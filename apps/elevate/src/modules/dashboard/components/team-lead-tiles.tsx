@@ -12,7 +12,7 @@ export async function TeamHoursTile() {
     return (
       <Tile label="Team hours" title="Team hours, last week" icon={<Timer className="size-4 text-primary" aria-hidden />} href="/hours-review" hrefLabel="Review">
         {hours.rows.length === 0 ? (
-          <TileNote>{hours.people === 0 ? "Your team shows here once you have people." : "No hours to review."}</TileNote>
+          <TileNote>No hours from last week to review.</TileNote>
         ) : (
           <TileList>
             {hours.rows.slice(0, 3).map((r, i) => (

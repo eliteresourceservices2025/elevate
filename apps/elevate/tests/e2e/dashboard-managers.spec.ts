@@ -79,3 +79,33 @@ test("a Super Admin sees the admin tiles with counts only", async ({ browser }) 
   await expect(page.getByRole("region", { name: "Audit highlights", exact: true })).toContainText("Exports this week");
   await expect(page.getByRole("region", { name: "Key numbers" })).toHaveCount(0);
 });
+
+test("a lead hides a tile and reorders another, it persists across a reload, and Reset puts it back", async ({ browser }) => {
+  test.setTimeout(240_000);
+  const stamp = Date.now().toString(36);
+  const lead = await createEmployeeAccount("Lia", `Layout${stamp}`, { roles: ["team_lead"] });
+  await createEmployeeAccount("Ned", `Member${stamp}`, { managerId: lead.employeeId });
+  const page = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(page, lead);
+  await regions(page, ["Team flags", "Reviews and goals due", "Needs your decision"]);
+
+  await page.getByRole("button", { name: "Edit layout" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("checkbox", { name: "Team flags" }).click();
+  for (let i = 0; i < 6; i++) await dialog.getByRole("button", { name: "Move Reviews and goals due up" }).click();
+  await dialog.getByRole("button", { name: "Save layout" }).click();
+  await expect(page.getByText("Layout saved.").first()).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByRole("region", { name: "Reviews and goals due", exact: true })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("region", { name: "Team flags", exact: true })).toHaveCount(0);
+  const first = await page.getByRole("region", { name: "Reviews and goals due", exact: true }).boundingBox();
+  const decisions = await page.getByRole("region", { name: "Needs your decision", exact: true }).boundingBox();
+  expect(first && decisions && first.x < decisions.x).toBe(true);
+
+  await page.getByRole("button", { name: "Edit layout" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Reset to default" }).click();
+  await expect(page.getByText("Layout reset.").first()).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("region", { name: "Team flags", exact: true })).toBeVisible({ timeout: 30_000 });
+});

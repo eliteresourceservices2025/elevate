@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { sql } from "drizzle-orm";
 import { authorize } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
@@ -15,6 +16,9 @@ import { getAttention } from "./feed-queries";
 import { orFallback } from "./or-fallback";
 
 // The VA's own tiles ("My work"): hours, schedule and to-do. Everything here is about the signed-in person only.
+
+/** One read of a week per request: the Me strip, the hours tile and the schedule tile all need the same week, and each read is heavy. */
+const myWeek = cache((weekStart?: string) => getMyTime(weekStart));
 
 async function me() {
   const user = await requireUser();
@@ -36,14 +40,14 @@ export type MyHours = {
 /** Hours from ELEVATE's own clock (never Jibble): this week so far, the scheduled total, and last week's approval. */
 export async function getMyHours(): Promise<MyHours | null> {
   const user = await me();
-  const week = await getMyTime();
+  const week = await myWeek();
   if (!week) return null;
   const clock = await orFallback(() => getClockStatus(), null);
   const scheduled = week.days.reduce((sum, d) => sum + (d.scheduledMinutes ?? 0), 0);
 
   let lastWeek: MyHours["lastWeek"] = null;
   const prevStart = addDays(week.weekStart, -7);
-  const prev = await getMyTime(prevStart);
+  const prev = await myWeek(prevStart);
   const worked = prev?.days.filter((d) => d.workedMinutes > 0) ?? [];
   if (prev && worked.length > 0) {
     const [row] = (await db.execute(sql`select id from core.employees where user_id = ${user.id} limit 1`)) as unknown as { id: string }[];
@@ -62,13 +66,13 @@ export type MyScheduleTile = { zone: string; client: string | null; clientZone: 
 /** Today and the next two days of the person's schedule, in their own zone (with the client's hours for today). */
 export async function getMyScheduleTile(): Promise<MyScheduleTile | null> {
   await me();
-  const week = await getMyTime();
+  const week = await myWeek();
   if (!week) return null;
   const today = formatInZone(Date.now(), week.zone, "yyyy-MM-dd");
   let days = week.days.filter((d) => d.date >= today);
   let next = null;
   if (days.length < 3) {
-    next = await getMyTime(addDays(week.weekStart, 7));
+    next = await myWeek(addDays(week.weekStart, 7));
     days = [...days, ...(next?.days ?? [])];
   }
   const shown = days.slice(0, 3);
@@ -115,5 +119,6 @@ export async function getMyTodo(): Promise<{ items: TodoItem[]; total: number }>
     ...goals.map((g): TodoItem => ({ id: `g-${g.id}`, kind: "goal", title: `Update goal: ${g.title}`, detail: g.targetOn ? `Target ${g.targetOn}` : null, href: "/reviews/goals", overdue: g.targetOn !== null && g.targetOn < today })),
   ];
   items.sort((a, b) => Number(b.overdue) - Number(a.overdue));
-  return { items: items.slice(0, 5), total: items.length };
+  // Nothing waiting is ever hidden: the tile scrolls inside itself instead of cutting the list.
+  return { items: items.slice(0, 40), total: items.length };
 }

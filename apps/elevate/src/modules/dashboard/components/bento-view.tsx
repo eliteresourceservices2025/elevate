@@ -24,7 +24,7 @@ export function BentoView({ tiles, layout = null }: { tiles: readonly TileDef[];
   return (
     <div className="grid grid-flow-dense grid-cols-2 gap-3 lg:grid-cols-6">
       {arrangeTiles(tiles, layout).map((t) => (
-        <div key={t.id} className={cn("min-w-0", t.rows ? TALL : SPAN[t.span])}>
+        <div key={t.id} className={cn("min-w-0 empty:hidden", t.rows ? TALL : SPAN[t.span])}>
           <Suspense fallback={<Skeleton className="h-full min-h-32 rounded-2xl" />}>{t.render()}</Suspense>
         </div>
       ))}

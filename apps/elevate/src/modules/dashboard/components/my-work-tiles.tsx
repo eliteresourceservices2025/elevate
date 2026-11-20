@@ -74,6 +74,7 @@ export async function TodoTile() {
         {items.length === 0 ? (
           <TileNote icon={<CheckCircle2 className="size-4 text-success" aria-hidden />}>You are all caught up.</TileNote>
         ) : (
+          <div tabIndex={items.length > 4 ? 0 : undefined} aria-label={items.length > 4 ? "Everything waiting for you (scrolls)" : undefined} className="max-h-40 overflow-y-auto rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
           <TileList>
             {items.map((t) => {
               const Icon = KIND_ICON[t.kind];
@@ -88,6 +89,7 @@ export async function TodoTile() {
               );
             })}
           </TileList>
+          </div>
         )}
         {total > items.length ? <p className="mt-auto pt-1.5 text-xs text-muted-foreground">+ {total - items.length} more</p> : null}
       </Tile>

@@ -15,7 +15,8 @@ export async function MeStrip({ actions }: { actions?: ReactNode }) {
     "Me",
     async () => {
       const [hours, schedule] = await Promise.all([orFallback(() => getMyHours(), null), orFallback(() => getMyScheduleTile(), null)]);
-      if (!hours && !actions) return null;
+      // No people record: no Me strip (nothing of theirs to show), but Edit layout is still reachable.
+      if (!hours) return actions ? <div className="flex justify-end">{actions}</div> : null;
       const today = schedule?.days.find((d) => d.today);
       return (
         <section aria-label="Me" className="flex flex-wrap items-center gap-x-5 gap-y-1 rounded-xl bg-muted px-4 py-2 text-sm">

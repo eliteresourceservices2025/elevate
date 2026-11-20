@@ -6,6 +6,8 @@ const EVERYONE = { super_admin: "own", hr_admin: "own", team_lead: "own", recrui
 // widget by widget and source by source with the owning module's own rules (nothing here widens anyone's access).
 export const dashboardPermissions = definePermissions({
   "dashboard.view": { roles: EVERYONE },
+  // Hide and reorder your own tiles. A preference only: it never changes what a tile may show.
+  "dashboard.customize": { roles: EVERYONE },
   "search.use": { roles: EVERYONE },
   // Marking the quick tour as seen on your own account.
   "tour.complete": { roles: EVERYONE },
