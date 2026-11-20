@@ -29,6 +29,9 @@ export async function fetchTurnUsage(now = new Date()): Promise<CloudflareUsage>
     if (!response.ok) return { state: "error", reason: response.status === 401 || response.status === 403 ? "Cloudflare refused the token (it needs the Account Analytics permission)." : `Cloudflare answered ${response.status}.` };
     const json = (await response.json()) as { data?: unknown; errors?: unknown[] };
     if (Array.isArray(json.errors) && json.errors.length > 0) return { state: "error", reason: "Cloudflare could not answer the usage question." };
+    // An account id the token cannot see comes back as an empty list, not an error: say so plainly.
+    const accounts = (json.data as { viewer?: { accounts?: unknown[] } } | null | undefined)?.viewer?.accounts;
+    if (Array.isArray(accounts) && accounts.length === 0) return { state: "error", reason: "Cloudflare found no account with that id for this token." };
     const usage = sumTurnBytes(json.data);
     if (!usage) return { state: "error", reason: "Cloudflare's answer was not in the shape we expected." };
     return { state: "ok", ...usage };
