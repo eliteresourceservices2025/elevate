@@ -6,6 +6,7 @@ const state = vi.hoisted(() => ({
   device: null as null | { deviceId: string; employeeId: string },
   required: null as string | null,
   releases: [] as unknown[],
+  storageDown: false,
 }));
 vi.mock("@/modules/activity/device-auth", () => ({ authenticateDevice: vi.fn(async () => state.device), redeemEnrollmentCode: vi.fn() }));
 vi.mock("@/lib/rate-limit", () => ({ allowRequest: vi.fn(async () => true) }));
@@ -16,7 +17,12 @@ vi.mock("@/modules/activity/releases-service", () => ({
 }));
 vi.mock("@/modules/documents/storage", () => ({
   BUCKETS: { trackerBuilds: "tracker-builds", tracker: "activity-shots" },
-  getDocumentStorage: () => ({ createSignedDownload: async (_bucket: string, path: string, seconds: number) => `https://storage.example.test/signed/${path}?expires=${seconds}` }),
+  getDocumentStorage: () => ({
+    createSignedDownload: async (_bucket: string, path: string, seconds: number) => {
+      if (state.storageDown) throw new Error("Could not create a download link");
+      return `https://storage.example.test/signed/${path}?expires=${seconds}`;
+    },
+  }),
 }));
 vi.mock("@/modules/activity/ingest", () => ({
   clockStateFor: vi.fn(async () => ({ state: "working" })),
@@ -48,6 +54,7 @@ const get = (url: string, headers: Record<string, string> = AUTH) => new Request
 beforeEach(() => {
   state.device = { deviceId: "d1", employeeId: "e1" };
   state.required = null;
+  state.storageDown = false;
   state.releases = [rel("1.1.0"), rel("1.2.0"), rel("1.3.0", "withdrawn")];
 });
 
@@ -73,8 +80,8 @@ describe("the update feed", () => {
     expect(body.signature).toBe("SIG-1.2.0");
     expect(body.url).toBe("http://localhost/api/tracker/update/download/windows-x86_64?version=1.2.0");
     expect(body.url).not.toContain("storage.example.test");
-    expect(body.notes).toContain("Added: New page");
-    expect(body.notes).toContain("Fixed: A fix");
+    // Each group is a heading with one line per change, so a note that ends in a full stop does not run into the next one.
+    expect(body.notes).toBe("Added:\n- New page\nFixed:\n- A fix");
     expect(body.pub_date).toBe("2026-11-20T10:00:00.000Z");
   });
   it("treats a missing or unreadable current version as older than everything", async () => {
@@ -104,6 +111,16 @@ describe("the update download", () => {
     expect((await call("windows-x86_64", "7.7.7")).status).toBe(404);
     expect((await call("windows-x86_64", "junk")).status).toBe(404);
     expect((await call("linux-x86_64", "1.2.0")).status).toBe(404);
+  });
+});
+
+describe("when storage is down", () => {
+  it("answers the update download with a JSON 503 the app can retry on, not a bare 500", async () => {
+    state.storageDown = true;
+    const res = await download.GET(get("/api/tracker/update/download/windows-x86_64?version=1.2.0"), { params: Promise.resolve({ platform: "windows-x86_64" }) });
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: "storage_unavailable" });
+    state.storageDown = false;
   });
 });
 

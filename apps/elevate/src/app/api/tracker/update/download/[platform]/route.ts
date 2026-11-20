@@ -18,8 +18,13 @@ export async function GET(request: Request, context: { params: Promise<{ platfor
       const release = (await getPublishedReleases()).find((r) => r.version === version && r.status === "published");
       const build = release?.builds.find((b) => b.platform === platform && b.kind === "update");
       if (!build) return json({ error: "not_found" }, 404);
-      const link = await getDocumentStorage().createSignedDownload(BUCKETS.trackerBuilds, build.storagePath, 60, build.fileName);
-      return new Response(null, { status: 302, headers: { location: link, "cache-control": "no-store" } });
+      try {
+        const link = await getDocumentStorage().createSignedDownload(BUCKETS.trackerBuilds, build.storagePath, 60, build.fileName);
+        return new Response(null, { status: 302, headers: { location: link, "cache-control": "no-store" } });
+      } catch {
+        // Storage is unavailable (or waking up): say so in a way the updater can retry on, with nothing else in the answer.
+        return json({ error: "storage_unavailable" }, 503);
+      }
     },
     { exemptFromFloor: true },
   );

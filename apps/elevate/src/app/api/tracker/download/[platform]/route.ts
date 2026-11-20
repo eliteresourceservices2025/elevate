@@ -21,7 +21,13 @@ export async function GET(_request: Request, context: { params: Promise<{ platfo
   const build = release?.builds.find((b) => b.platform === platform && b.kind === "installer");
   if (!release || !build) return Response.json({ error: "not_found" }, { status: 404 });
 
+  // The link first, then the audit row: a download that could not be made must not be recorded as one.
+  let link: string;
+  try {
+    link = await getDocumentStorage().createSignedDownload(BUCKETS.trackerBuilds, build.storagePath, 60, build.fileName);
+  } catch {
+    return Response.json({ error: "storage_unavailable" }, { status: 503 });
+  }
   await writeAudit({ actor: user, action: "tracker.download", targetType: "tracker_release", targetId: release.id, metadata: { platform, version: release.version } });
-  const link = await getDocumentStorage().createSignedDownload(BUCKETS.trackerBuilds, build.storagePath, 60, build.fileName);
   return new Response(null, { status: 302, headers: { location: link, "cache-control": "no-store" } });
 }

@@ -6,10 +6,11 @@ import { getPublishedReleases } from "@/modules/activity/releases-service";
 // platform, otherwise the newest published release. The file itself comes from our own download route, never a storage address.
 export const dynamic = "force-dynamic";
 
+// A heading per group and one "- " line per change, so a change that ends in a full stop never runs into the next one.
 const noteText = (n: ReleaseNotes) =>
   [["Added", n.added], ["Improved", n.improved], ["Fixed", n.fixed]]
     .filter(([, items]) => items.length > 0)
-    .map(([label, items]) => `${label}: ${(items as string[]).join("; ")}`)
+    .map(([label, items]) => `${label}:\n${(items as string[]).map((line) => `- ${line}`).join("\n")}`)
     .join("\n");
 
 export async function GET(request: Request) {

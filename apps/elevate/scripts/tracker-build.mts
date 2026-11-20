@@ -67,7 +67,10 @@ const path = buildStoragePath(args.version, args.platform, args.kind, fileName);
 const admin = createClient(url as string, key as string, { auth: { autoRefreshToken: false, persistSession: false } });
 
 const uploaded = await admin.storage.from(BUCKETS.trackerBuilds).upload(path, bytes, { contentType: "application/octet-stream", upsert: false });
-if (uploaded.error) fail(`Could not upload the file: ${uploaded.error.message}. Has pnpm storage:setup been run?`);
+if (uploaded.error) {
+  const exists = /already exists/i.test(uploaded.error.message);
+  fail(exists ? `A file is already stored for this ${args.kind} (${path}). It was probably registered before; a different file needs a new version.` : `Could not upload the file: ${uploaded.error.message}. Has pnpm storage:setup been run?`);
+}
 
 const registered = await registerBuild({ version: args.version, platform: args.platform, kind: args.kind, storagePath: path, fileName, sizeBytes: size, sha256, signature });
 if (!registered.ok) {
