@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "ELEVATE Tracker App",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "identifier": "com.eliteresourceservices.elevate-tracker",
   "build": {
     "beforeDevCommand": "pnpm dev",
@@ -55,7 +55,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEEwRUI4MTkxRkY1QTExNzcKUldSM0VWci9rWUhyb0pDUmMweUVDTm1pVkU5Q1BvNExweVZZOEg3aXk0djJzek5nSytuaWJRUk4K"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEYxQzk0QUU2OTU2RUFFODEKUldTQnJtNlY1a3JKOFdqNTFsOEp6cGx6enJLWTI5M21mU1dIamhHaVVrTkFKcHl1STlicHNhNmYK"
     }
   }
 }
