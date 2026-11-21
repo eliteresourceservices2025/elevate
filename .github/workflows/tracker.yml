@@ -47,7 +47,7 @@ jobs:
           }
 
       - name: A release is never built with the development update key
-        if: startsWith(github.ref, refs/tags/tracker-v)
+        if: startsWith(github.ref, 'refs/tags/tracker-v')
         shell: pwsh
         run: |
           $pub = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String((Get-Content apps/tracker/src-tauri/updater.pub -Raw).Trim()))
