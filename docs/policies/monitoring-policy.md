@@ -24,7 +24,7 @@ You can always see what the app recorded about you: in the app under "What was c
 - The Tracker App never records window titles, web addresses, page names or document names. Only the program name.
 - No activity scores. The Tracker App is evidence for checking a time record. It does not change your hours, and it does not pay or rank you.
 - Nothing while you are clocked out or on a break.
-- Unblurred screenshots are never stored by ERS. The blur happens on your computer.
+- A readable screenshot is never sent to ERS. The blur happens on your computer, and ERS only ever receives and stores the blurred picture.
 
 ## Messages (ELEVATE chat)
 
