@@ -38,7 +38,7 @@ export function buildStoragePath(version: string, platform: string, kind: string
 }
 
 const MIN_BYTES = 100 * 1024;
-const MAX_BYTES = 150 * 1024 * 1024;
+const MAX_BYTES = 100 * 1024 * 1024;
 const starts = (bytes: Uint8Array, sig: number[]) => sig.every((b, i) => bytes[i] === b);
 const isMz = (b: Uint8Array) => starts(b, [0x4d, 0x5a]);
 const isOle = (b: Uint8Array) => starts(b, [0xd0, 0xcf, 0x11, 0xe0]);
@@ -47,7 +47,7 @@ const isGzip = (b: Uint8Array) => starts(b, [0x1f, 0x8b]);
 export function checkBuildFile(input: { fileName: string; platform: Platform; kind: "installer" | "update"; sizeBytes: number; head: Uint8Array }): { ok: true } | { ok: false; error: string } {
   const name = input.fileName.toLowerCase();
   if (input.sizeBytes < MIN_BYTES) return { ok: false, error: "That file is too small to be an app." };
-  if (input.sizeBytes > MAX_BYTES) return { ok: false, error: "That file is larger than 150 MB." };
+  if (input.sizeBytes > MAX_BYTES) return { ok: false, error: "That file is larger than 100 MB." };
   const windows = input.platform.startsWith("windows");
   if (windows) {
     if (name.endsWith(".exe")) return isMz(input.head) ? { ok: true } : { ok: false, error: "A .exe must be a Windows program (the first bytes do not match)." };
