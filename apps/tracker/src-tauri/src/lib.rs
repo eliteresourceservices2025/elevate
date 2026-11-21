@@ -28,16 +28,33 @@ use crate::queue::Queue;
 use crate::state::{new_shared, Deps, KeyringStore, TokenStore};
 
 /// Where the app talks to. Set `ELEVATE_TRACKER_BASE_URL` when building to point a build somewhere else (for example a staging site).
-const BASE_URL: &str = match option_env!("ELEVATE_TRACKER_BASE_URL") {
-    Some(url) => url,
-    None => {
-        if cfg!(debug_assertions) {
-            "http://localhost:3000"
-        } else {
-            "https://elevate.eliteresourceservices.com"
+/// An empty value counts as not set: GitHub Actions passes an unset variable as an empty string, and that once built an app with no address.
+const BASE_URL: &str = pick_base_url(option_env!("ELEVATE_TRACKER_BASE_URL"), cfg!(debug_assertions));
+
+const fn pick_base_url(configured: Option<&'static str>, debug: bool) -> &'static str {
+    if let Some(url) = configured {
+        if !str_is_blank(url) {
+            return url;
         }
     }
-};
+    if debug {
+        "http://localhost:3000"
+    } else {
+        "https://elevate.eliteresourceservices.com"
+    }
+}
+
+const fn str_is_blank(s: &str) -> bool {
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if !matches!(bytes[i], b' ' | b'\t' | b'\r' | b'\n') {
+            return false;
+        }
+        i += 1;
+    }
+    true
+}
 
 pub fn run() {
     let started_minimized = std::env::args().any(|a| a == "--minimized");
@@ -118,4 +135,23 @@ pub fn run() {
                 }
             }
         });
+}
+
+#[cfg(test)]
+mod base_url_tests {
+    use super::pick_base_url;
+
+    #[test]
+    fn an_empty_address_from_the_build_means_the_default_not_no_address() {
+        // GitHub Actions passes an unset variable as an empty string. That crashed the first release at start-up.
+        assert_eq!(pick_base_url(Some(""), false), "https://elevate.eliteresourceservices.com");
+        assert_eq!(pick_base_url(None, false), "https://elevate.eliteresourceservices.com");
+        assert_eq!(pick_base_url(Some("   "), false), "https://elevate.eliteresourceservices.com");
+    }
+
+    #[test]
+    fn a_real_address_wins_and_debug_builds_default_to_localhost() {
+        assert_eq!(pick_base_url(Some("https://staging.example.com"), false), "https://staging.example.com");
+        assert_eq!(pick_base_url(None, true), "http://localhost:3000");
+    }
 }
