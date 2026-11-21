@@ -96,3 +96,11 @@ fn the_build_workflow_gives_signing_secrets_only_to_the_steps_that_need_them() {
     assert!(job_env.iter().all(|l| !l.contains("secrets.")), "a secret at job level is visible to every dependency install script and action: {job_env:?}");
     assert!(flow.contains("cert.pfx") && flow.contains("if: always()"), "the certificate file is removed even when the build fails");
 }
+
+#[test]
+fn the_build_workflow_conditions_are_valid_expressions() {
+    let flow = fs::read_to_string(root().join("../../../.github/workflows/tracker.yml")).expect("workflow");
+    for line in flow.lines().filter(|l| l.trim_start().starts_with("if:")) {
+        assert!(line.contains("'refs/tags/tracker-v'") || line.contains("always()"), "an `if:` must use quoted strings so GitHub accepts the file: {line}");
+    }
+}
