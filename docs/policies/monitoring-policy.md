@@ -13,7 +13,7 @@ This policy tells you exactly what ERS watches while you work, why, who can see 
 
 You can always see what the app recorded about you: in the app under "What was captured", and in ELEVATE on your Attendance page, where you can also see who looked at your screenshots. The app never clocks you in or out by itself. Only your click does.
 
-**3. Work screenshots in Jibble.** If HR has set you to clock in with Jibble, the Jibble app takes screenshots at intervals set by ERS while you are clocked in and not on a break. Jibble is being replaced by the ELEVATE Tracker App team by team; you will be told when yours moves.
+**3. Work screenshots in Jibble.** If HR has set you to clock in with Jibble, the Jibble app takes screenshots at intervals set by ERS while you are clocked in and not on a break. Jibble is being replaced by the ELEVATE Tracker App team by team. Once the Tracker App is connected on your work computer, ELEVATE no longer starts Jibble for you, so you are not watched by both. You will be told when yours moves.
 
 **4. Approximate location (optional).** You may choose, in your clock settings, to let ELEVATE record your approximate location (rounded to about 1 km) when you clock in. This is your choice. It is off unless you switch it on, and you can switch it off at any time.
 
