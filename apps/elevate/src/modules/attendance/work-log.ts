@@ -34,7 +34,7 @@ export async function loadWorkLog(executor: Executor, employeeId: string, fromMs
 }
 
 /** The clients a person is assigned to today, each with its active projects (by name). People pick from these on the clock. */
-export async function assignedClientsWithProjects(executor: Parameters<typeof assignedClients>[0] & Pick<typeof db, "select">, employeeId: string): Promise<{ id: string; name: string; projects: { id: string; name: string }[] }[]> {
+export async function assignedClientsWithProjects(executor: Parameters<typeof assignedClients>[0] & Pick<typeof db, "select">, employeeId: string): Promise<{ id: string; name: string; allowNoProject: boolean; projects: { id: string; name: string }[] }[]> {
   const assigned = await assignedClients(executor, employeeId);
   if (assigned.length === 0) return [];
   const projects = await executor
@@ -50,7 +50,8 @@ export async function assignedClientsWithProjects(executor: Parameters<typeof as
       ),
     )
     .orderBy(clientProjects.name);
-  return assigned.map((c) => ({ id: c.id, name: c.name, projects: projects.filter((p) => p.clientId === c.id).map((p) => ({ id: p.id, name: p.name })) }));
+  const flags = await executor.select({ id: clients.id, allowNoProject: clients.allowNoProject }).from(clients).where(inArray(clients.id, assigned.map((c) => c.id)));
+  return assigned.map((c) => ({ id: c.id, name: c.name, allowNoProject: flags.find((f) => f.id === c.id)?.allowNoProject ?? true, projects: projects.filter((p) => p.clientId === c.id).map((p) => ({ id: p.id, name: p.name })) }));
 }
 
 /** Who each clocked-in person is working for right now (only people whose open session has a client), with the time that stretch began. */

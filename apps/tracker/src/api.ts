@@ -5,7 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 
 export type WorkState = "working" | "break" | "out";
 export type Project = { id: string; name: string };
-export type ClientChoice = { id: string; name: string; projects: Project[] };
+export type ClientChoice = { id: string; name: string; projects: Project[]; /** false: "No specific project" is not offered for this client (missing means it is). */ allowNoProject?: boolean };
 export type StatusView = {
   signedIn: boolean;
   state: WorkState | null;
@@ -120,7 +120,7 @@ export async function subscribe(onChange: () => void, onNotice: (n: Notice) => v
 export type Choice = { clientId: string; projectId?: string; label: string };
 export function workChoices(clients: ClientChoice[]): Choice[] {
   return clients.flatMap((c): Choice[] =>
-    c.projects.length === 0 ? [{ clientId: c.id, label: c.name }] : [...c.projects.map((p) => ({ clientId: c.id, projectId: p.id, label: `${c.name} · ${p.name}` })), { clientId: c.id, label: `${c.name} · no specific project` }],
+    c.projects.length === 0 ? [{ clientId: c.id, label: c.name }] : [...c.projects.map((p) => ({ clientId: c.id, projectId: p.id, label: `${c.name} · ${p.name}` })), ...(c.allowNoProject === false ? [] : [{ clientId: c.id, label: `${c.name} · no specific project` }])],
   );
 }
 

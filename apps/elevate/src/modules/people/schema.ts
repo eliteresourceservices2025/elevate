@@ -195,6 +195,8 @@ export const clients = core
       isActive: boolean("is_active").notNull().default(true),
       /** The client's work involves patient information: people assigned to it take the Full HIPAA training track. On by default (safer). */
       handlesPhi: boolean("handles_phi").notNull().default(true),
+      /** A client with projects also offers "No specific project" on the clock. HR can switch that off so people must pick a project. On by default. */
+      allowNoProject: boolean("allow_no_project").notNull().default(true),
       createdBy: uuid("created_by"),
       archivedAt: timestamp("archived_at", { withTimezone: true }),
       ...stamps,

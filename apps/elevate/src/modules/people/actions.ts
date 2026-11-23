@@ -52,6 +52,7 @@ import {
   bankChangeSchema,
   cancelChangeSchema,
   clientProjectSchema,
+  noProjectAllowedSchema,
   projectPeopleSchema,
   clientSchema,
   contactChangeSchemaFor,
@@ -795,6 +796,28 @@ export async function setClientProjectPeople(input: unknown): Promise<ActionResu
       await tx.delete(clientProjectMembers).where(eq(clientProjectMembers.projectId, project.id));
       if (ids.length > 0) await tx.insert(clientProjectMembers).values(ids.map((employeeId) => ({ projectId: project.id, employeeId })));
       await writeAudit({ actor, action: "client.project.people", targetType: "client_project", targetId: project.id, after: { clientId: project.clientId, count: ids.length } }, tx);
+      revalidatePath("/people/clients");
+      return { ok: true, data: undefined } as const;
+    });
+  });
+}
+
+/**
+ * Shows or hides "No specific project" for a client. Shown by default. Hidden: someone who can see at least one of the client's projects
+ * must pick one; someone who can see none still clocks in for the client.
+ */
+export async function setClientNoProjectAllowed(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "people.manage_clients");
+    const parsed = noProjectAllowedSchema.safeParse(input);
+    if (!parsed.success) return fail(firstIssue(parsed.error));
+    return db.transaction(async (tx) => {
+      const [client] = await tx.select({ id: clients.id }).from(clients).where(and(eq(clients.id, parsed.data.clientId), isNull(clients.archivedAt))).for("update");
+      if (!client) return fail("That client was not found.");
+      await tx.update(clients).set({ allowNoProject: parsed.data.allowed, updatedAt: new Date() }).where(eq(clients.id, client.id));
+      await writeAudit({ actor, action: "client.project.no_project", targetType: "client", targetId: client.id, after: { allowed: parsed.data.allowed } }, tx);
       revalidatePath("/people/clients");
       return { ok: true, data: undefined } as const;
     });

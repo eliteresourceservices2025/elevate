@@ -214,6 +214,7 @@ export const clientProjectSchema = z.object({ clientId: uuid, name: requiredText
 export const renameProjectSchema = z.object({ projectId: uuid, name: requiredText("the project name", 80) });
 export const archiveProjectSchema = z.object({ projectId: uuid });
 /** The people who may pick a project (an empty list means everyone assigned to the client). */
+export const noProjectAllowedSchema = z.object({ clientId: uuid, allowed: z.boolean() });
 export const projectPeopleSchema = z.object({ projectId: uuid, employeeIds: z.array(uuid).max(200) });
 
 const assignmentHours = z.preprocess(

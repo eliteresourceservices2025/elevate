@@ -6,13 +6,13 @@
 
 export type WorkChoice = { clientId: string; projectId: string | undefined; label: string; clientName: string; title: string; grouped: boolean };
 
-export function workChoices(clients: readonly { id: string; name: string; projects: readonly { id: string; name: string }[] }[]): WorkChoice[] {
+export function workChoices(clients: readonly { id: string; name: string; allowNoProject?: boolean; projects: readonly { id: string; name: string }[] }[]): WorkChoice[] {
   return clients.flatMap((c): WorkChoice[] =>
     c.projects.length === 0
       ? [{ clientId: c.id, projectId: undefined, label: c.name, clientName: c.name, title: c.name, grouped: false }]
       : [
           ...c.projects.map((p) => ({ clientId: c.id, projectId: p.id, label: `${c.name} · ${p.name}`, clientName: c.name, title: p.name, grouped: true })),
-          { clientId: c.id, projectId: undefined, label: `${c.name} · no specific project`, clientName: c.name, title: "No specific project", grouped: true },
+          ...(c.allowNoProject === false ? [] : [{ clientId: c.id, projectId: undefined, label: `${c.name} · no specific project`, clientName: c.name, title: "No specific project", grouped: true }]),
         ],
   );
 }

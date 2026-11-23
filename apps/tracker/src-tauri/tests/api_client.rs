@@ -250,3 +250,17 @@ fn the_token_is_saved_loaded_and_cleared() {
 fn _uses(_: &dyn Fn()) {
     let _ = header_exists("x");
 }
+
+#[tokio::test]
+async fn a_client_can_say_no_specific_project_is_not_offered_and_older_servers_default_to_offering_it() {
+    let server = MockServer::start().await;
+    let mut body = state_body();
+    body["clients"] = json!([
+        { "id": "c1", "name": "Acme", "allowNoProject": false, "projects": [{ "id": "p1", "name": "Intake" }] },
+        { "id": "c2", "name": "Beta", "projects": [{ "id": "p2", "name": "Billing" }] }
+    ]);
+    answer(&server, "GET", "/api/tracker/clock-state", 200, body).await;
+    let s = client(&server).await.clock_state(TOKEN).await.unwrap();
+    assert!(!s.clients[0].allow_no_project, "the client said it is not offered");
+    assert!(s.clients[1].allow_no_project, "no answer means it is offered, as before");
+}

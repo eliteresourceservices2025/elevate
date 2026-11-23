@@ -34,7 +34,13 @@ fn item(id: &'static str, label: &str, enabled: bool) -> Entry {
 
 /// How many things the person can pick when clocking in: each client with no projects, or each project plus the client itself.
 pub fn choice_count(view: &StatusView) -> usize {
-    view.clients.iter().map(|c| if c.projects.is_empty() { 1 } else { c.projects.len() + 1 }).sum()
+    view.clients.iter().map(|c| if c.projects.is_empty() { 1 } else { c.projects.len() + usize::from(c.allow_no_project) }).sum()
+}
+
+/// Whether clocking in needs the window: more than one thing to pick, or a single project that must still be named (a client that does
+/// not offer "No specific project" and has just one project).
+fn needs_window(view: &StatusView) -> bool {
+    choice_count(view) > 1 || view.clients.iter().any(|c| !c.projects.is_empty())
 }
 
 /// The short reason shown beside a greyed-out clock item.
@@ -72,7 +78,7 @@ pub fn plan(view: &StatusView) -> TrayPlan {
     let mut entries = vec![item("open", "Open", true), Entry::Separator];
     // The clock stays available on an old version: time keeping is never blocked by the version floor.
     if view.signed_in {
-        let many = choice_count(view) > 1;
+        let many = needs_window(view);
         if let Some(reason) = &view.clock_blocked_reason {
             entries.push(item("blocked", &format!("Clock is off: {}", short_reason(reason)), false));
         } else {
@@ -184,13 +190,23 @@ mod tests {
     #[test]
     fn with_several_clients_or_projects_clock_in_opens_the_window_to_choose() {
         let mut v = view();
-        v.clients = vec![ClientChoice { id: "c1".into(), name: "Acme".into(), projects: vec![ProjectChoice { id: "p1".into(), name: "Intake".into() }] }];
+        v.clients = vec![ClientChoice { id: "c1".into(), name: "Acme".into(), allow_no_project: true, projects: vec![ProjectChoice { id: "p1".into(), name: "Intake".into() }] }];
         assert_eq!(choice_count(&v), 2);
         assert_eq!(ids(&plan(&v)), vec!["open", "open", "updates", "quit"]);
         v.state = Some(WorkState::Working);
         assert!(ids(&plan(&v)).windows(2).any(|w| w == ["open", "break_15"]), "a switch entry opens the window while working");
-        v.clients = vec![ClientChoice { id: "c1".into(), name: "Acme".into(), projects: vec![] }];
+        v.clients = vec![ClientChoice { id: "c1".into(), name: "Acme".into(), allow_no_project: true, projects: vec![] }];
         assert_eq!(choice_count(&v), 1);
+    }
+
+    #[test]
+    fn hiding_no_specific_project_removes_that_choice_and_a_single_project_still_opens_the_window() {
+        let mut v = view();
+        v.clients = vec![ClientChoice { id: "c1".into(), name: "Acme".into(), allow_no_project: false, projects: vec![ProjectChoice { id: "p1".into(), name: "Intake".into() }] }];
+        assert_eq!(choice_count(&v), 1, "just the project");
+        let p = plan(&v);
+        assert!(!ids(&p).contains(&"clock_in"), "a plain Clock in would send no project, which the client requires");
+        assert_eq!(ids(&p), vec!["open", "open", "updates", "quit"]);
     }
 
     #[test]

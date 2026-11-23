@@ -13,7 +13,7 @@ vi.mock("@/lib/db", () => ({ db: new Proxy({}, { get: () => { throw new Error("d
 vi.mock("@/modules/audit/write", () => ({ writeAudit: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
-const { createClientProject, renameClientProject, archiveClientProject, setClientProjectPeople } = await import("@/modules/people/actions");
+const { createClientProject, renameClientProject, archiveClientProject, setClientProjectPeople, setClientNoProjectAllowed } = await import("@/modules/people/actions");
 
 const ID = "11111111-1111-4111-8111-111111111111";
 const OTHER = "22222222-2222-4222-8222-222222222222";
@@ -28,6 +28,7 @@ const cases: { name: string; call: () => Promise<{ ok: boolean; error?: string }
   { name: "createClientProject", call: () => createClientProject({ clientId: OTHER, name: "Intake" }) },
   { name: "renameClientProject", call: () => renameClientProject({ projectId: OTHER, name: "Billing" }) },
   { name: "archiveClientProject", call: () => archiveClientProject({ projectId: OTHER }) },
+  { name: "setClientNoProjectAllowed", call: () => setClientNoProjectAllowed({ clientId: OTHER, allowed: false }) },
   { name: "setClientProjectPeople", call: () => setClientProjectPeople({ projectId: OTHER, employeeIds: [ID] }) },
 ];
 

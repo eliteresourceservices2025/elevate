@@ -51,7 +51,7 @@ export type ClockStatus = {
   /** Approved extra hours windows around now, so the header knows when the person is allowed to keep working. */
   extraWindows: { startMs: number; endMs: number }[];
   /** The clients the person is assigned to today. With two or more they choose one when clocking in and can switch while working. */
-  clients: { id: string; name: string; projects: { id: string; name: string }[] }[];
+  clients: { id: string; name: string; allowNoProject: boolean; projects: { id: string; name: string }[] }[];
   /** The project the session is working on now (null when none). */
   currentProjectId: string | null;
   /** The client the session is working for now (null when not working, or when the session has no client). */

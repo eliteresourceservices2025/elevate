@@ -421,6 +421,8 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
   // What a person can clock in for or switch to: each client with no projects, and each project (plus "no specific project") of a client that has some.
   const choices = workChoices(status.clients);
   const needsChoice = choices.length > 1;
+  // One project and no "No specific project": there is nothing to choose, but the project still has to be named.
+  const onlyChoice = choices.length === 1 && choices[0].projectId ? choices[0] : undefined;
   // The header is tight (the sidebar and two clocks take room): with a Switch button, the text of Break and Clock out waits for a very wide screen.
   const clockLabel = needsChoice ? "max-2xl:sr-only" : "max-sm:sr-only";
   const currentChoice = choices.find((c) => c.clientId === status.currentClientId && (c.projectId ?? null) === status.currentProjectId);
@@ -492,8 +494,10 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
             aria-expanded={needsChoice ? clientMenu === "in" : undefined}
             onClick={() => {
               if (needsChoice) setClientMenu(clientMenu === "in" ? null : "in");
-              else if (status.needsSelfie) setSelfie(true);
-              else void doClockIn();
+              else if (status.needsSelfie) {
+                setChosenWork(onlyChoice);
+                setSelfie(true);
+              } else void doClockIn(undefined, onlyChoice);
             }}
             className="h-11 gap-2 px-3 text-base font-bold shadow-lg shadow-primary/30 sm:min-w-36 sm:px-6 ring-2 ring-primary/40 transition-transform hover:scale-[1.03]"
           >

@@ -43,10 +43,17 @@ pub struct ProjectChoice {
     pub name: String,
 }
 
+fn yes() -> bool {
+    true
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct ClientChoice {
     pub id: String,
     pub name: String,
+    /// Whether "No specific project" is offered for this client. An older ELEVATE sends nothing, which means it is.
+    #[serde(rename = "allowNoProject", default = "yes")]
+    pub allow_no_project: bool,
     #[serde(default)]
     pub projects: Vec<ProjectChoice>,
 }

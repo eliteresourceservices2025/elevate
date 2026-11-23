@@ -27,3 +27,18 @@ describe("what a person can clock in for", () => {
     expect(workChoices([])).toEqual([]);
   });
 });
+
+describe("hiding 'No specific project'", () => {
+  it("leaves it out for a client that has projects when the client does not allow it", () => {
+    const got = workChoices([{ id: "c1", name: "Acme", allowNoProject: false, projects: [{ id: "p1", name: "Intake" }] }]);
+    expect(got.map((c) => c.title)).toEqual(["Intake"]);
+  });
+
+  it("still lists a client with no projects as just the client, whatever the setting", () => {
+    expect(workChoices([{ id: "c1", name: "Acme", allowNoProject: false, projects: [] }]).map((c) => c.title)).toEqual(["Acme"]);
+  });
+
+  it("shows it when the setting is missing (older answers)", () => {
+    expect(workChoices([{ id: "c1", name: "Acme", projects: [{ id: "p1", name: "Intake" }] }]).map((c) => c.title)).toEqual(["Intake", "No specific project"]);
+  });
+});

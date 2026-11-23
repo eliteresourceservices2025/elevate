@@ -13,7 +13,7 @@ import { selfTestEmails } from "@/modules/jibble/client";
 import { enqueueMirror, kickMirror } from "@/modules/jibble/enqueue";
 import { isSelfTestEmail } from "@/modules/jibble/mirror-rules";
 import { clientProjects, employees } from "@/modules/people/schema";
-import { projectOpenTo } from "./project-access";
+import { projectOpenTo, projectRequired } from "./project-access";
 import { MINUTE, breakLabel, ipAllowed, overbreakOf, replayClock, roundCoordinate, transition, validCoordinates, type ClockEventLite, type ClockState, type ClockType } from "./clock";
 import { clockSourceOf } from "./clock-source";
 import { assignedClients } from "./extra-hours-service";
@@ -197,6 +197,7 @@ export async function performClock(actor: { id: string; email: string }, type: C
         if (picked === nowClient && projectId === nowProject) throw new ActionFailure(projectId ? "You are already working on that project." : "You are already working for that client.");
       } else if (picked === null && assigned.length > 1) throw new ActionFailure("Choose the client you are working for.");
       clientId = picked ?? (assigned.length === 1 ? assigned[0].id : null);
+      if (clientId !== null && projectId === null && (await projectRequired(tx, clientId, person.id))) throw new ActionFailure("Choose a project for this client.");
     }
 
     const location =

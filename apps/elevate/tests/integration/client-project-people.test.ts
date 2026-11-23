@@ -131,3 +131,56 @@ describe("choosing who can pick a project", () => {
     expect(row.after).toEqual({ clientId: c, count: 1 });
   });
 });
+
+describe("showing or hiding 'No specific project' for a client", () => {
+  const off = (clientId: string) => people.setClientNoProjectAllowed({ clientId, allowed: false });
+
+  it("is shown by default, and the clock state says so", async () => {
+    const a = await worker();
+    const c = await client();
+    await assign(a.employeeId, c);
+    await project(c, "Intake");
+    expect((await clockStateFor(a.employeeId)).clients.find((x) => x.id === c)?.allowNoProject).toBe(true);
+    expect((await clockForDevice(a.employeeId, "clock_in", { clientId: c })).ok).toBe(true);
+  });
+
+  it("when hidden, a client with projects needs one: clock-in and switch with just the client are refused, a project works", async () => {
+    const a = await worker();
+    const c = await client();
+    await assign(a.employeeId, c);
+    const p1 = await project(c, "Intake");
+    const p2 = await project(c, "Billing");
+    expect((await off(c)).ok).toBe(true);
+    expect((await clockStateFor(a.employeeId)).clients.find((x) => x.id === c)?.allowNoProject).toBe(false);
+    // The person has one client, so it would be filled in on its own: still no project, still refused.
+    expect(await clockForDevice(a.employeeId, "clock_in", {})).toEqual({ ok: false, error: "refused", message: "Choose a project for this client." });
+    expect(await clockForDevice(a.employeeId, "clock_in", { clientId: c })).toEqual({ ok: false, error: "refused", message: "Choose a project for this client." });
+    expect((await clockForDevice(a.employeeId, "clock_in", { projectId: p1 })).ok).toBe(true);
+    expect(await clockForDevice(a.employeeId, "switch_client", { clientId: c })).toEqual({ ok: false, error: "refused", message: "Choose a project for this client." });
+    expect((await clockForDevice(a.employeeId, "switch_client", { projectId: p2 })).ok).toBe(true);
+  });
+
+  it("when hidden, someone who can see none of the client's projects still clocks in for the client", async () => {
+    const [a, b] = [await worker(), await worker()];
+    const c = await client();
+    await assign(a.employeeId, c);
+    await assign(b.employeeId, c);
+    const p = await project(c, "Intake");
+    await people.setClientProjectPeople({ projectId: p, employeeIds: [a.employeeId] });
+    await off(c);
+    expect((await clockForDevice(b.employeeId, "clock_in", { clientId: c })).ok).toBe(true);
+    expect((await clockForDevice(a.employeeId, "clock_in", { clientId: c })).ok).toBe(false);
+  });
+
+  it("can be turned back on, only HR and Super Admin can change it, and the audit row has the client id and the new value", async () => {
+    const c = await client();
+    const a = await worker();
+    as(a.user);
+    expect(await off(c)).toEqual({ ok: false, error: NO_ACCESS });
+    as(await makeUser("sa", ["super_admin"]));
+    expect((await off(c)).ok).toBe(true);
+    expect((await people.setClientNoProjectAllowed({ clientId: c, allowed: true })).ok).toBe(true);
+    const [row] = await rows<{ after: Record<string, unknown> }>(sql`select after from ops.audit_log where action = 'client.project.no_project' and target_id = ${c} and after->>'allowed' = 'true'`);
+    expect(row.after).toEqual({ allowed: true });
+  });
+});
