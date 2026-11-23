@@ -25,6 +25,13 @@ describe("hiddenNavFor and the Activity menu item", () => {
   });
 });
 
+describe("hiddenNavFor and the Approvals menu item", () => {
+  it("shows Approvals only to roles that can decide something", () => {
+    for (const role of ["team_lead", "hr_admin", "super_admin", "executive"] as const) expect(hiddenNavFor(user([role]))).not.toContain("/approvals");
+    for (const role of ["employee", "recruiter"] as const) expect(hiddenNavFor(user([role]))).toContain("/approvals");
+  });
+});
+
 describe("hiddenNavFor and the ELEVATE Tracker App menu item", () => {
   it("shows it to every role", () => {
     for (const role of ["super_admin", "hr_admin", "team_lead", "recruiter", "executive", "employee"] as const) expect(hiddenNavFor(user([role]))).not.toContain("/tracker/download");

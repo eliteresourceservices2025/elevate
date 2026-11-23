@@ -29,7 +29,7 @@ export default async function MyDataPage() {
   const p = data.profile;
   const rows: [string, string | null][] = p
     ? [
-        ["Employee number", p.employeeNumber],
+        ["Contractor number", p.employeeNumber],
         ["Legal name", [p.legalFirstName, p.legalMiddleName, p.legalLastName].filter(Boolean).join(" ")],
         ["Preferred name", p.preferredName],
         ["Birth date", p.birthDate],

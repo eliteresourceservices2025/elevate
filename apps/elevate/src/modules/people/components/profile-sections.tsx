@@ -95,7 +95,7 @@ export function EmploymentSection({ profile, orgOptions, today }: { profile: Pro
   return (
     <div className="space-y-6">
       <DetailList title="Employment" className="max-w-3xl">
-        <Detail label="Employee number">{e.employeeNumber}</Detail>
+        <Detail label="Contractor number">{e.employeeNumber}</Detail>
         <Detail label="Position">{dash(e.position)}</Detail>
         <Detail label="Status">
           <Badge variant={STATUS_BADGE[e.status]}>{STATUS_LABELS[e.status]}</Badge>

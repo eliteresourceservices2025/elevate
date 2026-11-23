@@ -299,7 +299,7 @@ describe("who has acknowledged", () => {
     const result = await actions.exportAcknowledgments({ kind: "announcement", id });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.data.csv.split("\r\n")[0]).toBe("Employee number,Name,Team,Has account,Status,Acknowledged at");
+    expect(result.data.csv.split("\r\n")[0]).toBe("Contractor number,Name,Team,Has account,Status,Acknowledged at");
     expect(result.data.csv).toContain("'=HYPERLINK(1)");
     expect(result.data.fileName).toMatch(/^acknowledgments-\d{4}-\d{2}-\d{2}\.csv$/);
     expect(await rows(sql`select 1 from ops.audit_log where action = 'acknowledgment.export' and target_id = ${id}`)).toHaveLength(1);

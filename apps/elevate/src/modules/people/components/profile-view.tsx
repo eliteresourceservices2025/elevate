@@ -71,7 +71,7 @@ export async function ProfileView({ id, requestedTab, basePath, own, returnTo = 
   // only people who may see the Client assignments tab get.
   const currentClients = access.canViewClients ? profile.assignments.filter((a) => !a.endDate).map((a) => a.clientName) : null;
   const facts: { label: string; value: string | null }[] = [
-    { label: "Employee no.", value: e.employeeNumber },
+    { label: "Contractor no.", value: e.employeeNumber },
     { label: "Team", value: e.teamName },
     { label: "Manager", value: e.managerName },
     ...(currentClients ? [{ label: "Client", value: currentClients.join(", ") || null }] : []),

@@ -363,7 +363,7 @@ export async function exportAcknowledgments(input: unknown): Promise<ActionResul
 
     const rows = await ackStatus(db, subject, null);
     const csv = toCsv(
-      ["Employee number", "Name", "Team", "Has account", "Status", "Acknowledged at"],
+      ["Contractor number", "Name", "Team", "Has account", "Status", "Acknowledged at"],
       rows.map((r) => [
         r.employeeNumber,
         r.name,

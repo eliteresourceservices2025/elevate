@@ -84,7 +84,7 @@ export async function renderMyDataPdf(data: MyData): Promise<Uint8Array> {
   const p = data.profile;
   if (!p) empty("No people record is linked to this account.");
   else {
-    field("Employee number", p.employeeNumber);
+    field("Contractor number", p.employeeNumber);
     field("Name", [p.legalFirstName, p.legalMiddleName, p.legalLastName].filter(Boolean).join(" "));
     field("Preferred name", p.preferredName);
     field("Birth date", p.birthDate);
