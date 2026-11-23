@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { clockIn, clockOut, clockText, endBreak, hoursMinutes, startBreak, switchClient, timeOf, workChoices, type Choice, type Notice, type StatusView } from "../api";
+import { clockIn, clockOut, clockText, endBreak, hoursMinutes, openPermissionSettings, startBreak, switchClient, timeOf, workChoices, type Choice, type Notice, type StatusView } from "../api";
 import { CoffeeIcon, PlayIcon, SearchIcon, StopIcon, SwitchIcon } from "../icons";
 
 const BLOCKED: Record<string, string> = {
@@ -151,6 +151,16 @@ export function Status({ status, notice, onNotice, onChanged }: { status: Status
           </p>
         ) : null}
       </section>
+
+      {!status.permissionsOk ? (
+        <section className="card stack" role="alert" aria-label="Allow Screen Recording">
+          <h3>Allow Screen Recording</h3>
+          <p>Your Mac needs your OK before this app can take the blurred pictures. Open System Settings, turn on ELEVATE Tracker App under Screen Recording, then quit the app from its menu bar icon and open it again.</p>
+          <button type="button" className="primary" onClick={() => void openPermissionSettings()}>
+            Open System Settings
+          </button>
+        </section>
+      ) : null}
 
       {choices.length > 1 ? (
         <section className="worklist" aria-label="Your clients and projects">

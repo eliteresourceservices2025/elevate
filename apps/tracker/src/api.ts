@@ -26,6 +26,10 @@ export type StatusView = {
   today: TodayWork | null;
   /** When (this computer's clock, in ms) `today` arrived, so a wrong computer clock cannot skew the timer. */
   todayReceivedMs: number | null;
+  /** False when the system has not let the app see the screen yet (macOS Screen Recording). */
+  permissionsOk: boolean;
+  /** True when the app installs its own updates (Windows); on a Mac the person downloads the new version from ELEVATE. */
+  autoUpdate: boolean;
   hasShot: boolean;
 };
 export type ReleaseNotes = { version: string; publishedAt: string | null; notes: { added: string[]; improved: string[]; fixed: string[] }; minRequired: boolean };
@@ -67,6 +71,8 @@ let mockState: StatusView = {
     ],
   },
   todayReceivedMs: Date.now(),
+  permissionsOk: mockMode !== "noperm",
+  autoUpdate: mockMode !== "mac",
   hasShot: true,
 };
 const mockCaptured: CapturedApp[] = [
@@ -123,6 +129,9 @@ export async function capturedToday(): Promise<CapturedApp[]> {
 export async function lastShot(): Promise<string | null> {
   if (inTauri) return invoke<string | null>("last_shot_thumbnail");
   return "data:image/svg+xml;utf8," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="320" height="180" fill="#e9e4f2"/><rect x="16" y="16" width="288" height="14" fill="#c8bde0"/><rect x="16" y="44" width="180" height="60" rx="6" fill="#d6cdea"/><rect x="208" y="44" width="96" height="120" rx="6" fill="#d6cdea"/><rect x="16" y="116" width="180" height="48" rx="6" fill="#dcd4ee"/></svg>`);
+}
+export async function openPermissionSettings(): Promise<void> {
+  if (inTauri) await invoke("open_permission_settings");
 }
 export async function checkForUpdates(): Promise<void> {
   if (inTauri) await invoke("check_for_updates");

@@ -101,6 +101,6 @@ fn the_build_workflow_gives_signing_secrets_only_to_the_steps_that_need_them() {
 fn the_build_workflow_conditions_are_valid_expressions() {
     let flow = fs::read_to_string(root().join("../../../.github/workflows/tracker.yml")).expect("workflow");
     for line in flow.lines().filter(|l| l.trim_start().starts_with("if:")) {
-        assert!(line.contains("'refs/tags/tracker-v'") || line.contains("always()"), "an `if:` must use quoted strings so GitHub accepts the file: {line}");
+        assert!(line.contains("'refs/tags/tracker-v'") || line.contains("always()") || line.contains("matrix.target == '"), "an `if:` must use quoted strings so GitHub accepts the file: {line}");
     }
 }

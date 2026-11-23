@@ -108,6 +108,53 @@ jobs:
             apps/tracker/src-tauri/target/release/bundle/nsis/*-setup.exe.sig
             apps/tracker/src-tauri/target/release/bundle/nsis/SHA256SUMS.txt
 
-  # macos:
-  #   Phase 4. A coworker tests the Mac build; it needs an Apple Developer ID certificate, notarization and its own update key entry
-  #   (platforms darwin-aarch64 and darwin-x86_64). Left out until then on purpose.
+  # The Mac app, unsigned for now (like the first Windows builds): a person opens it with right-click, Open, or Open Anyway in System
+  # Settings. It is signed only with an ad-hoc identity, so no Apple Developer account is needed yet. Mac builds do not self-update: the
+  # update file is not made, and the person downloads each new version from the ELEVATE Tracker App page. Both kinds of Mac are built.
+  macos:
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [aarch64-apple-darwin, x86_64-apple-darwin]
+    env:
+      ELEVATE_TRACKER_BASE_URL: ${{ vars.ELEVATE_TRACKER_BASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/tracker/src-tauri
+          key: ${{ matrix.target }}
+
+      - run: pnpm install --frozen-lockfile --filter "elevate-tracker..."
+      - run: pnpm --filter elevate-tracker typecheck
+      # The tests run on this kind of Mac once (they check the same code for both).
+      - name: Rust tests
+        if: matrix.target == 'aarch64-apple-darwin'
+        run: pnpm --filter elevate-tracker test:rust
+
+      - name: Build the Mac app
+        run: pnpm --filter elevate-tracker exec tauri build --target ${{ matrix.target }} --bundles dmg --config '{"bundle":{"createUpdaterArtifacts":false}}'
+
+      - name: Fingerprints
+        run: |
+          cd apps/tracker/src-tauri/target/${{ matrix.target }}/release/bundle/dmg
+          ls -l *.dmg
+          shasum -a 256 *.dmg | tee SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: elevate-tracker-macos-${{ matrix.target }}
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            apps/tracker/src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+            apps/tracker/src-tauri/target/${{ matrix.target }}/release/bundle/dmg/SHA256SUMS.txt

@@ -1,4 +1,4 @@
-//! A stand-in so the crate compiles on macOS and Linux until Phase 4. It reports nothing and captures nothing.
+//! A stand-in so the crate compiles on macOS and Linux on systems other than Windows and macOS. It reports nothing and captures nothing.
 use super::{CaptureError, MonitorShot, Platform};
 
 pub struct UnsupportedPlatform;

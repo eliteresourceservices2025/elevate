@@ -29,6 +29,13 @@ fn no_source_file_reads_a_window_title_or_other_content() {
         ["Get", "Key", "State"].concat(),
         ["Get", "Raw", "Input", "Data"].concat(),
         ["UI", "Automation"].concat(),
+        // macOS: window names, accessibility element titles, the clipboard and global input taps.
+        ["CGWindow", "ListCopyWindowInfo"].concat(),
+        ["kCG", "WindowName"].concat(),
+        ["AX", "UIElement"].concat(),
+        ["AX", "Title"].concat(),
+        ["NS", "Pasteboard"].concat(),
+        ["CGEvent", "TapCreate"].concat(),
     ]
     .into();
     let mut files = Vec::new();

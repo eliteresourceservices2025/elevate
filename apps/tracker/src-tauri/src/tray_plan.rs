@@ -140,6 +140,8 @@ mod tests {
             clock_blocked_reason: None,
             today: None,
             today_received_ms: None,
+            permissions_ok: true,
+            auto_update: true,
             has_shot: false,
         }
     }
