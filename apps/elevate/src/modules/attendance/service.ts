@@ -13,6 +13,7 @@ import { selfTestEmails } from "@/modules/jibble/client";
 import { enqueueMirror, kickMirror } from "@/modules/jibble/enqueue";
 import { isSelfTestEmail } from "@/modules/jibble/mirror-rules";
 import { clientProjects, employees } from "@/modules/people/schema";
+import { projectOpenTo } from "./project-access";
 import { MINUTE, breakLabel, ipAllowed, overbreakOf, replayClock, roundCoordinate, transition, validCoordinates, type ClockEventLite, type ClockState, type ClockType } from "./clock";
 import { clockSourceOf } from "./clock-source";
 import { assignedClients } from "./extra-hours-service";
@@ -181,7 +182,7 @@ export async function performClock(actor: { id: string; email: string }, type: C
       let picked = input.clientId ?? null;
       if (input.projectId) {
         const [proj] = await tx.select({ id: clientProjects.id, clientId: clientProjects.clientId, archivedAt: clientProjects.archivedAt }).from(clientProjects).where(eq(clientProjects.id, input.projectId)).limit(1);
-        if (!proj || proj.archivedAt) throw new ActionFailure("That project is not available.");
+        if (!proj || proj.archivedAt || !(await projectOpenTo(tx, proj.id, person.id))) throw new ActionFailure("That project is not available.");
         if (picked !== null && proj.clientId !== picked) throw new ActionFailure("That project does not belong to that client.");
         picked = proj.clientId;
         projectId = proj.id;

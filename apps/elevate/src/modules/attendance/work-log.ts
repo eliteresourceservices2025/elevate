@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { db } from "@/lib/db";
 import { clientProjects, clients } from "@/modules/people/schema";
 import { replayClock, workLog } from "./clock";
@@ -40,7 +40,15 @@ export async function assignedClientsWithProjects(executor: Parameters<typeof as
   const projects = await executor
     .select({ id: clientProjects.id, clientId: clientProjects.clientId, name: clientProjects.name })
     .from(clientProjects)
-    .where(and(inArray(clientProjects.clientId, assigned.map((c) => c.id)), isNull(clientProjects.archivedAt)))
+    .where(
+      and(
+        inArray(clientProjects.clientId, assigned.map((c) => c.id)),
+        isNull(clientProjects.archivedAt),
+        // A project with people listed is only for them; with nobody listed it is open to everyone assigned to the client.
+        sql`(not exists (select 1 from core.client_project_members m where m.project_id = ${clientProjects.id})
+          or exists (select 1 from core.client_project_members m where m.project_id = ${clientProjects.id} and m.employee_id = ${employeeId}))`,
+      ),
+    )
     .orderBy(clientProjects.name);
   return assigned.map((c) => ({ id: c.id, name: c.name, projects: projects.filter((p) => p.clientId === c.id).map((p) => ({ id: p.id, name: p.name })) }));
 }

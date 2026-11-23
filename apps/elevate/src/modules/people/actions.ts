@@ -24,6 +24,7 @@ import { SENSITIVE_LABELS } from "./constants";
 import {
   changeRequests,
   clientAssignments,
+  clientProjectMembers,
   clientProjects,
   clients,
   customFieldDefs,
@@ -51,6 +52,7 @@ import {
   bankChangeSchema,
   cancelChangeSchema,
   clientProjectSchema,
+  projectPeopleSchema,
   clientSchema,
   contactChangeSchemaFor,
   createEmployeeSchema,
@@ -762,6 +764,37 @@ export async function archiveClientProject(input: unknown): Promise<ActionResult
       if (!before || before.archivedAt) return fail("That project was not found.");
       await tx.update(clientProjects).set({ archivedAt: new Date(), updatedAt: new Date() }).where(eq(clientProjects.id, before.id));
       await writeAudit({ actor, action: "client.project.archive", targetType: "client_project", targetId: before.id, after: { clientId: before.clientId } }, tx);
+      revalidatePath("/people/clients");
+      return { ok: true, data: undefined } as const;
+    });
+  });
+}
+
+/**
+ * Chooses who may pick a project. The list replaces the old one; an empty list opens the project to everyone assigned to its client.
+ * Only active people who are assigned to the project's client today can be listed. Audit rows carry the client id and a count.
+ */
+export async function setClientProjectPeople(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "people.manage_clients");
+    const parsed = projectPeopleSchema.safeParse(input);
+    if (!parsed.success) return fail(firstIssue(parsed.error));
+    const ids = [...new Set(parsed.data.employeeIds)];
+    return db.transaction(async (tx) => {
+      const [project] = await tx.select().from(clientProjects).where(eq(clientProjects.id, parsed.data.projectId)).for("update");
+      if (!project || project.archivedAt) return fail("That project was not found.");
+      if (ids.length > 0) {
+        const ok = (await tx.execute(sql`
+          select count(distinct e.id)::int as n from core.employees e join core.client_assignments a on a.employee_id = e.id
+          where e.id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)}) and e.status = 'active' and a.client_id = ${project.clientId}
+            and a.start_date <= current_date and (a.end_date is null or a.end_date >= current_date)`)) as unknown as { n: number }[];
+        if ((ok[0]?.n ?? 0) !== ids.length) return fail("Only people assigned to this client can be added.");
+      }
+      await tx.delete(clientProjectMembers).where(eq(clientProjectMembers.projectId, project.id));
+      if (ids.length > 0) await tx.insert(clientProjectMembers).values(ids.map((employeeId) => ({ projectId: project.id, employeeId })));
+      await writeAudit({ actor, action: "client.project.people", targetType: "client_project", targetId: project.id, after: { clientId: project.clientId, count: ids.length } }, tx);
       revalidatePath("/people/clients");
       return { ok: true, data: undefined } as const;
     });

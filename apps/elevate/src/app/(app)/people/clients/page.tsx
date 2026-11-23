@@ -2,14 +2,14 @@ import type { Metadata } from "next";
 import { clientTimeZones } from "@/lib/client-time-zones";
 import { orNotFound } from "@/lib/or-not-found";
 import { ClientProjects, ClientRow, NewClientForm } from "@/modules/people/components/admin-forms";
-import { listClientProjectsForAdmin, listClients } from "@/modules/people/queries";
+import { listClientProjectPeopleForAdmin, listClientProjectsForAdmin, listClients } from "@/modules/people/queries";
 import { PageHeader } from "@/components/page-header";
 import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Clients" };
 
 export default async function ClientsPage() {
-  const [clients, projects] = await orNotFound(Promise.all([listClients(), listClientProjectsForAdmin()]));
+  const [clients, projects, projectPeople] = await orNotFound(Promise.all([listClients(), listClientProjectsForAdmin(), listClientProjectPeopleForAdmin()]));
   const timeZones = clientTimeZones(Intl.supportedValuesOf("timeZone"), clients.map((client) => client.timeZone));
 
   return (
@@ -25,7 +25,7 @@ export default async function ClientsPage() {
         {clients.map((c) => (
           <li key={c.id} className="py-3">
             <ClientRow client={{ id: c.id, name: c.name, timeZone: c.timeZone, holidayCalendar: c.holidayCalendar === "PH" ? "PH" : "US", isActive: c.isActive, handlesPhi: c.handlesPhi }} timeZones={timeZones} />
-            <ClientProjects clientId={c.id} projects={projects.filter((p) => p.clientId === c.id).map((p) => ({ id: p.id, name: p.name }))} />
+            <ClientProjects clientId={c.id} projects={projects.filter((p) => p.clientId === c.id).map((p) => ({ id: p.id, name: p.name }))} people={projectPeople.clientPeople[c.id] ?? []} members={projectPeople.members} />
           </li>
         ))}
       </ul>

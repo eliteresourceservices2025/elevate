@@ -6,7 +6,8 @@ import { toast } from "@/components/feedback-dialog";
 import { SelectField, TextField } from "@/components/form-fields";
 import { TimeZonePicker } from "@/components/time-zone-picker";
 import { Button } from "@/components/ui/button";
-import { archiveClientProject, archiveCustomFieldDef, createClient, createClientProject, createCustomFieldDef, renameClientProject, updateClient } from "../actions";
+import { Checkbox } from "@/components/ui/checkbox";
+import { archiveClientProject, archiveCustomFieldDef, createClient, createClientProject, createCustomFieldDef, renameClientProject, setClientProjectPeople, updateClient } from "../actions";
 import { CUSTOM_FIELD_TYPES, CUSTOM_FIELD_VISIBILITY } from "../constants";
 import { useAsk } from "@/components/confirm-dialog";
 
@@ -132,12 +133,26 @@ export function ClientRow({ client, timeZones }: { client: { id: string; name: s
  * A client's projects: add one, rename it, archive it. People assigned to the client pick a project on the clock (the web clock and the
  * ELEVATE Tracker App), and the time then shows which client and project it was for. Archiving keeps the project on time already recorded.
  */
-export function ClientProjects({ clientId, projects }: { clientId: string; projects: { id: string; name: string }[] }) {
+export function ClientProjects({
+  clientId,
+  projects,
+  people,
+  members,
+}: {
+  clientId: string;
+  projects: { id: string; name: string }[];
+  /** The people assigned to this client today (the choices for "who can pick it"). */
+  people: { id: string; name: string }[];
+  /** Who is listed on each project of this client; a project with nobody listed is open to everyone on the client. */
+  members: Record<string, string[]>;
+}) {
   const { run, pending } = useRun();
   const ask = useAsk();
   const [name, setName] = useState("");
   const [renaming, setRenaming] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
+  const [editingPeople, setEditingPeople] = useState<string | null>(null);
+  const [picked, setPicked] = useState<string[]>([]);
   return (
     <div className="mt-2 border-t pt-2 pl-3" aria-label="Projects">
       <p className="text-xs font-medium text-muted-foreground">Projects</p>
@@ -163,8 +178,21 @@ export function ClientProjects({ clientId, projects }: { clientId: string; proje
               </form>
             ) : (
               <>
-                <span className="text-sm">{p.name}</span>
+                <span className="text-sm">
+                  {p.name}{" "}
+                  <span className="text-xs text-muted-foreground">{(members[p.id]?.length ?? 0) === 0 ? "· everyone on this client" : `· ${members[p.id].length} ${members[p.id].length === 1 ? "person" : "people"}`}</span>
+                </span>
                 <span className="flex gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setPicked(members[p.id] ?? []);
+                      setEditingPeople(editingPeople === p.id ? null : p.id);
+                    }}
+                  >
+                    Who can pick it
+                  </Button>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -190,6 +218,33 @@ export function ClientProjects({ clientId, projects }: { clientId: string; proje
                 </span>
               </>
             )}
+            {editingPeople === p.id ? (
+              <fieldset className="mt-1 w-full rounded-lg border bg-muted/30 p-3">
+                <legend className="px-1 text-xs font-medium text-muted-foreground">Who can pick {p.name}</legend>
+                <p className="mb-2 text-xs text-muted-foreground">Tick the people who work on it. Leave everyone unticked to let everyone assigned to this client pick it.</p>
+                {people.length === 0 ? <p className="text-sm text-muted-foreground">Nobody is assigned to this client yet.</p> : null}
+                <ul className="grid gap-1 sm:grid-cols-2">
+                  {people.map((person) => (
+                    <li key={person.id} className="flex items-center gap-2 text-sm">
+                      <Checkbox
+                        id={`pp-${p.id}-${person.id}`}
+                        checked={picked.includes(person.id)}
+                        onCheckedChange={(on) => setPicked((cur) => (on ? [...cur, person.id] : cur.filter((x) => x !== person.id)))}
+                      />
+                      <label htmlFor={`pp-${p.id}-${person.id}`}>{person.name}</label>
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-2 flex gap-2">
+                  <Button size="sm" disabled={pending} onClick={() => run(() => setClientProjectPeople({ projectId: p.id, employeeIds: picked }), picked.length === 0 ? "Everyone on this client can pick it." : "Saved.", () => setEditingPeople(null))}>
+                    Save
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setEditingPeople(null)}>
+                    Cancel
+                  </Button>
+                </div>
+              </fieldset>
+            ) : null}
           </li>
         ))}
       </ul>
