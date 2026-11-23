@@ -295,3 +295,20 @@ describe("an open session in a wide window", () => {
     expect(log[0].to).toBeLessThanOrEqual(Date.now() + 1000);
   });
 });
+
+describe("today's time in clock-state (for the Tracker App screen)", () => {
+  it("gives the total worked today and the time for each client and project, as of a stated moment", async () => {
+    const w = await worker();
+    const c = await client();
+    await assign(w.employeeId, c);
+    const p = await project(c, "Intake");
+    const before = await clockStateFor(w.employeeId);
+    expect(before.today.totalMs).toBe(0);
+    expect(before.today.byWork).toEqual([]);
+    await clockForDevice(w.employeeId, "clock_in", { projectId: p });
+    const during = await clockStateFor(w.employeeId);
+    expect(during.today.totalMs).toBeGreaterThanOrEqual(0);
+    expect(during.today.byWork).toEqual([{ clientId: c, projectId: p, ms: during.today.totalMs }]);
+    expect(Math.abs(Date.parse(during.today.asOf) - Date.now())).toBeLessThan(5_000);
+  });
+});

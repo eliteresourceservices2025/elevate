@@ -1368,3 +1368,66 @@ describe("people who clock in without a Jibble account", () => {
     expect(await flagsOf(locked.employeeId)).not.toContain("no_screenshots");
   });
 });
+
+describe("people who use the ELEVATE Tracker App are not also run in Jibble", () => {
+  /** What Jibble was told for this person (other tests leave calls for other people in the fake). */
+  const callsFor = (p: { jibbleId: string }) => fake.calls.filter((c) => c.personId === p.jibbleId).map((c) => c.action);
+  const connectComputer = (employeeId: string, status: "active" | "revoked" = "active") =>
+    db.execute(sql`insert into time.tracker_devices (employee_id, name, os, token_hash, status) values (${employeeId}, 'Work PC', 'windows', ${randomUUID()}, ${status})`);
+
+  it("queues nothing for Jibble when the person has a connected Tracker App computer, but still does for a revoked one", async () => {
+    await withMonitoring(async () => {
+      const team = await makeTeam();
+      expect((await turnOn(hr, team)).ok).toBe(true);
+      const withApp = await person("WithApp", { teamId: team });
+      await connectComputer(withApp.employeeId);
+      as(withApp.user);
+      expect((await attendance.clockIn({})).ok).toBe(true);
+      expect((await attendance.clockOut()).ok).toBe(true);
+      expect(await logOf(withApp.employeeId)).toHaveLength(0);
+
+      const revoked = await person("Revoked", { teamId: team });
+      await connectComputer(revoked.employeeId, "revoked");
+      as(revoked.user);
+      await attendance.clockIn({});
+      await attendance.clockOut();
+      expect((await logOf(revoked.employeeId)).map((l) => l.action).sort()).toEqual(["In", "Out"]);
+    });
+  });
+
+  it("still stops Jibble when a computer is connected in the middle of a shift that Jibble was already running", async () => {
+    await withMonitoring(async () => {
+      const team = await makeTeam();
+      await turnOn(hr, team);
+      const ana = await person("Mid", { teamId: team });
+      as(ana.user);
+      await attendance.clockIn({});
+      await jobs.processMirrorQueue(new Date()); // Jibble was told to start
+      expect(callsFor(ana)).toEqual(["In"]);
+      await connectComputer(ana.employeeId); // the app is connected mid-shift
+      as(ana.user);
+      await attendance.clockOut();
+      await jobs.processMirrorQueue(new Date());
+      expect(callsFor(ana)).toEqual(["In", "Out"]);
+      // and the next shift does not start Jibble again
+      await attendance.clockIn({});
+      await attendance.clockOut();
+      await jobs.processMirrorQueue(new Date());
+      expect(callsFor(ana)).toEqual(["In", "Out"]);
+    });
+  });
+
+  it("does not send a Jibble start that was queued before the computer was connected", async () => {
+    await withMonitoring(async () => {
+      const team = await makeTeam();
+      await turnOn(hr, team);
+      const ana = await person("Queued", { teamId: team });
+      as(ana.user);
+      await attendance.clockIn({});
+      expect((await logOf(ana.employeeId)).map((l) => l.action)).toEqual(["In"]); // queued, not yet sent
+      await connectComputer(ana.employeeId);
+      await jobs.processMirrorQueue(new Date());
+      expect(callsFor(ana)).toEqual([]);
+    });
+  });
+});

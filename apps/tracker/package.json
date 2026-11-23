@@ -1,6 +1,6 @@
 {
   "name": "elevate-tracker",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "description": "ELEVATE Tracker App (Windows first): a tray app that clocks in and out through ELEVATE and records app names, idle time and blurred screenshots while clocked in.",
   "type": "module",

@@ -250,3 +250,34 @@ fn the_token_is_saved_loaded_and_cleared() {
 fn _uses(_: &dyn Fn()) {
     let _ = header_exists("x");
 }
+
+#[tokio::test]
+async fn a_client_can_say_no_specific_project_is_not_offered_and_older_servers_default_to_offering_it() {
+    let server = MockServer::start().await;
+    let mut body = state_body();
+    body["clients"] = json!([
+        { "id": "c1", "name": "Acme", "allowNoProject": false, "projects": [{ "id": "p1", "name": "Intake" }] },
+        { "id": "c2", "name": "Beta", "projects": [{ "id": "p2", "name": "Billing" }] }
+    ]);
+    answer(&server, "GET", "/api/tracker/clock-state", 200, body).await;
+    let s = client(&server).await.clock_state(TOKEN).await.unwrap();
+    assert!(!s.clients[0].allow_no_project, "the client said it is not offered");
+    assert!(s.clients[1].allow_no_project, "no answer means it is offered, as before");
+}
+
+#[tokio::test]
+async fn clock_state_reads_todays_time_and_an_older_elevate_without_it_is_fine() {
+    let server = MockServer::start().await;
+    let mut body = state_body();
+    body["today"] = json!({ "asOf": "2026-11-23T18:00:00.000Z", "totalMs": 5_400_000, "byWork": [{ "clientId": "c1", "projectId": "p1", "ms": 3_600_000 }, { "clientId": "c1", "projectId": null, "ms": 1_800_000 }] });
+    answer(&server, "GET", "/api/tracker/clock-state", 200, body).await;
+    let s = client(&server).await.clock_state(TOKEN).await.unwrap();
+    let today = s.today.expect("today was sent");
+    assert_eq!(today.total_ms, 5_400_000);
+    assert_eq!(today.by_work[0].project_id.as_deref(), Some("p1"));
+    assert_eq!(today.by_work[1].project_id, None);
+
+    let older = MockServer::start().await;
+    answer(&older, "GET", "/api/tracker/clock-state", 200, state_body()).await;
+    assert!(client(&older).await.clock_state(TOKEN).await.unwrap().today.is_none());
+}

@@ -13,6 +13,7 @@ import type { ChangeCategory, ChangeStatus, CustomFieldType, CustomFieldVisibili
 import {
   changeRequests,
   clientAssignments,
+  clientProjectMembers,
   clientProjects,
   clients,
   customFieldDefs,
@@ -461,6 +462,30 @@ export async function listClientProjectsForAdmin() {
   const user = await requireUser();
   await authorize(user, "people.manage_clients");
   return db.select({ id: clientProjects.id, clientId: clientProjects.clientId, name: clientProjects.name }).from(clientProjects).where(isNull(clientProjects.archivedAt)).orderBy(clientProjects.name);
+}
+
+/**
+ * For the Clients page: who is listed on each project (a project with nobody listed is open to the client's people), and the people each
+ * client has today (the choices for that list). Names only.
+ */
+export async function listClientProjectPeopleForAdmin() {
+  const user = await requireUser();
+  await authorize(user, "people.manage_clients");
+  const memberRows = await db
+    .select({ projectId: clientProjectMembers.projectId, employeeId: clientProjectMembers.employeeId })
+    .from(clientProjectMembers)
+    .innerJoin(clientProjects, eq(clientProjects.id, clientProjectMembers.projectId))
+    .where(isNull(clientProjects.archivedAt));
+  const members: Record<string, string[]> = {};
+  for (const m of memberRows) (members[m.projectId] ??= []).push(m.employeeId);
+  const peopleRows = (await db.execute(sql`
+    select distinct a.client_id as "clientId", e.id, coalesce(nullif(e.preferred_name, ''), e.legal_first_name) || ' ' || e.legal_last_name as name
+    from core.client_assignments a join core.employees e on e.id = a.employee_id join core.clients c on c.id = a.client_id
+    where c.archived_at is null and e.status = 'active' and a.start_date <= current_date and (a.end_date is null or a.end_date >= current_date)
+    order by name`)) as unknown as { clientId: string; id: string; name: string }[];
+  const clientPeople: Record<string, { id: string; name: string }[]> = {};
+  for (const p of peopleRows) (clientPeople[p.clientId] ??= []).push({ id: p.id, name: p.name });
+  return { members, clientPeople };
 }
 
 export async function listCustomFieldDefs() {

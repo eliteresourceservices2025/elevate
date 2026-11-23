@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { status as loadStatus, subscribe, type Notice, type StatusView } from "./api";
+import { status as loadStatus, subscribe, timeOf, type Notice, type StatusView } from "./api";
 import { Captured } from "./screens/Captured";
 import { RequiredUpdate } from "./screens/RequiredUpdate";
 import { SignIn } from "./screens/SignIn";
@@ -41,9 +41,15 @@ export function App() {
 
   return (
     <main className="app">
-      <header className="between">
+      <header className="topbar">
+        <span className="logo" aria-hidden>E</span>
         <h1>ELEVATE Tracker App</h1>
-        <span className="muted">Version {status.version}</span>
+        {status.signedIn ? (
+          <span className={`pill ${status.online ? "online" : "offline"}`}>
+            <span className="dot" aria-hidden />
+            {status.online ? "Online" : "Offline"}
+          </span>
+        ) : null}
       </header>
 
       {!status.signedIn ? (
@@ -59,6 +65,19 @@ export function App() {
           {tab === "status" ? <Status status={status} notice={notice} onNotice={setNotice} onChanged={reload} /> : <Captured refreshKey={refreshKey} onDisconnected={reload} />}
         </>
       )}
+
+      <footer className="footer">
+        <span>
+          {!status.signedIn
+            ? "Not connected"
+            : status.queueLen > 0
+              ? `${status.queueLen} items waiting to be sent`
+              : status.lastSentMs
+                ? `Last sent at ${timeOf(new Date(status.lastSentMs).toISOString())}`
+                : "Nothing sent yet"}
+        </span>
+        <span>Version {status.version}</span>
+      </footer>
     </main>
   );
 }

@@ -212,6 +212,8 @@ impl Engine {
                     s.on_break = cs.on_break;
                     s.current = cs.current;
                     s.clock_blocked_reason = cs.clock_blocked_reason;
+                    s.today = cs.today;
+                    s.today_received_ms = Some(now);
                     s.idle_timeout_secs = cs.settings.idle_timeout_seconds;
                     came_back
                 };

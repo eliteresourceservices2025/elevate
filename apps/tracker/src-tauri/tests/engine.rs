@@ -508,3 +508,15 @@ async fn when_elevate_comes_back_what_is_waiting_is_sent_at_once_not_after_the_l
     assert_eq!(r.queue.len().unwrap().0, 0, "everything waiting went out as soon as ELEVATE was seen again");
     assert!(r.calls("/api/tracker/segments").await > 0);
 }
+
+#[tokio::test]
+async fn todays_time_from_elevate_reaches_the_window_with_the_moment_it_arrived() {
+    let mut r = rig(true).await;
+    let mut body = state_body("working", true);
+    body["today"] = json!({ "asOf": "2026-11-23T18:00:00.000Z", "totalMs": 7_200_000, "byWork": [{ "clientId": "c1", "projectId": null, "ms": 7_200_000 }] });
+    says_status(&r.server, 200, body).await;
+    r.run(0, 5, 5).await;
+    let view = r.shared.lock().unwrap().view("1.0.2");
+    assert_eq!(view.today.as_ref().map(|t| t.total_ms), Some(7_200_000));
+    assert_eq!(view.today_received_ms, Some(T0), "counted from the moment it arrived on this computer, so a wrong computer clock cannot skew it");
+}

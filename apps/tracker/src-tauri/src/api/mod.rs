@@ -43,10 +43,17 @@ pub struct ProjectChoice {
     pub name: String,
 }
 
+fn yes() -> bool {
+    true
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct ClientChoice {
     pub id: String,
     pub name: String,
+    /// Whether "No specific project" is offered for this client. An older ELEVATE sends nothing, which means it is.
+    #[serde(rename = "allowNoProject", default = "yes")]
+    pub allow_no_project: bool,
     #[serde(default)]
     pub projects: Vec<ProjectChoice>,
 }
@@ -56,6 +63,25 @@ pub struct ClientChoice {
 pub struct TrackerSettings {
     pub idle_timeout_seconds: u32,
     pub shot_interval_minutes: u32,
+}
+
+/// Today's worked time in one line: a client, a project (or none) and the milliseconds.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TodayLine {
+    pub client_id: String,
+    pub project_id: Option<String>,
+    pub ms: i64,
+}
+
+/// Today's worked time (breaks left out) as ELEVATE counted it at `as_of`. Only for the person's own screen: it is not hours.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TodayWork {
+    pub as_of: String,
+    pub total_ms: i64,
+    #[serde(default)]
+    pub by_work: Vec<TodayLine>,
 }
 
 /// What ELEVATE says about this person right now.
@@ -77,6 +103,9 @@ pub struct ClockState {
     pub clock_blocked_reason: Option<String>,
     pub policy: bool,
     pub settings: TrackerSettings,
+    /// An older ELEVATE sends nothing here.
+    #[serde(default)]
+    pub today: Option<TodayWork>,
     /// The version this app must update to. The app still gets the clock state (time keeping is never blocked by the version floor),
     /// but records and sends nothing until it is updated.
     #[serde(default)]

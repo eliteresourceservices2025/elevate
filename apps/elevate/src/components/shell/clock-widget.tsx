@@ -15,7 +15,8 @@ import { cn } from "@/lib/utils";
 import { BREAK_CHOICES, EOD_TEMPLATE, HEARTBEAT_MS, MINUTE, breakLabel, formatClock, needsWelcomeBack } from "@/modules/attendance/clock";
 import { coveringWindow } from "@/modules/attendance/extra-hours";
 import { EvidenceField, uploadEvidence } from "@/modules/attendance/components/evidence-field";
-import { answerIdlePrompt, cancelCorrection, clockIn, clockOut, endBreak, pingPresence, reportIdlePrompt, requestClockSelfie, requestCorrection, saveShiftNote, startBreak, switchClient } from "@/modules/attendance/actions";
+import { answerIdlePrompt, cancelCorrection, clockIn, clockOut, endBreak, pingPresence, refreshClockStatus, reportIdlePrompt, requestClockSelfie, requestCorrection, saveShiftNote, startBreak, switchClient } from "@/modules/attendance/actions";
+import { clockStatusChanged } from "@/modules/attendance/clock-status-change";
 import type { ClockStatus } from "@/modules/attendance/queries";
 import { workChoices, type WorkChoice } from "@/modules/attendance/work-choices";
 
@@ -231,8 +232,79 @@ function EodNote({ sessionId, onDone }: { sessionId: string; onDone: () => void 
  * The time clock in the header. Elapsed time counts from the SERVER's timestamps (offset against this browser's clock),
  * so changing the computer's clock changes nothing. All the rules are enforced on the server; this only shows state.
  */
-export function ClockWidget({ status }: { status: ClockStatus | null }) {
+/** The client and project choices in the two menus: a client that has projects is a small heading with short lines under it. */
+function ChoiceList({ choices, onPick }: { choices: WorkChoice[]; onPick: (c: WorkChoice) => void }) {
+  return (
+    <>
+      {choices.map((c, i) => (
+        <div key={`${c.clientId}:${c.projectId ?? ""}`}>
+          {c.grouped && choices[i - 1]?.clientId !== c.clientId ? (
+            <p className="px-3 pb-0.5 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{c.clientName}</p>
+          ) : null}
+          <button
+            type="button"
+            role="menuitem"
+            className={cn("block w-full truncate py-1.5 text-left text-xs hover:bg-muted focus-visible:bg-muted focus-visible:outline-none", c.grouped ? "pl-5 pr-3" : "px-3 font-medium")}
+            title={c.label}
+            onClick={() => onPick(c)}
+          >
+            {c.title}
+          </button>
+        </div>
+      ))}
+    </>
+  );
+}
+
+/** How often the header asks whether the clock changed on another device (only while the tab is in front). */
+const STATUS_CHECK_MS = 30_000;
+
+export function ClockWidget({ status: statusProp }: { status: ClockStatus | null }) {
   const router = useRouter();
+  // The status comes with the page; it is also re-read now and then, so a click in the ELEVATE Tracker App shows here without a refresh.
+  const [status, setStatus] = useState(statusProp);
+  const [seenProp, setSeenProp] = useState(statusProp);
+  if (statusProp !== seenProp) {
+    // A fresh status came with the page: it wins over what the last check found.
+    setSeenProp(statusProp);
+    setStatus(statusProp);
+  }
+  const shown = useRef(status);
+  const clicks = useRef(0);
+  useEffect(() => {
+    shown.current = status;
+  }, [status]);
+  const hasStatus = statusProp !== null;
+  useEffect(() => {
+    if (!hasStatus) return;
+    let busy = false;
+    const check = async () => {
+      if (busy || document.visibilityState !== "visible") return;
+      busy = true;
+      const clicksBefore = clicks.current;
+      try {
+        const latest = await refreshClockStatus();
+        if (clicks.current !== clicksBefore) return; // the person clicked while this was on its way: the click's own refresh is newer
+        if (clockStatusChanged(shown.current, latest)) {
+          shown.current = latest;
+          setStatus(latest);
+          router.refresh(); // the rest of the page (Attendance, the dashboard) follows
+        }
+      } catch {
+        // Offline or signed out: the next check or the next click says so.
+      } finally {
+        busy = false;
+      }
+    };
+    const timer = window.setInterval(check, STATUS_CHECK_MS);
+    document.addEventListener("visibilitychange", check);
+    window.addEventListener("focus", check);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", check);
+      window.removeEventListener("focus", check);
+    };
+  }, [hasStatus, router]);
   const [pending, startTransition] = useTransition();
   const [now, setNow] = useState<number | null>(null);
   const [selfie, setSelfie] = useState(false);
@@ -377,7 +449,11 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
     );
   }
 
-  const run = <T,>(fn: () => Promise<ActionResult<T>>, success?: string, after?: (data: T) => void) =>
+  const run = <T,>(fn: () => Promise<ActionResult<T>>, success?: string, after?: (data: T) => void) => {
+    clicks.current += 1; // a status check that started before this click must not overwrite what the click did
+    return runAction(fn, success, after);
+  };
+  const runAction = <T,>(fn: () => Promise<ActionResult<T>>, success?: string, after?: (data: T) => void) =>
     startTransition(async () => {
       try {
         const result = await fn();
@@ -397,6 +473,8 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
   // What a person can clock in for or switch to: each client with no projects, and each project (plus "no specific project") of a client that has some.
   const choices = workChoices(status.clients);
   const needsChoice = choices.length > 1;
+  // One project and no "No specific project": there is nothing to choose, but the project still has to be named.
+  const onlyChoice = choices.length === 1 && choices[0].projectId ? choices[0] : undefined;
   // The header is tight (the sidebar and two clocks take room): with a Switch button, the text of Break and Clock out waits for a very wide screen.
   const clockLabel = needsChoice ? "max-2xl:sr-only" : "max-sm:sr-only";
   const currentChoice = choices.find((c) => c.clientId === status.currentClientId && (c.projectId ?? null) === status.currentProjectId);
@@ -468,8 +546,10 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
             aria-expanded={needsChoice ? clientMenu === "in" : undefined}
             onClick={() => {
               if (needsChoice) setClientMenu(clientMenu === "in" ? null : "in");
-              else if (status.needsSelfie) setSelfie(true);
-              else void doClockIn();
+              else if (status.needsSelfie) {
+                setChosenWork(onlyChoice);
+                setSelfie(true);
+              } else void doClockIn(undefined, onlyChoice);
             }}
             className="h-11 gap-2 px-3 text-base font-bold shadow-lg shadow-primary/30 sm:min-w-36 sm:px-6 ring-2 ring-primary/40 transition-transform hover:scale-[1.03]"
           >
@@ -480,22 +560,15 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
           {clientMenu === "in" ? (
             <div role="menu" aria-label="Which client or project are you working on?" className="absolute right-0 top-full z-50 mt-1 max-h-96 w-64 overflow-y-auto rounded-xl border bg-popover py-1 shadow-lg">
               <p className="px-3 py-1.5 text-xs font-medium text-muted-foreground">Clock in for</p>
-              {choices.map((c) => (
-                <button
-                  key={`${c.clientId}:${c.projectId ?? ""}`}
-                  type="button"
-                  role="menuitem"
-                  className="block w-full px-3 py-2 text-left text-sm hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
-                  onClick={() => {
-                    setClientMenu(null);
-                    setChosenWork(c);
-                    if (status.needsSelfie) setSelfie(true);
-                    else void doClockIn(undefined, c);
-                  }}
-                >
-                  {c.label}
-                </button>
-              ))}
+              <ChoiceList
+                choices={choices}
+                onPick={(c) => {
+                  setClientMenu(null);
+                  setChosenWork(c);
+                  if (status.needsSelfie) setSelfie(true);
+                  else void doClockIn(undefined, c);
+                }}
+              />
             </div>
           ) : null}
         </div>
@@ -532,22 +605,13 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
                 <div role="menu" aria-label="Switch client or project" className="absolute right-0 top-full z-50 mt-1 max-h-96 w-64 overflow-y-auto rounded-xl border bg-popover py-1 shadow-lg">
                   <p className="px-3 pt-1.5 text-xs text-muted-foreground">Now: {nowLabel}</p>
                   <p className="px-3 py-1.5 text-xs font-medium text-muted-foreground">Move the rest of this session to</p>
-                  {choices
-                    .filter((c) => c !== currentChoice)
-                    .map((c) => (
-                      <button
-                        key={`${c.clientId}:${c.projectId ?? ""}`}
-                        type="button"
-                        role="menuitem"
-                        className="block w-full px-3 py-2 text-left text-sm hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
-                        onClick={() => {
-                          setClientMenu(null);
-                          run(() => switchClient({ clientId: c.clientId, projectId: c.projectId }), `Now working on ${c.label}.`);
-                        }}
-                      >
-                        {c.label}
-                      </button>
-                    ))}
+                  <ChoiceList
+                    choices={choices.filter((c) => c !== currentChoice)}
+                    onPick={(c) => {
+                      setClientMenu(null);
+                      run(() => switchClient({ clientId: c.clientId, projectId: c.projectId }), `Now working on ${c.label}.`);
+                    }}
+                  />
                 </div>
               ) : null}
             </div>

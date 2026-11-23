@@ -195,6 +195,8 @@ export const clients = core
       isActive: boolean("is_active").notNull().default(true),
       /** The client's work involves patient information: people assigned to it take the Full HIPAA training track. On by default (safer). */
       handlesPhi: boolean("handles_phi").notNull().default(true),
+      /** A client with projects also offers "No specific project" on the clock. HR can switch that off so people must pick a project. On by default. */
+      allowNoProject: boolean("allow_no_project").notNull().default(true),
       createdBy: uuid("created_by"),
       archivedAt: timestamp("archived_at", { withTimezone: true }),
       ...stamps,
@@ -206,7 +208,8 @@ export const clients = core
 /**
  * A project of a client (owner decision 2026-11-20): a named piece of work a person handling two or more clients picks on the clock,
  * so the time shows which client and project it belonged to. Added by HR and Super Admin; archived, never deleted (clock events point at it).
- * People are assigned to clients, not projects: anyone assigned to the client can pick any of its active projects.
+ * People are assigned to clients, not projects: anyone assigned to the client can pick any of its active projects, unless HR listed
+ * specific people on the project (`clientProjectMembers`), in which case only they can.
  */
 export const clientProjects = core
   .table(
@@ -226,6 +229,26 @@ export const clientProjects = core
       uniqueIndex("client_projects_name_idx").on(t.clientId, sql`lower(${t.name})`).where(sql`${t.archivedAt} is null`),
       index("client_projects_client_idx").on(t.clientId),
     ],
+  )
+  .enableRLS();
+
+/**
+ * Who may pick a project. A project with NO rows here is open to everyone assigned to its client (the original behavior); with rows, only
+ * those people see it on the clock and the server refuses anyone else. Rows are replaced as a set by HR (`setClientProjectPeople`).
+ */
+export const clientProjectMembers = core
+  .table(
+    "client_project_members",
+    {
+      projectId: uuid("project_id")
+        .notNull()
+        .references(() => clientProjects.id),
+      employeeId: uuid("employee_id")
+        .notNull()
+        .references(() => employees.id),
+      createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    },
+    (t) => [primaryKey({ columns: [t.projectId, t.employeeId] }), index("client_project_members_employee_idx").on(t.employeeId)],
   )
   .enableRLS();
 

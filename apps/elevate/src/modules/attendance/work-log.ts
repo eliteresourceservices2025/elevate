@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { db } from "@/lib/db";
 import { clientProjects, clients } from "@/modules/people/schema";
 import { replayClock, workLog } from "./clock";
@@ -34,15 +34,24 @@ export async function loadWorkLog(executor: Executor, employeeId: string, fromMs
 }
 
 /** The clients a person is assigned to today, each with its active projects (by name). People pick from these on the clock. */
-export async function assignedClientsWithProjects(executor: Parameters<typeof assignedClients>[0] & Pick<typeof db, "select">, employeeId: string): Promise<{ id: string; name: string; projects: { id: string; name: string }[] }[]> {
+export async function assignedClientsWithProjects(executor: Parameters<typeof assignedClients>[0] & Pick<typeof db, "select">, employeeId: string): Promise<{ id: string; name: string; allowNoProject: boolean; projects: { id: string; name: string }[] }[]> {
   const assigned = await assignedClients(executor, employeeId);
   if (assigned.length === 0) return [];
   const projects = await executor
     .select({ id: clientProjects.id, clientId: clientProjects.clientId, name: clientProjects.name })
     .from(clientProjects)
-    .where(and(inArray(clientProjects.clientId, assigned.map((c) => c.id)), isNull(clientProjects.archivedAt)))
+    .where(
+      and(
+        inArray(clientProjects.clientId, assigned.map((c) => c.id)),
+        isNull(clientProjects.archivedAt),
+        // A project with people listed is only for them; with nobody listed it is open to everyone assigned to the client.
+        sql`(not exists (select 1 from core.client_project_members m where m.project_id = ${clientProjects.id})
+          or exists (select 1 from core.client_project_members m where m.project_id = ${clientProjects.id} and m.employee_id = ${employeeId}))`,
+      ),
+    )
     .orderBy(clientProjects.name);
-  return assigned.map((c) => ({ id: c.id, name: c.name, projects: projects.filter((p) => p.clientId === c.id).map((p) => ({ id: p.id, name: p.name })) }));
+  const flags = await executor.select({ id: clients.id, allowNoProject: clients.allowNoProject }).from(clients).where(inArray(clients.id, assigned.map((c) => c.id)));
+  return assigned.map((c) => ({ id: c.id, name: c.name, allowNoProject: flags.find((f) => f.id === c.id)?.allowNoProject ?? true, projects: projects.filter((p) => p.clientId === c.id).map((p) => ({ id: p.id, name: p.name })) }));
 }
 
 /** Who each clocked-in person is working for right now (only people whose open session has a client), with the time that stretch began. */

@@ -12,6 +12,7 @@ import type { JibbleClient } from "./http-client";
 import { closeWorkingMismatches, recordOutMismatch, recordWorkingMismatch } from "./mismatch-lifecycle";
 import { claimJibbleOperation, finishJibbleOperation, runGuardedJibbleEffect } from "./operation-guard";
 import { createJibbleStartProposal } from "./jibble-proposal";
+import { jibbleAppliesSql } from "./applies";
 import { jibbleLinkLog } from "./schema";
 import { eq } from "drizzle-orm";
 
@@ -23,7 +24,7 @@ export async function checkWorkingMismatch(employeeId: string, client: JibbleCli
   let wakeQueue = false;
   try {
     const eligible = async (executor: Pick<typeof db, "execute" | "select" | "insert" | "update" | "delete"> = db, ignoreLogId?: string) => {
-      const [row] = (await executor.execute(sql`select p.jibble_person_id, u.email, coalesce(r.jibble_mirror, false) as enabled,
+      const [row] = (await executor.execute(sql`select p.jibble_person_id, u.email, ${jibbleAppliesSql(sql`e.id`, sql`coalesce(r.jibble_mirror, false)`)} as enabled,
         coalesce((select paused from time.jibble_settings where id = 1), false) as paused,
         exists(select 1 from time.jibble_link_log l where l.employee_id = e.id and l.status = 'queued' ${ignoreLogId ? sql`and l.id <> ${ignoreLogId}::uuid` : sql``}) as queued
         from core.employees e join time.jibble_people p on p.employee_id = e.id

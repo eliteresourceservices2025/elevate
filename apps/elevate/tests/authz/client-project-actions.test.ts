@@ -13,7 +13,7 @@ vi.mock("@/lib/db", () => ({ db: new Proxy({}, { get: () => { throw new Error("d
 vi.mock("@/modules/audit/write", () => ({ writeAudit: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
-const { createClientProject, renameClientProject, archiveClientProject } = await import("@/modules/people/actions");
+const { createClientProject, renameClientProject, archiveClientProject, setClientProjectPeople, setClientNoProjectAllowed } = await import("@/modules/people/actions");
 
 const ID = "11111111-1111-4111-8111-111111111111";
 const OTHER = "22222222-2222-4222-8222-222222222222";
@@ -28,6 +28,8 @@ const cases: { name: string; call: () => Promise<{ ok: boolean; error?: string }
   { name: "createClientProject", call: () => createClientProject({ clientId: OTHER, name: "Intake" }) },
   { name: "renameClientProject", call: () => renameClientProject({ projectId: OTHER, name: "Billing" }) },
   { name: "archiveClientProject", call: () => archiveClientProject({ projectId: OTHER }) },
+  { name: "setClientNoProjectAllowed", call: () => setClientNoProjectAllowed({ clientId: OTHER, allowed: false }) },
+  { name: "setClientProjectPeople", call: () => setClientProjectPeople({ projectId: OTHER, employeeIds: [ID] }) },
 ];
 
 beforeEach(() => vi.spyOn(console, "error").mockImplementation(() => {}));
@@ -49,13 +51,13 @@ describe("client project actions, every role", () => {
   }
 });
 
-describe("listClientProjectsForAdmin, every role", () => {
+describe.each([["listClientProjectsForAdmin"], ["listClientProjectPeopleForAdmin"]] as const)("%s, every role", (fn) => {
   for (const role of ROLE_SLUGS) {
     const allowed = ALLOWED.includes(role);
     it(`${role}: ${allowed ? "passes authorize()" : "is refused"}`, async () => {
       as(role);
-      const { listClientProjectsForAdmin } = await import("@/modules/people/queries");
-      const outcome = await listClientProjectsForAdmin().then(
+      const queries = await import("@/modules/people/queries");
+      const outcome = await queries[fn]().then(
         () => "resolved",
         (e: unknown) => (e instanceof ForbiddenError ? "forbidden" : "other"),
       );
@@ -65,6 +67,12 @@ describe("listClientProjectsForAdmin, every role", () => {
 });
 
 describe("client project input", () => {
+  it("refuses a bad project id or more than 200 people before touching anything", async () => {
+    as("hr_admin");
+    expect((await setClientProjectPeople({ projectId: "nope", employeeIds: [] })).ok).toBe(false);
+    expect((await setClientProjectPeople({ projectId: OTHER, employeeIds: Array.from({ length: 201 }, () => ID) })).ok).toBe(false);
+  });
+
   it("refuses a blank name and a bad id before touching anything", async () => {
     as("hr_admin");
     expect((await createClientProject({ clientId: OTHER, name: "   " })).ok).toBe(false);

@@ -10,9 +10,11 @@ import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { hrUserIds, notify } from "@/modules/notifications/service";
 import { timeChainUserIds, reportName } from "@/modules/org/service";
 import { selfTestEmails } from "@/modules/jibble/client";
+import { trackerReplacesJibble } from "@/modules/jibble/applies";
 import { enqueueMirror, kickMirror } from "@/modules/jibble/enqueue";
 import { isSelfTestEmail } from "@/modules/jibble/mirror-rules";
 import { clientProjects, employees } from "@/modules/people/schema";
+import { projectOpenTo, projectRequired } from "./project-access";
 import { MINUTE, breakLabel, ipAllowed, overbreakOf, replayClock, roundCoordinate, transition, validCoordinates, type ClockEventLite, type ClockState, type ClockType } from "./clock";
 import { clockSourceOf } from "./clock-source";
 import { assignedClients } from "./extra-hours-service";
@@ -62,7 +64,9 @@ export async function rulesFor(executor: Executor, employeeId: string): Promise<
     .innerJoin(clockRules, eq(clockRules.teamId, employees.teamId))
     .where(eq(employees.id, employeeId))
     .limit(1);
-  return row ?? DEFAULT_RULES;
+  if (!row) return DEFAULT_RULES;
+  // A person whose work computer runs the ELEVATE Tracker App is not also run in Jibble (see jibble/applies.ts).
+  return row.jibbleMirror && (await trackerReplacesJibble(executor, employeeId)) ? { ...row, jibbleMirror: false } : row;
 }
 
 export async function prefsFor(executor: Executor, employeeId: string): Promise<{ shareLocation: boolean; timeZone: string | null; zone: string }> {
@@ -181,7 +185,7 @@ export async function performClock(actor: { id: string; email: string }, type: C
       let picked = input.clientId ?? null;
       if (input.projectId) {
         const [proj] = await tx.select({ id: clientProjects.id, clientId: clientProjects.clientId, archivedAt: clientProjects.archivedAt }).from(clientProjects).where(eq(clientProjects.id, input.projectId)).limit(1);
-        if (!proj || proj.archivedAt) throw new ActionFailure("That project is not available.");
+        if (!proj || proj.archivedAt || !(await projectOpenTo(tx, proj.id, person.id))) throw new ActionFailure("That project is not available.");
         if (picked !== null && proj.clientId !== picked) throw new ActionFailure("That project does not belong to that client.");
         picked = proj.clientId;
         projectId = proj.id;
@@ -196,6 +200,7 @@ export async function performClock(actor: { id: string; email: string }, type: C
         if (picked === nowClient && projectId === nowProject) throw new ActionFailure(projectId ? "You are already working on that project." : "You are already working for that client.");
       } else if (picked === null && assigned.length > 1) throw new ActionFailure("Choose the client you are working for.");
       clientId = picked ?? (assigned.length === 1 ? assigned[0].id : null);
+      if (clientId !== null && projectId === null && (await projectRequired(tx, clientId, person.id))) throw new ActionFailure("Choose a project for this client.");
     }
 
     const location =

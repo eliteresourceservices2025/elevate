@@ -1,0 +1,1 @@
+ALTER TABLE "core"."clients" ADD COLUMN "allow_no_project" boolean DEFAULT true NOT NULL;

@@ -3,14 +3,15 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "@/components/feedback-dialog";
+import { useFormDialog } from "@/components/form-dialog";
 import { SelectField, TextField } from "@/components/form-fields";
 import { TimeZonePicker } from "@/components/time-zone-picker";
 import { Button } from "@/components/ui/button";
-import { archiveClientProject, archiveCustomFieldDef, createClient, createClientProject, createCustomFieldDef, renameClientProject, updateClient } from "../actions";
+import { archiveCustomFieldDef, createClient, createCustomFieldDef } from "../actions";
 import { CUSTOM_FIELD_TYPES, CUSTOM_FIELD_VISIBILITY } from "../constants";
 import { useAsk } from "@/components/confirm-dialog";
 
-function useRun() {
+export function useRun() {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const run = (fn: () => Promise<{ ok: boolean; error?: string }>, success: string, after?: () => void) =>
@@ -33,12 +34,16 @@ export function NewClientForm({ timeZones }: { timeZones: readonly string[] }) {
   const [timeZone, setTimeZone] = useState("America/New_York");
   const [holidayCalendar, setHolidayCalendar] = useState<"PH" | "US">("US");
   const [handlesPhi, setHandlesPhi] = useState(true);
+  const dialog = useFormDialog();
   return (
     <form
-      className="grid gap-3 rounded-xl border bg-card p-4 sm:grid-cols-3"
+      className="grid gap-3 sm:grid-cols-2"
       onSubmit={(e) => {
         e.preventDefault();
-        run(() => createClient({ name, timeZone, holidayCalendar, isActive: true, handlesPhi }), "Client added.", () => setName(""));
+        run(() => createClient({ name, timeZone, holidayCalendar, isActive: true, handlesPhi }), "Client added.", () => {
+          setName("");
+          void dialog?.close(true);
+        });
       }}
     >
       <TextField id="nc-name" label="Client name" value={name} onChange={(e) => setName(e.target.value)} required />
@@ -47,7 +52,7 @@ export function NewClientForm({ timeZones }: { timeZones: readonly string[] }) {
         <option value="US">US holidays</option>
         <option value="PH">Philippine holidays</option>
       </SelectField>
-      <p className="text-xs text-muted-foreground sm:col-span-3">Names only. Never enter patient information.</p>
+      <p className="text-xs text-muted-foreground sm:col-span-2">Names only. Never enter patient information.</p>
       <PhiToggle id="nc-phi" checked={handlesPhi} onChange={setHandlesPhi} />
       <Button type="submit" disabled={pending || !name.trim()} className="sm:justify-self-start">
         Add client
@@ -57,7 +62,7 @@ export function NewClientForm({ timeZones }: { timeZones: readonly string[] }) {
 }
 
 /** Whether the client's work involves patient information: it decides the HIPAA training track of the people assigned to it. */
-function PhiToggle({ id, checked, onChange }: { id: string; checked: boolean; onChange: (v: boolean) => void }) {
+export function PhiToggle({ id, checked, onChange }: { id: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <label htmlFor={id} className="flex items-start gap-2 text-sm sm:col-span-2">
       <input id={id} type="checkbox" className="mt-1" checked={checked} onChange={(e) => onChange(e.target.checked)} />
@@ -66,146 +71,6 @@ function PhiToggle({ id, checked, onChange }: { id: string; checked: boolean; on
         <span className="block text-xs text-muted-foreground">People assigned here take the full HIPAA training. Turn off for clients with no patient data.</span>
       </span>
     </label>
-  );
-}
-
-export function ClientRow({ client, timeZones }: { client: { id: string; name: string; timeZone: string; holidayCalendar: "PH" | "US"; isActive: boolean; handlesPhi: boolean }; timeZones: readonly string[] }) {
-  const { run, pending } = useRun();
-  const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(client.name);
-  const [timeZone, setTimeZone] = useState(client.timeZone);
-  const [holidayCalendar, setHolidayCalendar] = useState(client.holidayCalendar);
-  const [handlesPhi, setHandlesPhi] = useState(client.handlesPhi);
-
-  if (!editing)
-    return (
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <span className="font-medium">{client.name}</span>
-          <span className="ml-2 text-sm text-muted-foreground">{client.timeZone} · {client.holidayCalendar === "PH" ? "PH" : "US"} holidays{client.handlesPhi ? " · patient information" : " · no patient information"}</span>
-          {client.isActive ? null : <span className="ml-2 text-xs text-muted-foreground">(inactive)</span>}
-        </div>
-        <div className="flex gap-1">
-          <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
-            Edit
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={pending}
-            onClick={() => run(() => updateClient({ clientId: client.id, name: client.name, timeZone: client.timeZone, holidayCalendar: client.holidayCalendar, isActive: !client.isActive, handlesPhi: client.handlesPhi }), client.isActive ? "Marked inactive." : "Marked active.")}
-          >
-            {client.isActive ? "Mark inactive" : "Mark active"}
-          </Button>
-        </div>
-      </div>
-    );
-
-  return (
-    <form
-      className="grid gap-3 sm:grid-cols-3"
-      onSubmit={(e) => {
-        e.preventDefault();
-        run(() => updateClient({ clientId: client.id, name, timeZone, holidayCalendar, isActive: client.isActive, handlesPhi }), "Client updated.", () => setEditing(false));
-      }}
-    >
-      <TextField id={`ec-name-${client.id}`} label="Client name" value={name} onChange={(e) => setName(e.target.value)} required />
-      <TimeZonePicker id={`ec-zone-${client.id}`} value={timeZone} onChange={setTimeZone} options={timeZones} />
-      <SelectField id={`ec-cal-${client.id}`} label="Holidays" value={holidayCalendar} onChange={(e) => setHolidayCalendar(e.target.value as "PH" | "US")}>
-        <option value="US">US holidays</option>
-        <option value="PH">Philippine holidays</option>
-      </SelectField>
-      <PhiToggle id={`ec-phi-${client.id}`} checked={handlesPhi} onChange={setHandlesPhi} />
-      <div className="flex gap-2">
-        <Button type="submit" disabled={pending}>
-          Save
-        </Button>
-        <Button type="button" variant="ghost" onClick={() => setEditing(false)}>
-          Cancel
-        </Button>
-      </div>
-    </form>
-  );
-}
-
-/**
- * A client's projects: add one, rename it, archive it. People assigned to the client pick a project on the clock (the web clock and the
- * ELEVATE Tracker App), and the time then shows which client and project it was for. Archiving keeps the project on time already recorded.
- */
-export function ClientProjects({ clientId, projects }: { clientId: string; projects: { id: string; name: string }[] }) {
-  const { run, pending } = useRun();
-  const ask = useAsk();
-  const [name, setName] = useState("");
-  const [renaming, setRenaming] = useState<string | null>(null);
-  const [newName, setNewName] = useState("");
-  return (
-    <div className="mt-2 border-t pt-2 pl-3" aria-label="Projects">
-      <p className="text-xs font-medium text-muted-foreground">Projects</p>
-      {projects.length === 0 ? <p className="py-1 text-sm text-muted-foreground">No projects. People pick just the client.</p> : null}
-      <ul>
-        {projects.map((p) => (
-          <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 py-1">
-            {renaming === p.id ? (
-              <form
-                className="flex flex-wrap items-end gap-2"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  run(() => renameClientProject({ projectId: p.id, name: newName }), "Project renamed.", () => setRenaming(null));
-                }}
-              >
-                <TextField id={`rp-${p.id}`} label="Project name" value={newName} onChange={(e) => setNewName(e.target.value)} required />
-                <Button type="submit" size="sm" disabled={pending || !newName.trim()}>
-                  Save
-                </Button>
-                <Button type="button" size="sm" variant="ghost" onClick={() => setRenaming(null)}>
-                  Cancel
-                </Button>
-              </form>
-            ) : (
-              <>
-                <span className="text-sm">{p.name}</span>
-                <span className="flex gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setNewName(p.name);
-                      setRenaming(p.id);
-                    }}
-                  >
-                    Rename
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={pending}
-                    onClick={async () => {
-                      if (await ask(`Archive the project "${p.name}"? People can no longer pick it. Time already recorded keeps its name.`, { confirmLabel: "Archive project", destructive: false })) {
-                        run(() => archiveClientProject({ projectId: p.id }), "Project archived.");
-                      }
-                    }}
-                  >
-                    Archive
-                  </Button>
-                </span>
-              </>
-            )}
-          </li>
-        ))}
-      </ul>
-      <form
-        className="mt-1 flex flex-wrap items-end gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          run(() => createClientProject({ clientId, name }), "Project added.", () => setName(""));
-        }}
-      >
-        <TextField id={`np-${clientId}`} label="New project name" value={name} onChange={(e) => setName(e.target.value)} />
-        <Button type="submit" size="sm" variant="outline" disabled={pending || !name.trim()}>
-          Add project
-        </Button>
-      </form>
-    </div>
   );
 }
 

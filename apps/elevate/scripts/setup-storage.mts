@@ -29,7 +29,7 @@ const BUCKETS: { name: string; types: string[]; maxBytes: number }[] = [
   // ELEVATE Tracker screenshots: already blurred on the person's computer, small JPEG or PNG files (300 KB checked by the server), kept 30 days.
   { name: "activity-shots", types: ["image/jpeg", "image/png"], maxBytes: 512 * 1024 },
   // ELEVATE Tracker App installers and update files (registered by pnpm tracker:build). Not reachable except through signed links.
-  { name: "tracker-builds", types: ["application/octet-stream", "application/x-msi", "application/x-msdownload", "application/x-apple-diskimage", "application/gzip"], maxBytes: 150 * 1024 * 1024 },
+  { name: "tracker-builds", types: ["application/octet-stream", "application/x-msi", "application/x-msdownload", "application/x-apple-diskimage", "application/gzip"], maxBytes: 100 * 1024 * 1024 },
 ];
 
 console.log(`Project: ${new URL(url).host}`);
