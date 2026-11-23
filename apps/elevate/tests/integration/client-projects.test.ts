@@ -308,6 +308,8 @@ describe("today's time in clock-state (for the Tracker App screen)", () => {
     await clockForDevice(w.employeeId, "clock_in", { projectId: p });
     const during = await clockStateFor(w.employeeId);
     expect(during.today.totalMs).toBeGreaterThanOrEqual(0);
+    expect(Number.isInteger(during.today.totalMs)).toBe(true); // the Tracker App cannot read a fraction
+    expect(during.today.byWork.every((l) => Number.isInteger(l.ms))).toBe(true);
     expect(during.today.byWork).toEqual([{ clientId: c, projectId: p, ms: during.today.totalMs }]);
     expect(Math.abs(Date.parse(during.today.asOf) - Date.now())).toBeLessThan(5_000);
   });

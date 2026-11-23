@@ -29,3 +29,15 @@ describe("today's time for the Tracker App", () => {
     expect(summarizeToday([s(10, 10, "c1", null), s(20, 10, "c1", null)]).totalMs).toBe(0);
   });
 });
+
+describe("whole milliseconds (the Tracker App reads whole numbers)", () => {
+  it("rounds fractional stretches, so one decimal never makes the app unable to read the answer", () => {
+    const got = summarizeToday([
+      { from: 0.4, to: 54.969970703125, clientId: "c1", projectId: null },
+      { from: 100.2, to: 200.9, clientId: "c1", projectId: "p1" },
+    ]);
+    expect(Number.isInteger(got.totalMs)).toBe(true);
+    expect(got.byWork.every((l) => Number.isInteger(l.ms))).toBe(true);
+    expect(got.totalMs).toBe(155);
+  });
+});
