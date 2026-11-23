@@ -16,7 +16,7 @@ import { getUploadOptions, listEmployeeFolders } from "@/modules/documents/queri
 import { UploadForm } from "@/modules/documents/components/upload-form";
 import { BulkUpload } from "@/modules/documents/components/bulk-upload";
 
-export const metadata: Metadata = { title: "Upload employee files" };
+export const metadata: Metadata = { title: "Upload contractor files" };
 
 /** The cross-person upload entry point is for HR; individual profiles retain their own upload permission. */
 export default async function UploadEmployeeFilesPage({
@@ -41,7 +41,7 @@ export default async function UploadEmployeeFilesPage({
   return (
     <PageContainer width="medium">
       <PageHeader
-        title="Upload employee files"
+        title="Upload contractor files"
         description={
           options?.employee
             ? `${options.employee.name} · ${options.employee.number}`
@@ -49,7 +49,7 @@ export default async function UploadEmployeeFilesPage({
         }
         breadcrumbs={[
           { label: "All files", href: "/documents?tab=files" },
-          { label: "Upload employee files" },
+          { label: "Upload contractor files" },
         ]}
         actions={
           person ? (
@@ -71,7 +71,7 @@ export default async function UploadEmployeeFilesPage({
                 type="search"
                 name="q"
                 defaultValue={directory.query.q}
-                placeholder="Name, email or employee number"
+                placeholder="Name, email or contractor number"
                 className="h-(--control-h) w-full rounded-lg border bg-background px-3 text-sm"
               />
             </div>

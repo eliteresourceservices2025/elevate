@@ -77,7 +77,7 @@ export function InvitationsPanel({ invitations, now, canAssign }: { invitations:
         </div>
         {canAssign ? (
           <fieldset className="space-y-2 rounded-xl border p-3">
-            <legend className="px-1 text-sm font-medium">Give them, on top of Employee</legend>
+            <legend className="px-1 text-sm font-medium">Give them, on top of Contractor</legend>
             <div className="grid gap-2 sm:grid-cols-2">
               {GRANTABLE_ROLES.map((role) => (
                 <div key={role} className="flex items-center gap-2">
@@ -99,7 +99,7 @@ export function InvitationsPanel({ invitations, now, canAssign }: { invitations:
         ) : null}
       </form>
       <p className="text-sm text-muted-foreground">
-        Invitations last 7 days. New people start as Employee; only a Super Admin can give other roles or make someone a Safe Voice handler. We email the link when
+        Invitations last 7 days. New people start as Contractor; only a Super Admin can give other roles or make someone a Safe Voice handler. We email the link when
         email is set up. If they do not receive it, tell them to use <strong>Accept an invite</strong> on the sign-in page with this exact
         address.
       </p>
@@ -140,7 +140,7 @@ export function InvitationsPanel({ invitations, now, canAssign }: { invitations:
                         </Badge>
                       ))}
                       {row.isSafevoiceHandler ? <Badge variant="outline">Safe Voice handler</Badge> : null}
-                      {row.roles.length === 0 && !row.isSafevoiceHandler ? <span className="text-muted-foreground">Employee only</span> : null}
+                      {row.roles.length === 0 && !row.isSafevoiceHandler ? <span className="text-muted-foreground">Contractor only</span> : null}
                     </div>
                   </TableCell>
                 ) : null}

@@ -26,7 +26,7 @@ PDF, JPG, PNG, WEBP, DOC and DOCX, up to 10 MB each. ELEVATE checks the real typ
 
 ![A person's Documents tab: folders, the list of files and the upload buttons.](help:upload-and-sort-documents/02-person-documents.png)
 
-From **Documents**, you can also click **Upload employee files**, choose a person and use **One document** or **Many files**. For company files, open **Company documents** and use its upload buttons.
+From **Documents**, you can also click **Upload contractor files**, choose a person and use **One document** or **Many files**. For company files, open **Company documents** and use its upload buttons.
 
 # Upload many files
 

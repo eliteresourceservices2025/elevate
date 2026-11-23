@@ -111,6 +111,20 @@ describe("the public application", () => {
     expect(audit).toHaveLength(1);
   });
 
+  it("does not tell someone on the hiring team after their recruiting role was taken away", async () => {
+    const former = await makeUser("former", ["team_lead", "employee"]);
+    as(recruiter);
+    const opening = idOf(await actions.saveOpening({ title: uniq("VA "), description: "Support our clients with scheduling and inbox care.", hiringTeamUserIds: [former.id] }));
+    expect((await actions.setOpeningStatus({ id: opening, status: "open" })).ok).toBe(true);
+    await db.execute(sql`delete from core.user_roles where user_id = ${former.id} and role_slug = 'team_lead'`);
+
+    expect(await apply(opening)).toEqual({ ok: true });
+    const link = `/recruiting/${opening}`;
+    expect(await rows(sql`select 1 from ops.notifications where user_id = ${former.id} and kind = 'recruiting.new_application' and link = ${link}`)).toHaveLength(0);
+    // The opening's creator still holds a recruiting role, so they are told.
+    expect(await rows(sql`select 1 from ops.notifications where user_id = ${recruiter.id} and kind = 'recruiting.new_application' and link = ${link}`)).toHaveLength(1);
+  });
+
   it("accepts a DOCX and refuses an executable, an oversized file, a missing file and a missing consent", async () => {
     const opening = await openJob();
     expect(await apply(opening, {}, { bytes: DOCX_BYTES, name: "cv.docx" })).toEqual({ ok: true });

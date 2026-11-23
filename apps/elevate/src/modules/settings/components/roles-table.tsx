@@ -74,7 +74,7 @@ function EditRolesDialog({ person }: { person: PersonRow }) {
         <DialogHeader>
           <DialogTitle>Roles for {person.email}</DialogTitle>
           <DialogDescription>
-            Everyone keeps the Employee role. Saving signs this person out so the change applies right away.
+            Everyone keeps the Contractor role. Saving signs this person out so the change applies right away.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">

@@ -466,6 +466,26 @@ describe("cleanup of unfinished uploads", () => {
 });
 
 describe("notifications", () => {
+  it("hides notices for decisions and recruiting once the person no longer holds that role, and keeps their own", async () => {
+    const was = await makeUser("WasLead", ["team_lead", "employee"]);
+    await db.execute(sql`insert into ops.notifications (user_id, kind, title) values
+      (${was.id}, 'recruiting.new_application', 'New application'),
+      (${was.id}, 'timeoff.approval_needed', 'Time off to decide'),
+      (${was.id}, 'hours.approval_summary', 'Hours to approve'),
+      (${was.id}, 'timeoff.approved', 'Your time off was approved')`);
+
+    as(was); // still a Team Lead: sees all four
+    expect((await notifQueries.listMyNotifications()).map((n) => n.title).sort()).toEqual(["Hours to approve", "New application", "Time off to decide", "Your time off was approved"]);
+    expect(await notifQueries.countMyUnread()).toBe(4);
+
+    as({ ...was, roles: ["employee"] }); // downgraded: only the notice addressed to them as a contractor remains
+    expect((await notifQueries.listMyNotifications()).map((n) => n.title)).toEqual(["Your time off was approved"]);
+    expect(await notifQueries.countMyUnread()).toBe(1);
+
+    as(was); // and they come back if the role does
+    expect(await notifQueries.countMyUnread()).toBe(4);
+  });
+
   it("everyone sees only their own and can only clear their own", async () => {
     const a = await person("NotifA");
     const b = await person("NotifB");

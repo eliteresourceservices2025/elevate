@@ -39,7 +39,7 @@ The person now shows in the list below with the status **Pending**. When they fi
 # Good to know
 
 - An invitation lasts **7 days**. After that, send a new one.
-- New people start with the **Employee** role. Only a Super Admin can give other roles when inviting.
+- New people start with the **Contractor** role. Only a Super Admin can give other roles when inviting.
 - To cancel an invitation, click **Revoke** on that row.
 
 # Common mistakes
