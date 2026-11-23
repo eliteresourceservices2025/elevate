@@ -16,7 +16,7 @@ export const ROLE_LABELS: Record<RoleSlug, string> = {
   team_lead: "Team Lead",
   recruiter: "Recruiter",
   executive: "Executive",
-  employee: "Employee / VA",
+  employee: "Contractor / VA",
 };
 
 /** Everyone who signs in holds this role; it cannot be removed. */

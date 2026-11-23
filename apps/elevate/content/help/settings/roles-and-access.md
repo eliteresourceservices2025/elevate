@@ -7,7 +7,7 @@ order: 1
 updated: 2026-10-21
 ---
 
-A **role** decides what a person can see and do. Everyone has the **Employee** role. Other roles are added on top.
+A **role** decides what a person can see and do. Everyone has the **Contractor** role. Other roles are added on top.
 
 # The six roles
 
@@ -16,7 +16,7 @@ A **role** decides what a person can see and do. Everyone has the **Employee** r
 - **Team Lead** sees and approves for their team: hours, corrections, time off and onboarding tasks.
 - **Recruiter** works on jobs, applicants, interviews and offers.
 - **Executive** sees summaries and decides time off for people who report to them.
-- **Employee** is the base role for everyone: clock, time off, profile and documents.
+- **Contractor** (shown as "Contractor / VA") is the base role for everyone: clock, time off, profile and documents.
 
 "Team" means everyone below you in the reporting chain. A Team Lead sees a limited view of a person's profile.
 
@@ -24,7 +24,7 @@ A **role** decides what a person can see and do. Everyone has the **Employee** r
 
 Only a **Super Admin** can give roles.
 
-- **With an invitation:** in **Settings > Invitations**, tick the roles under **Give them, on top of Employee**.
+- **With an invitation:** in **Settings > Invitations**, tick the roles under **Give them, on top of Contractor**.
 - **For someone already in:** click **Settings**, open **Roles and access**, choose the person's roles and click **Save roles**.
 
 Changing a role signs the person out, so the change applies right away. Every change is written to the audit log.

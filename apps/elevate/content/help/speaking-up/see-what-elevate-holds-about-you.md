@@ -15,7 +15,7 @@ Click **My data** in the left menu. The page says: **What ELEVATE holds about yo
 
 # What you will see
 
-- **Profile**: your employee number, legal name, preferred name, work email, status, worker type, position, team, manager and dates.
+- **Profile**: your contractor number, legal name, preferred name, work email, status, worker type, position, team, manager and dates.
 - **Government IDs, bank and pay**: shown masked. To see a full value, reveal it on your profile. Each reveal is recorded.
 - **Emergency contacts**, **Client assignments**, **Documents on file** and **Employment history**.
 - **Announcements and policies you acknowledged**.

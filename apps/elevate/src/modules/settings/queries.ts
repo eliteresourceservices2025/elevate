@@ -50,7 +50,7 @@ export type InvitationRow = {
   expiresAt: Date;
   acceptedAt: Date | null;
   invitedByEmail: string | null;
-  /** What they get on top of Employee when they first sign in, as chosen in the invitation. */
+  /** What they get on top of Contractor when they first sign in, as chosen in the invitation. */
   roles: string[];
   isSafevoiceHandler: boolean;
 };

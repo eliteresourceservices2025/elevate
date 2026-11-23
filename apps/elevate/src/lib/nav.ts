@@ -52,7 +52,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, description: "Your day at a glance." },
       { href: "/messages", label: "Messages", icon: MessageSquare, description: "Chat with your team and groups." },
-      { href: "/approvals", label: "Approvals", icon: CheckCheck, description: "Requests and hours waiting for your decision." },
+      { href: "/approvals", label: "Approvals", icon: CheckCheck, description: "Requests and hours waiting for your decision.", access: [{ action: "timeoff.approve", scopes: ["all", "team"] }, { action: "attendance.approve_correction", scopes: ["all", "team"] }, { action: "extra_hours.decide", scopes: ["all", "team"] }, { action: "hours.approve", scopes: ["all", "team"] }] },
     ],
   },
   {

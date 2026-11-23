@@ -28,8 +28,8 @@ export function OrphanedCertificateRepair({ sourceUserId, targets }: { sourceUse
         repair();
       }}
     >
-      <NativeSelect aria-label="Current employee" value={targetEmployeeId} onChange={(event) => setTargetEmployeeId(event.target.value)} className="h-8 max-w-56 text-xs" required>
-        <option value="">Match to current employee…</option>
+      <NativeSelect aria-label="Current contractor" value={targetEmployeeId} onChange={(event) => setTargetEmployeeId(event.target.value)} className="h-8 max-w-56 text-xs" required>
+        <option value="">Match to current contractor…</option>
         {targets.map((target) => <option key={target.employeeId} value={target.employeeId}>{target.name}</option>)}
       </NativeSelect>
       <Input aria-label="Verification reason" placeholder="How this match was verified" value={reason} onChange={(event) => setReason(event.target.value)} className="h-8 w-56 text-xs" required minLength={10} maxLength={500} />

@@ -23,7 +23,7 @@ import { offers } from "@/modules/offers/schema";
 import { onboardingCases } from "@/modules/onboarding/schema";
 import { applicationStageHistory, applicationTagLinks, emailTemplates, applicationTags, applications, candidateEmails, candidateNotes, candidates, careersPage, interviewers, interviews, jobOpenings, openingHiringTeam, recruitingSettings, scorecards } from "./schema";
 import { sendRecruitingEmailsNow } from "./immediate";
-import { authorizeForOpening, freeSlug, hiringTeamIds, openingIdOfApplication, queueCandidateEmail, slugTaken } from "./service";
+import { authorizeForOpening, freeSlug, hiringTeamIds, openingIdOfApplication, queueCandidateEmail, slugTaken, stillOnRecruiting } from "./service";
 import { clearBanner } from "./careers-banner";
 import { MAX_TAGS_PER_APPLICATION, isApplyable, isTerminalStage, type OpeningStatus, type Stage } from "./constants";
 import { keywordColumns, keywordSetKey, parseKeywordList } from "./keywords";
@@ -321,7 +321,7 @@ export async function scheduleInterview(input: unknown): Promise<ActionResult<{ 
         await writeAudit({ actor, action: "recruiting.interview_schedule", targetType: "application", targetId: v.applicationId, after: { interviewId, startsAt: v.startsAt.toISOString(), interviewers: panel.length, calendar: calendar.mode } }, tx);
 
         const when = `${formatInZone(v.startsAt, MANILA, "EEE MMM d, h:mm a")} Manila time`;
-        await notify(tx, panel.map((userId) => ({ userId, kind: "recruiting.interview", title: "Interview scheduled", body: `${when}.`, link: `/recruiting/applications/${v.applicationId}` })));
+        await notify(tx, (await stillOnRecruiting(tx, panel)).map((userId) => ({ userId, kind: "recruiting.interview", title: "Interview scheduled", body: `${when}.`, link: `/recruiting/applications/${v.applicationId}` })));
         if (calendar.mode === "ics") {
           const ics = buildInterviewIcs({ uid: interviewId, summary: `Interview: ${row.title}`, startsAt: v.startsAt, minutes: v.minutes, location: v.location, description: v.note });
           await queueEmails(
@@ -367,7 +367,8 @@ export async function cancelInterview(input: unknown): Promise<ActionResult<{ wa
       await tx.update(interviews).set({ status: "cancelled" }).where(eq(interviews.id, interviewId));
       await writeAudit({ actor, action: "recruiting.interview_cancel", targetType: "application", targetId: iv.applicationId, after: { interviewId, calendar: iv.calendarMode } }, tx);
       const panel = await tx.select({ userId: interviewers.userId }).from(interviewers).where(eq(interviewers.interviewId, interviewId));
-      await notify(tx, panel.map((p) => ({ userId: p.userId, kind: "recruiting.interview_cancelled", title: "An interview was cancelled", body: "Open the applicant for details.", link: `/recruiting/applications/${iv.applicationId}` })));
+      const stillIn = new Set(await stillOnRecruiting(tx, panel.map((p) => p.userId)));
+      await notify(tx, panel.filter((p) => stillIn.has(p.userId)).map((p) => ({ userId: p.userId, kind: "recruiting.interview_cancelled", title: "An interview was cancelled", body: "Open the applicant for details.", link: `/recruiting/applications/${iv.applicationId}` })));
       // A Google event is removed from the calendar (Google tells the guests, after the commit). Otherwise cancellation files go out as email.
       if (iv.calendarMode === "ics") {
         const ics = buildInterviewIcs({ uid: iv.id, summary: "Interview cancelled", startsAt: iv.startsAt, minutes: iv.minutes, location: iv.location, method: "CANCEL" });
@@ -723,7 +724,7 @@ export async function addPoolMemberToOpening(input: unknown): Promise<ActionResu
       if (!created) throw new ActionFailure("They already have an application for that job.");
       await tx.insert(applicationStageHistory).values({ applicationId: created.id, fromStage: null, toStage: "applied", byUserId: actor.id, note: "Added from the talent pool" });
       await writeAudit({ actor, action: "recruiting.pool_to_opening", targetType: "application", targetId: created.id, after: { openingId, candidateId: c.id } }, tx);
-      const team = new Set([...(opening.createdBy ? [opening.createdBy] : []), ...(await hiringTeamIds(tx, openingId))]);
+      const team = new Set(await stillOnRecruiting(tx, [...(opening.createdBy ? [opening.createdBy] : []), ...(await hiringTeamIds(tx, openingId))]));
       team.delete(actor.id);
       if (team.size > 0) await notify(tx, [...team].map((userId) => ({ userId, kind: "recruiting.new_application", title: "New application", body: `For ${opening.title}, from the talent pool.`, link: `/recruiting/${openingId}` })));
       return created.id;

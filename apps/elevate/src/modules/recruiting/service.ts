@@ -1,6 +1,6 @@
 import "server-only";
 import { createHash, randomUUID } from "node:crypto";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { authorize, type ActionName, type AuthzUser } from "@/lib/authz";
 import { db } from "@/lib/db";
 import { ActionFailure } from "@/lib/run-action";
@@ -9,6 +9,7 @@ import { applicantSelfIdSchema } from "@/modules/demographics/validators";
 import { saveApplicantSelfId } from "@/modules/demographics/service";
 import { sniffFileKind } from "@/modules/documents/files";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
+import { userRoles, users } from "@/modules/core/schema";
 import { notify } from "@/modules/notifications/service";
 import { POOL_MONTHS, RESUME_KINDS, RESUME_MAX_BYTES, addMonthsUtc, isApplyable, isTerminalStage, type OpeningStatus, type Stage } from "./constants";
 import { keywordColumns } from "./keywords";
@@ -25,6 +26,23 @@ type Executor = Pick<typeof db, "insert" | "select" | "update" | "delete" | "exe
 export async function hiringTeamIds(executor: Executor, openingId: string): Promise<string[]> {
   const rows = await executor.select({ userId: openingHiringTeam.userId }).from(openingHiringTeam).where(eq(openingHiringTeam.openingId, openingId));
   return rows.map((r) => r.userId);
+}
+
+/** Roles that hold `recruiting.view` (keep in step with permissions.ts). */
+export const RECRUITING_ROLES = ["super_admin", "hr_admin", "recruiter", "team_lead"] as const;
+
+/**
+ * Keeps only the people who still hold a recruiting role today. An opening's creator, hiring team and interview panel are saved ids:
+ * after a role is taken away they must stop getting recruiting notices.
+ */
+export async function stillOnRecruiting(executor: Executor, userIds: string[]): Promise<string[]> {
+  if (userIds.length === 0) return [];
+  const rows = await executor
+    .select({ id: users.id })
+    .from(users)
+    .innerJoin(userRoles, eq(userRoles.userId, users.id))
+    .where(and(inArray(users.id, userIds), inArray(userRoles.roleSlug, [...RECRUITING_ROLES]), isNull(users.archivedAt)));
+  return [...new Set(rows.map((r) => r.id))];
 }
 
 /** Authorizes an action on one opening. A team lead's "team" scope means "on this opening's hiring team". */
@@ -146,7 +164,7 @@ export async function submitApplication(raw: Record<string, unknown>, file: { by
         const mail = receivedMail({ fullName: v.fullName, jobTitle: opening.title }, await loadTemplate(tx, "received"));
         await queueCandidateEmail(tx, { applicationId: app.id, toEmail: v.email, kind: "received", subject: mail.subject, text: mail.text, html: mail.html, dedupeKey: `received:${app.id}` });
       }
-      const team = new Set([...(opening.createdBy ? [opening.createdBy] : []), ...(await hiringTeamIds(tx, opening.id))]);
+      const team = new Set(await stillOnRecruiting(tx, [...(opening.createdBy ? [opening.createdBy] : []), ...(await hiringTeamIds(tx, opening.id))]));
       if (team.size > 0) {
         await notify(tx, [...team].map((userId) => ({ userId, kind: "recruiting.new_application", title: "New application", body: `For ${opening.title}.`, link: `/recruiting/${opening.id}` })));
       }

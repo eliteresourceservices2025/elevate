@@ -64,7 +64,7 @@ export default async function DocumentsPage({ searchParams }: PageProps<"/docume
     <PageContainer>
       <PageHeader
         title="Documents"
-        actions={companyUpload ? <DocumentUploadActions target="company" types={companyUpload.types} clients={[]} today={today} /> : isHr && can(user, "documents.upload") ? <Link href="/documents/upload" className={buttonVariants()}>Upload employee files</Link> : null}
+        actions={companyUpload ? <DocumentUploadActions target="company" types={companyUpload.types} clients={[]} today={today} /> : isHr && can(user, "documents.upload") ? <Link href="/documents/upload" className={buttonVariants()}>Upload contractor files</Link> : null}
         description={
           <>
             {isHr
