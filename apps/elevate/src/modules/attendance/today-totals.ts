@@ -14,5 +14,6 @@ export function summarizeToday(stretches: readonly { from: number; to: number; c
     if (line) line.ms += ms;
     else lines.set(key, { clientId: s.clientId, projectId: s.projectId, ms });
   }
-  return { totalMs, byWork: [...lines.values()] };
+  // Whole milliseconds: event times can carry fractions, and the Tracker App reads whole numbers (a fraction makes it unable to read the answer).
+  return { totalMs: Math.round(totalMs), byWork: [...lines.values()].map((l) => ({ ...l, ms: Math.round(l.ms) })) };
 }
