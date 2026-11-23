@@ -65,6 +65,25 @@ pub struct TrackerSettings {
     pub shot_interval_minutes: u32,
 }
 
+/// Today's worked time in one line: a client, a project (or none) and the milliseconds.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TodayLine {
+    pub client_id: String,
+    pub project_id: Option<String>,
+    pub ms: i64,
+}
+
+/// Today's worked time (breaks left out) as ELEVATE counted it at `as_of`. Only for the person's own screen: it is not hours.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TodayWork {
+    pub as_of: String,
+    pub total_ms: i64,
+    #[serde(default)]
+    pub by_work: Vec<TodayLine>,
+}
+
 /// What ELEVATE says about this person right now.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -84,6 +103,9 @@ pub struct ClockState {
     pub clock_blocked_reason: Option<String>,
     pub policy: bool,
     pub settings: TrackerSettings,
+    /// An older ELEVATE sends nothing here.
+    #[serde(default)]
+    pub today: Option<TodayWork>,
     /// The version this app must update to. The app still gets the clock state (time keeping is never blocked by the version floor),
     /// but records and sends nothing until it is updated.
     #[serde(default)]

@@ -15,7 +15,8 @@ import { cn } from "@/lib/utils";
 import { BREAK_CHOICES, EOD_TEMPLATE, HEARTBEAT_MS, MINUTE, breakLabel, formatClock, needsWelcomeBack } from "@/modules/attendance/clock";
 import { coveringWindow } from "@/modules/attendance/extra-hours";
 import { EvidenceField, uploadEvidence } from "@/modules/attendance/components/evidence-field";
-import { answerIdlePrompt, cancelCorrection, clockIn, clockOut, endBreak, pingPresence, reportIdlePrompt, requestClockSelfie, requestCorrection, saveShiftNote, startBreak, switchClient } from "@/modules/attendance/actions";
+import { answerIdlePrompt, cancelCorrection, clockIn, clockOut, endBreak, pingPresence, refreshClockStatus, reportIdlePrompt, requestClockSelfie, requestCorrection, saveShiftNote, startBreak, switchClient } from "@/modules/attendance/actions";
+import { clockStatusChanged } from "@/modules/attendance/clock-status-change";
 import type { ClockStatus } from "@/modules/attendance/queries";
 import { workChoices, type WorkChoice } from "@/modules/attendance/work-choices";
 
@@ -255,8 +256,52 @@ function ChoiceList({ choices, onPick }: { choices: WorkChoice[]; onPick: (c: Wo
   );
 }
 
-export function ClockWidget({ status }: { status: ClockStatus | null }) {
+/** How often the header asks whether the clock changed on another device (only while the tab is in front). */
+const STATUS_CHECK_MS = 30_000;
+
+export function ClockWidget({ status: statusProp }: { status: ClockStatus | null }) {
   const router = useRouter();
+  // The status comes with the page; it is also re-read now and then, so a click in the ELEVATE Tracker App shows here without a refresh.
+  const [status, setStatus] = useState(statusProp);
+  const [seenProp, setSeenProp] = useState(statusProp);
+  if (statusProp !== seenProp) {
+    // A fresh status came with the page: it wins over what the last check found.
+    setSeenProp(statusProp);
+    setStatus(statusProp);
+  }
+  const shown = useRef(status);
+  useEffect(() => {
+    shown.current = status;
+  }, [status]);
+  const hasStatus = statusProp !== null;
+  useEffect(() => {
+    if (!hasStatus) return;
+    let busy = false;
+    const check = async () => {
+      if (busy || document.visibilityState !== "visible") return;
+      busy = true;
+      try {
+        const latest = await refreshClockStatus();
+        if (clockStatusChanged(shown.current, latest)) {
+          shown.current = latest;
+          setStatus(latest);
+          router.refresh(); // the rest of the page (Attendance, the dashboard) follows
+        }
+      } catch {
+        // Offline or signed out: the next check or the next click says so.
+      } finally {
+        busy = false;
+      }
+    };
+    const timer = window.setInterval(check, STATUS_CHECK_MS);
+    document.addEventListener("visibilitychange", check);
+    window.addEventListener("focus", check);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", check);
+      window.removeEventListener("focus", check);
+    };
+  }, [hasStatus, router]);
   const [pending, startTransition] = useTransition();
   const [now, setNow] = useState<number | null>(null);
   const [selfie, setSelfie] = useState(false);

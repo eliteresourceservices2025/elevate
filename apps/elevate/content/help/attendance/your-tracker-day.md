@@ -37,8 +37,9 @@ If the code runs out, click **Get a new code**.
 
 The app sits in the tray, the small icons next to the clock. If you cannot see it, click the arrow ^ to show hidden icons. Click its icon to open the window. Closing the window does not stop the app.
 
-- **Clock in**, **Start break** (choose 15 minutes, 30 minutes, 1 hour or no time limit), **End break** and **Clock out** work here exactly as in ELEVATE, and ELEVATE records the time. The same choices are in the icon's menu.
-- If you work for more than one client, **Clock in for** lets you choose the client or project, and **Switch to** moves the rest of your shift to another one. ELEVATE then shows which client and project each stretch of your day was for.
+- The big round button clocks you in (play), ends a break (play) or clocks you out (stop). The dark timer shows how long you have worked today. The coffee button starts a break (15 minutes, 30 minutes, 1 hour or no time limit). These work exactly as in ELEVATE, and ELEVATE records the time. The same choices are in the icon's menu.
+- If you work for more than one client or project, the list under the timer shows each one with the time you worked on it today. Press the play button on a row to clock in for it, or the arrows button to move the rest of your shift to it. ELEVATE then shows which client and project each stretch of your day was for. The ELEVATE page follows what you do in the app within about half a minute.
+- The app updates itself. When a new version is ready it installs as soon as you are not working (clocked out or on a break), then opens again in the tray and shows what is new.
 - The icon is **green** while the app is recording, **grey** when you are clocked out, on a break, or recording is not switched on yet, **orange** when ELEVATE cannot be reached (it keeps what it records and sends it later) and **red** when the app needs an update.
 - **What was captured** shows the apps and minutes it noted today and your last blurred picture. Nothing is hidden from you.
 - The app never clocks you in or out by itself. Only your click does.

@@ -25,9 +25,14 @@ export function Captured({ refreshKey, onDisconnected }: { refreshKey: number; o
         {apps.length === 0 ? <p className="muted">Nothing yet. It notes programs only while you are clocked in.</p> : null}
         <ul className="plain">
           {apps.map((a) => (
-            <li key={a.app} className="between">
-              <span>{a.app}</span>
-              <span className="muted">{minutesText(a.minutes)}</span>
+            <li key={a.app}>
+              <div className="between">
+                <span>{a.app}</span>
+                <span className="muted">{minutesText(a.minutes)}</span>
+              </div>
+              <div className="bar" aria-hidden>
+                <span style={{ width: `${Math.max(4, Math.round((a.minutes / Math.max(...apps.map((x) => x.minutes), 1)) * 100))}%` }} />
+              </div>
             </li>
           ))}
         </ul>

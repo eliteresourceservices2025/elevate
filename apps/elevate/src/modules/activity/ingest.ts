@@ -6,7 +6,11 @@ import { db } from "@/lib/db";
 import { replayClock } from "@/modules/attendance/clock";
 import { clockSourceOf } from "@/modules/attendance/clock-source";
 import { loadEventsBetween, monitoringPolicyPublished, rulesFor } from "@/modules/attendance/service";
-import { assignedClientsWithProjects } from "@/modules/attendance/work-log";
+import { fromZonedTime } from "date-fns-tz";
+import { formatInZone } from "@/lib/time";
+import { prefsFor } from "@/modules/attendance/service";
+import { summarizeToday } from "@/modules/attendance/today-totals";
+import { assignedClientsWithProjects, loadWorkLog } from "@/modules/attendance/work-log";
 import { sniffFileKind } from "@/modules/documents/files";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { MAX_AGE_MS, SHOT_WINDOW_MS, clipToIntervals, dropOverlaps, sanitizeApp, shotWindow, validateSegment, workingIntervals, type Interval, type RawSegment } from "./logic";
@@ -47,6 +51,10 @@ export async function clockStateFor(employeeId: string, now = new Date()) {
     const [project] = projectId ? await db.select({ name: clientProjects.name }).from(clientProjects).where(eq(clientProjects.id, projectId)).limit(1) : [];
     current = { clientId, clientName: client?.name ?? null, projectId, projectName: project?.name ?? null, since: new Date(last ? last.at : open.startAt).toISOString() };
   }
+  // Today (in the person's own zone): the total worked and the time for each client and project, as of now, so the app can keep counting.
+  const { zone } = await prefsFor(db, employeeId);
+  const dayStart = fromZonedTime(`${formatInZone(now, zone, "yyyy-MM-dd")}T00:00:00`, zone).getTime();
+  const today = { asOf: now.toISOString(), ...summarizeToday(await loadWorkLog(db, employeeId, dayStart, nowMs)) };
   const clockBlockedReason: "jibble" | "selfie" | null = (await clockSourceOf(db, employeeId)) === "jibble" ? "jibble" : rules.selfieRequired && policy ? "selfie" : null;
   return {
     state: replay.state,
@@ -58,6 +66,8 @@ export async function clockStateFor(employeeId: string, now = new Date()) {
     clients,
     /** The client and project the time is going to right now, and since when (the last switch, or the clock-in). */
     current,
+    /** Today's worked time (breaks left out): the total and each client and project, as of `asOf`. Evidence for the person's own screen, never hours. */
+    today,
     /** Why the app's clock buttons are off: a Jibble-clock person, or a team that needs a selfie (the app cannot take one). */
     clockBlockedReason,
     policy,

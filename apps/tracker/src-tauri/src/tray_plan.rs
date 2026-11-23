@@ -138,6 +138,8 @@ mod tests {
             on_break: None,
             current: None,
             clock_blocked_reason: None,
+            today: None,
+            today_received_ms: None,
             has_shot: false,
         }
     }

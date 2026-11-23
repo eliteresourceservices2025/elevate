@@ -1,6 +1,6 @@
 [package]
 name = "elevate-tracker"
-version = "1.0.1"
+version = "1.0.2"
 description = "ELEVATE Tracker App"
 authors = ["Elite Resource Services"]
 edition = "2021"

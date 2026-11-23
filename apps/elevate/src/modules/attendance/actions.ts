@@ -23,6 +23,7 @@ import { groupByPerson, parseCorrectionsCsv } from "./bulk-corrections";
 import { EOD_EDIT_WINDOW_MS, needsHrDecision, replayClock } from "./clock";
 import { clockCorrections, clockEvents, clockEventVoids, clockPrefs, clockRules, correctionEvidence, idlePrompts, shiftNotes } from "./schema";
 import { rebuildAfterChange } from "./edit-service";
+import { getClockStatus, type ClockStatus } from "./queries";
 import { MAX_APPEAL_AGE_MS, MAX_EDIT_AGE_MS, checkProposal, evidencePath, lateClockOutsReplacedBy, loadRecentEvents, lockEmployeeClock, monitoringPolicyPublished, performClock, personForUser, rulesFor, selfiePath, verifyEvidence, type ClockResult } from "./service";
 import {
   EVIDENCE_MAX_BYTES,
@@ -543,4 +544,13 @@ export async function saveShiftNote(input: unknown): Promise<ActionResult> {
     refresh();
     return { ok: true, data: undefined };
   });
+}
+
+/**
+ * The header clock asks for its own status now and then, so a click made on another device (the ELEVATE Tracker App) shows here without
+ * a refresh. Own data only: getClockStatus checks the person and reads nobody else's.
+ */
+export async function refreshClockStatus(): Promise<ClockStatus | null> {
+  await requireUser();
+  return getClockStatus();
 }

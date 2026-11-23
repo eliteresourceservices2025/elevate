@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
 
-use crate::api::{ApiClient, ClientChoice, CurrentWork, OnBreak, WorkState};
+use crate::api::{ApiClient, ClientChoice, CurrentWork, OnBreak, TodayWork, WorkState};
 use crate::log::Logger;
 use crate::platform::Platform;
 use crate::queue::{Queue, SEGMENT_MAX_AGE_MS};
@@ -72,6 +72,9 @@ pub struct Status {
     pub on_break: Option<OnBreak>,
     pub current: Option<CurrentWork>,
     pub clock_blocked_reason: Option<String>,
+    /// Today's worked time as ELEVATE last counted it, and the moment (this computer's clock) it arrived, so the window can keep counting.
+    pub today: Option<TodayWork>,
+    pub today_received_ms: Option<i64>,
     pub idle_timeout_secs: u32,
     /// The last picture, already blurred: what the person can look at under "What was captured".
     pub last_shot: Option<Vec<u8>>,
@@ -94,6 +97,8 @@ impl Default for Status {
             on_break: None,
             current: None,
             clock_blocked_reason: None,
+            today: None,
+            today_received_ms: None,
             idle_timeout_secs: 180,
             last_shot: None,
         }
@@ -124,6 +129,8 @@ pub struct StatusView {
     pub on_break: Option<OnBreak>,
     pub current: Option<CurrentWork>,
     pub clock_blocked_reason: Option<String>,
+    pub today: Option<TodayWork>,
+    pub today_received_ms: Option<i64>,
     pub has_shot: bool,
 }
 
@@ -144,6 +151,8 @@ impl Status {
             on_break: self.on_break.clone(),
             current: self.current.clone(),
             clock_blocked_reason: self.clock_blocked_reason.clone(),
+            today: self.today.clone(),
+            today_received_ms: self.today_received_ms,
             has_shot: self.last_shot.is_some(),
         }
     }

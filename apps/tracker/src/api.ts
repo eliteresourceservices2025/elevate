@@ -6,6 +6,8 @@ import { listen } from "@tauri-apps/api/event";
 export type WorkState = "working" | "break" | "out";
 export type Project = { id: string; name: string };
 export type ClientChoice = { id: string; name: string; projects: Project[]; /** false: "No specific project" is not offered for this client (missing means it is). */ allowNoProject?: boolean };
+/** Today's worked time (breaks left out), as ELEVATE counted it; the window keeps counting from the moment it arrived. */
+export type TodayWork = { asOf: string; totalMs: number; byWork: { clientId: string; projectId: string | null; ms: number }[] };
 export type StatusView = {
   signedIn: boolean;
   state: WorkState | null;
@@ -21,6 +23,9 @@ export type StatusView = {
   onBreak: { startedAt: string; plannedMinutes: number | null } | null;
   current: { clientId: string | null; clientName: string | null; projectId: string | null; projectName: string | null; since: string } | null;
   clockBlockedReason: string | null;
+  today: TodayWork | null;
+  /** When (this computer's clock, in ms) `today` arrived, so a wrong computer clock cannot skew the timer. */
+  todayReceivedMs: number | null;
   hasShot: boolean;
 };
 export type ReleaseNotes = { version: string; publishedAt: string | null; notes: { added: string[]; improved: string[]; fixed: string[] }; minRequired: boolean };
@@ -45,11 +50,23 @@ let mockState: StatusView = {
   clients: [
     { id: "c1", name: "Summit Dental Care", projects: [{ id: "p1", name: "Intake desk" }, { id: "p2", name: "Billing follow-up" }] },
     { id: "c2", name: "Harbor Legal Group", projects: [] },
+    { id: "c3", name: "Northwind Family Clinic", allowNoProject: false, projects: [{ id: "p3", name: "Front desk" }, { id: "p4", name: "Insurance calls" }, { id: "p5", name: "Records requests" }] },
   ],
   workingSince: mockMode === "out" ? null : iso(95),
   onBreak: mockMode === "break" ? { startedAt: iso(12), plannedMinutes: 30 } : null,
   current: mockMode === "out" ? null : { clientId: "c1", clientName: "Summit Dental Care", projectId: "p1", projectName: "Intake desk", since: iso(95) },
   clockBlockedReason: mockMode === "blocked" ? "jibble" : null,
+  today: {
+    asOf: iso(0),
+    totalMs: 5 * 3_600_000 + 12 * 60_000 + 40_000,
+    byWork: [
+      { clientId: "c1", projectId: "p1", ms: 2 * 3_600_000 + 31 * 60_000 },
+      { clientId: "c1", projectId: null, ms: 22 * 60_000 },
+      { clientId: "c2", projectId: null, ms: 1 * 3_600_000 + 5 * 60_000 },
+      { clientId: "c3", projectId: "p4", ms: 1 * 3_600_000 + 14 * 60_000 },
+    ],
+  },
+  todayReceivedMs: Date.now(),
   hasShot: true,
 };
 const mockCaptured: CapturedApp[] = [
@@ -57,8 +74,23 @@ const mockCaptured: CapturedApp[] = [
   { app: "excel", startMs: Date.now() - 2 * 3_600_000, minutes: 37 },
   { app: "slack", startMs: Date.now() - 1 * 3_600_000, minutes: 12 },
 ];
-const mockNote = (state: WorkState, text: string) => {
-  mockState = { ...mockState, state, workingSince: state === "out" ? null : iso(0), onBreak: state === "break" ? { startedAt: iso(0), plannedMinutes: 30 } : null };
+// The stand-in keeps the day's total moving the way ELEVATE's answer would: time stops counting on a break or after clocking out.
+const mockWork = (clientId?: string, projectId?: string) => {
+  const client = mockState.clients.find((c) => c.id === clientId);
+  const project = client?.projects.find((p) => p.id === projectId);
+  return client ? { clientId: client.id, clientName: client.name, projectId: project?.id ?? null, projectName: project?.name ?? null, since: iso(0) } : null;
+};
+const mockNote = (state: WorkState, text: string, work?: StatusView["current"]) => {
+  const today = mockState.today && mockState.todayReceivedMs !== null ? { ...mockState.today, totalMs: mockState.today.totalMs + (mockState.state === "working" ? Date.now() - mockState.todayReceivedMs : 0) } : mockState.today;
+  mockState = {
+    ...mockState,
+    state,
+    today,
+    todayReceivedMs: Date.now(),
+    workingSince: state === "out" ? null : (mockState.workingSince ?? iso(0)),
+    onBreak: state === "break" ? { startedAt: iso(0), plannedMinutes: 30 } : null,
+    current: state === "out" ? null : (work ?? mockState.current),
+  };
   return text;
 };
 
@@ -71,10 +103,10 @@ export async function enroll(code: string): Promise<void> {
   mockState = { ...mockState, signedIn: true };
 }
 export async function clockIn(clientId?: string, projectId?: string): Promise<string> {
-  return inTauri ? invoke<string>("clock_in", { clientId, projectId }) : mockNote("working", "Clocked in.");
+  return inTauri ? invoke<string>("clock_in", { clientId, projectId }) : mockNote("working", "Clocked in.", mockWork(clientId, projectId));
 }
 export async function switchClient(clientId?: string, projectId?: string): Promise<string> {
-  return inTauri ? invoke<string>("switch_client", { clientId, projectId }) : "Switched.";
+  return inTauri ? invoke<string>("switch_client", { clientId, projectId }) : mockNote("working", "Switched.", mockWork(clientId, projectId));
 }
 export async function startBreak(minutes?: number): Promise<string> {
   return inTauri ? invoke<string>("start_break", { minutes }) : mockNote("break", "Break started.");
@@ -117,11 +149,28 @@ export async function subscribe(onChange: () => void, onNotice: (n: Notice) => v
 // ---- small helpers the screens share ----
 
 /** What a person can pick when clocking in: each client with no projects, or each project and then the client with no specific project. */
-export type Choice = { clientId: string; projectId?: string; label: string };
+export type Choice = { clientId: string; projectId?: string; label: string; clientName: string; title: string; grouped: boolean };
 export function workChoices(clients: ClientChoice[]): Choice[] {
   return clients.flatMap((c): Choice[] =>
-    c.projects.length === 0 ? [{ clientId: c.id, label: c.name }] : [...c.projects.map((p) => ({ clientId: c.id, projectId: p.id, label: `${c.name} · ${p.name}` })), ...(c.allowNoProject === false ? [] : [{ clientId: c.id, label: `${c.name} · no specific project` }])],
+    c.projects.length === 0
+      ? [{ clientId: c.id, label: c.name, clientName: c.name, title: c.name, grouped: false }]
+      : [
+          ...c.projects.map((p) => ({ clientId: c.id, projectId: p.id, label: `${c.name} · ${p.name}`, clientName: c.name, title: p.name, grouped: true })),
+          ...(c.allowNoProject === false ? [] : [{ clientId: c.id, label: `${c.name} · no specific project`, clientName: c.name, title: "No specific project", grouped: true }]),
+        ],
   );
+}
+
+/** Whole hours and minutes for lists: 2:31. */
+export function hoursMinutes(ms: number): string {
+  const m = Math.max(0, Math.floor(ms / 60_000));
+  return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`;
+}
+
+/** A running clock: 5:12:40. */
+export function clockText(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(s / 3600)}:${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 }
 
 export function timeOf(isoText: string | null): string {
