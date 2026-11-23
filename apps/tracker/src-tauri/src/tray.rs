@@ -68,6 +68,9 @@ fn build_menu(app: &AppHandle, plan: &TrayPlan) -> tauri::Result<Menu<tauri::Wry
 
 /// Shows the window, building it first when it was closed (a closed window really goes away; see `lib.rs`).
 pub fn show_window(app: &AppHandle) {
+    // A menu-bar app on a Mac is not the active app until it says so: without this the window can open behind other apps.
+    #[cfg(target_os = "macos")]
+    let _ = app.show();
     let window = app.get_webview_window("status").or_else(|| {
         let config = app.config().app.windows.first()?.clone();
         tauri::WebviewWindowBuilder::from_config(app, &config).ok()?.build().ok()

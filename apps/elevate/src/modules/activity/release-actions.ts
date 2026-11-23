@@ -9,7 +9,7 @@ import { fail, runAction, type ActionResult } from "@/lib/run-action";
 import { writeAudit } from "@/modules/audit/write";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { clearReleaseCache, highestReleasedVersion, highestVersionEver } from "./releases-service";
-import { isNewer, normalizeNotes, parseVersion } from "./releases-logic";
+import { isNewer, normalizeNotes, parseVersion, publishProblem } from "./releases-logic";
 import { trackerReleaseBuilds, trackerReleases } from "./schema";
 import { createReleaseSchema, releaseIdSchema } from "./validators";
 
@@ -69,21 +69,18 @@ export async function publishRelease(input: unknown): Promise<ActionResult> {
     const builds = await db.select({ platform: trackerReleaseBuilds.platform, kind: trackerReleaseBuilds.kind }).from(trackerReleaseBuilds).where(eq(trackerReleaseBuilds.releaseId, release.id));
     const installers = new Set(builds.filter((b) => b.kind === "installer").map((b) => b.platform));
     const updates = new Set(builds.filter((b) => b.kind === "update").map((b) => b.platform));
-    if (installers.size === 0) return fail("This release has no installer yet. Add builds with pnpm tracker:build first.");
-    const missing = [...installers].filter((p) => !updates.has(p));
-    if (missing.length > 0) return fail(`Add the update file and its signature for ${missing.join(", ")}: every platform with an installer needs one.`);
-
-    // "Required update" refuses every older app until it updates. The floor is not per computer type, so a required release must offer an
-    // update file for every type an earlier published release did, or those computers would be refused with nothing to update to.
-    if (release.minRequired) {
-      const earlier = await db
-        .selectDistinct({ platform: trackerReleaseBuilds.platform })
-        .from(trackerReleaseBuilds)
-        .innerJoin(trackerReleases, eq(trackerReleases.id, trackerReleaseBuilds.releaseId))
-        .where(and(eq(trackerReleases.status, "published"), eq(trackerReleaseBuilds.kind, "update"), ne(trackerReleases.id, release.id)));
-      const lacking = earlier.map((e) => e.platform).filter((p) => !updates.has(p));
-      if (lacking.length > 0) return fail(`A required update must cover every computer type earlier releases covered, or those computers would be refused with nothing to update to. Add the update file and its signature for ${lacking.join(", ")}.`);
-    }
+    // Earlier published releases' installers: a required release must cover every computer type they covered.
+    const earlierInstallers = release.minRequired
+      ? (
+          await db
+            .selectDistinct({ platform: trackerReleaseBuilds.platform })
+            .from(trackerReleaseBuilds)
+            .innerJoin(trackerReleases, eq(trackerReleases.id, trackerReleaseBuilds.releaseId))
+            .where(and(eq(trackerReleases.status, "published"), eq(trackerReleaseBuilds.kind, "installer"), ne(trackerReleases.id, release.id)))
+        ).map((e) => e.platform)
+      : [];
+    const problem = publishProblem({ installers, updates, minRequired: release.minRequired, earlierInstallers });
+    if (problem) return fail(problem);
 
     if (release.addsCollection) {
       if (!release.policyVersionId) return fail("This release adds new data collection. Name the published monitoring policy version that covers it.");
