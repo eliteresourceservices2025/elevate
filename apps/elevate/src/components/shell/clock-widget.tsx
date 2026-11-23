@@ -231,6 +231,30 @@ function EodNote({ sessionId, onDone }: { sessionId: string; onDone: () => void 
  * The time clock in the header. Elapsed time counts from the SERVER's timestamps (offset against this browser's clock),
  * so changing the computer's clock changes nothing. All the rules are enforced on the server; this only shows state.
  */
+/** The client and project choices in the two menus: a client that has projects is a small heading with short lines under it. */
+function ChoiceList({ choices, onPick }: { choices: WorkChoice[]; onPick: (c: WorkChoice) => void }) {
+  return (
+    <>
+      {choices.map((c, i) => (
+        <div key={`${c.clientId}:${c.projectId ?? ""}`}>
+          {c.grouped && choices[i - 1]?.clientId !== c.clientId ? (
+            <p className="px-3 pb-0.5 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{c.clientName}</p>
+          ) : null}
+          <button
+            type="button"
+            role="menuitem"
+            className={cn("block w-full truncate py-1.5 text-left text-xs hover:bg-muted focus-visible:bg-muted focus-visible:outline-none", c.grouped ? "pl-5 pr-3" : "px-3 font-medium")}
+            title={c.label}
+            onClick={() => onPick(c)}
+          >
+            {c.title}
+          </button>
+        </div>
+      ))}
+    </>
+  );
+}
+
 export function ClockWidget({ status }: { status: ClockStatus | null }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -480,22 +504,15 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
           {clientMenu === "in" ? (
             <div role="menu" aria-label="Which client or project are you working on?" className="absolute right-0 top-full z-50 mt-1 max-h-96 w-64 overflow-y-auto rounded-xl border bg-popover py-1 shadow-lg">
               <p className="px-3 py-1.5 text-xs font-medium text-muted-foreground">Clock in for</p>
-              {choices.map((c) => (
-                <button
-                  key={`${c.clientId}:${c.projectId ?? ""}`}
-                  type="button"
-                  role="menuitem"
-                  className="block w-full px-3 py-2 text-left text-sm hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
-                  onClick={() => {
-                    setClientMenu(null);
-                    setChosenWork(c);
-                    if (status.needsSelfie) setSelfie(true);
-                    else void doClockIn(undefined, c);
-                  }}
-                >
-                  {c.label}
-                </button>
-              ))}
+              <ChoiceList
+                choices={choices}
+                onPick={(c) => {
+                  setClientMenu(null);
+                  setChosenWork(c);
+                  if (status.needsSelfie) setSelfie(true);
+                  else void doClockIn(undefined, c);
+                }}
+              />
             </div>
           ) : null}
         </div>
@@ -532,22 +549,13 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
                 <div role="menu" aria-label="Switch client or project" className="absolute right-0 top-full z-50 mt-1 max-h-96 w-64 overflow-y-auto rounded-xl border bg-popover py-1 shadow-lg">
                   <p className="px-3 pt-1.5 text-xs text-muted-foreground">Now: {nowLabel}</p>
                   <p className="px-3 py-1.5 text-xs font-medium text-muted-foreground">Move the rest of this session to</p>
-                  {choices
-                    .filter((c) => c !== currentChoice)
-                    .map((c) => (
-                      <button
-                        key={`${c.clientId}:${c.projectId ?? ""}`}
-                        type="button"
-                        role="menuitem"
-                        className="block w-full px-3 py-2 text-left text-sm hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
-                        onClick={() => {
-                          setClientMenu(null);
-                          run(() => switchClient({ clientId: c.clientId, projectId: c.projectId }), `Now working on ${c.label}.`);
-                        }}
-                      >
-                        {c.label}
-                      </button>
-                    ))}
+                  <ChoiceList
+                    choices={choices.filter((c) => c !== currentChoice)}
+                    onPick={(c) => {
+                      setClientMenu(null);
+                      run(() => switchClient({ clientId: c.clientId, projectId: c.projectId }), `Now working on ${c.label}.`);
+                    }}
+                  />
                 </div>
               ) : null}
             </div>

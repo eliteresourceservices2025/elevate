@@ -3,15 +3,15 @@ import { workChoices } from "./work-choices";
 
 describe("what a person can clock in for", () => {
   it("lists a client with no projects as just the client", () => {
-    expect(workChoices([{ id: "c1", name: "Acme", projects: [] }])).toEqual([{ clientId: "c1", projectId: undefined, label: "Acme" }]);
+    expect(workChoices([{ id: "c1", name: "Acme", projects: [] }])).toEqual([{ clientId: "c1", projectId: undefined, label: "Acme", clientName: "Acme", title: "Acme", grouped: false }]);
   });
 
   it("lists each project of a client, then the client with no specific project", () => {
     const got = workChoices([{ id: "c1", name: "Acme", projects: [{ id: "p1", name: "Intake" }, { id: "p2", name: "Billing" }] }]);
     expect(got).toEqual([
-      { clientId: "c1", projectId: "p1", label: "Acme · Intake" },
-      { clientId: "c1", projectId: "p2", label: "Acme · Billing" },
-      { clientId: "c1", projectId: undefined, label: "Acme · no specific project" },
+      { clientId: "c1", projectId: "p1", label: "Acme · Intake", clientName: "Acme", title: "Intake", grouped: true },
+      { clientId: "c1", projectId: "p2", label: "Acme · Billing", clientName: "Acme", title: "Billing", grouped: true },
+      { clientId: "c1", projectId: undefined, label: "Acme · no specific project", clientName: "Acme", title: "No specific project", grouped: true },
     ]);
   });
 
