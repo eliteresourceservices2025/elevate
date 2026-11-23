@@ -10,6 +10,7 @@ import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { hrUserIds, notify } from "@/modules/notifications/service";
 import { timeChainUserIds, reportName } from "@/modules/org/service";
 import { selfTestEmails } from "@/modules/jibble/client";
+import { trackerReplacesJibble } from "@/modules/jibble/applies";
 import { enqueueMirror, kickMirror } from "@/modules/jibble/enqueue";
 import { isSelfTestEmail } from "@/modules/jibble/mirror-rules";
 import { clientProjects, employees } from "@/modules/people/schema";
@@ -63,7 +64,9 @@ export async function rulesFor(executor: Executor, employeeId: string): Promise<
     .innerJoin(clockRules, eq(clockRules.teamId, employees.teamId))
     .where(eq(employees.id, employeeId))
     .limit(1);
-  return row ?? DEFAULT_RULES;
+  if (!row) return DEFAULT_RULES;
+  // A person whose work computer runs the ELEVATE Tracker App is not also run in Jibble (see jibble/applies.ts).
+  return row.jibbleMirror && (await trackerReplacesJibble(executor, employeeId)) ? { ...row, jibbleMirror: false } : row;
 }
 
 export async function prefsFor(executor: Executor, employeeId: string): Promise<{ shareLocation: boolean; timeZone: string | null; zone: string }> {

@@ -8,6 +8,7 @@ import { clockSourceOf } from "@/modules/attendance/clock-source";
 import { loadRecentEvents, monitoringPolicyPublished, prefsFor } from "@/modules/attendance/service";
 import { hrUserIds, notify } from "@/modules/notifications/service";
 import { reportName } from "@/modules/org/service";
+import { jibbleAppliesSql, trackerReplacesJibble } from "./applies";
 import { breakMode, getJibbleClient, mirrorSendsEnabled, mismatchToleranceMinutes, selfTestEmails, sendsAllowed } from "./client";
 import { JibbleError, type JibbleClient } from "./http-client";
 import { MAX_ATTEMPTS, backoffMs, isMismatch, repairAction, targetState, type JibbleAction } from "./mirror-rules";
@@ -54,7 +55,7 @@ export async function maySendNow(employeeId: string, personId: string): Promise<
   if (!mirrorSendsEnabled() || !sendsAllowed(personId)) return false;
   // Someone who clocks in Jibble is never clocked in or out there by ELEVATE: their hours come from Jibble.
   if ((await clockSourceOf(db, employeeId)) === "jibble") return false;
-  const [row] = (await db.execute(sql`select p.jibble_person_id, u.email, coalesce(r.jibble_mirror, false) as enabled
+  const [row] = (await db.execute(sql`select p.jibble_person_id, u.email, ${jibbleAppliesSql(sql`e.id`, sql`coalesce(r.jibble_mirror, false)`)} as enabled
     from core.employees e join time.jibble_people p on p.employee_id = e.id
     left join core.users u on u.id = e.user_id left join time.clock_rules r on r.team_id = e.team_id
     where e.id = ${employeeId} and e.archived_at is null and e.status <> 'separated'`)) as unknown as { jibble_person_id: string; email: string | null; enabled: boolean }[];
@@ -116,6 +117,13 @@ export async function processMirrorQueue(now = new Date(), client: JibbleClient 
       const [fresh] = (await db.execute(sql`select l.status, p.jibble_person_id from time.jibble_link_log l
         left join time.jibble_people p on p.employee_id = l.employee_id where l.id = ${row.id}::uuid`)) as unknown as { status: string; jibble_person_id: string | null }[];
       if (!fresh || fresh.status !== "queued" || fresh.jibble_person_id !== row.jibble_person_id || await jibblePaused()) break;
+      // A call queued just before the person's computer was connected to the ELEVATE Tracker App is dropped: the app replaces Jibble.
+      // (A call that stops a Jibble that is already running is kept: trackerReplacesJibble is false while Jibble is running.)
+      if (await trackerReplacesJibble(db, row.employee_id)) {
+        await db.update(jibbleLinkLog).set({ status: "skipped", lastError: "not sent: the Tracker App is connected" }).where(eq(jibbleLinkLog.id, row.id));
+        run.skipped += 1;
+        continue;
+      }
       if (guardToken && now.getTime() - new Date(row.created_at).getTime() > 10 * MINUTE) {
         // A past action is not evidence of the state desired now. Hold it until current-state recovery is available.
         await db.update(jibbleLinkLog).set({ lastError: "stale call: review current status" }).where(eq(jibbleLinkLog.id, row.id));
@@ -280,7 +288,7 @@ export async function runJibbleRepair(now = new Date(), client: JibbleClient | n
     left join core.users u on u.id = e.user_id
     join time.jibble_people p on p.employee_id = e.id
     ${coordinating ? sql`left join time.jibble_check_cursor scan_cursor on scan_cursor.employee_id = e.id` : sql``}
-    where (coalesce(r.jibble_mirror, false) or ${selfTestMatch}) and e.archived_at is null and e.status <> 'separated'
+    where (${jibbleAppliesSql(sql`e.id`, sql`coalesce(r.jibble_mirror, false)`)} or ${selfTestMatch}) and e.archived_at is null and e.status <> 'separated'
       ${coordinating ? sql`` : sql`and exists (select 1 from time.v_clock_events c where c.employee_id = e.id and c.occurred_at > ${new Date(now.getTime() - 2 * DAY_MS).toISOString()}::timestamptz)`}
     ${coordinating ? sql`order by scan_cursor.checked_at asc nulls first, e.id` : sql``}
     limit ${coordinating ? 150 : 400}`)) as unknown as { employee_id: string; jibble_person_id: string }[];
@@ -438,7 +446,7 @@ export async function runJibbleComparison(now = new Date(), client: JibbleClient
     select e.id as employee_id, p.jibble_person_id from core.employees e
     join time.clock_rules r on r.team_id = e.team_id and r.jibble_mirror
     join time.jibble_people p on p.employee_id = e.id
-    where e.archived_at is null and e.status <> 'separated'
+    where e.archived_at is null and e.status <> 'separated' and ${jibbleAppliesSql(sql`e.id`, sql`true`)}
       and coalesce((select s.source from time.clock_source s where s.employee_id = e.id order by s.set_at desc, s.id desc limit 1), 'elevate') <> 'jibble'`)) as unknown as { employee_id: string; jibble_person_id: string }[];
 
   // Each person's "yesterday" depends on their own zone, so group people by the date they need.
