@@ -20,8 +20,21 @@ test("HR uploads a document, downloads it, and a disguised file is refused", asy
   const personUrl = page.url();
 
   await page.getByRole("navigation", { name: "Profile sections" }).getByRole("link", { name: "Documents" }).click();
-  await expect(page.getByText("Do not upload client records or patient information.")).toBeVisible();
-  await waitForHydration(page, "#up-file");
+  // The upload form lives in a dialog opened by the "Upload a document" button
+  const openUpload = async () => {
+    await page.getByRole("group", { name: "Upload documents" }).getByRole("button", { name: "Upload a document" }).click();
+    await expect(page.getByText("Do not upload client records or patient information.")).toBeVisible();
+    await waitForHydration(page, "#up-file");
+  };
+  await openUpload();
+
+  // Results appear in a centered "Done" dialog that covers the page until it is closed (or after a few seconds)
+  const acknowledge = async (message: string) => {
+    const feedback = page.getByRole("dialog", { name: "Done" });
+    await expect(feedback.getByText(message)).toBeVisible();
+    await feedback.getByRole("button", { name: "Close", exact: true }).last().click();
+    await expect(feedback).toBeHidden();
+  };
 
   const pdf = Buffer.from("%PDF-1.4\n%fake e2e document\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n");
   const fill = async (title: string, file: { name: string; mimeType: string; buffer: Buffer }) => {
@@ -34,7 +47,9 @@ test("HR uploads a document, downloads it, and a disguised file is refused", asy
 
   // A real PDF is accepted, saved as verified (HR uploaded it), and downloads byte for byte
   await fill("Signed contract", { name: "../contract.pdf", mimeType: "application/pdf", buffer: pdf });
-  await expect(page.getByText("Document saved.")).toBeVisible();
+  await acknowledge("Document saved.");
+  // The app closes the upload dialog itself once the document is saved
+  await expect(page.getByText("Do not upload client records or patient information.")).toBeHidden();
   const row = page.getByRole("row", { name: /Signed contract/ });
   await expect(row).toBeVisible();
   await expect(row.getByText("Verified")).toBeVisible();
@@ -49,19 +64,23 @@ test("HR uploads a document, downloads it, and a disguised file is refused", asy
   await page.getByRole("button", { name: "New folder" }).click();
   await page.getByLabel("Folder name").fill("Contracts");
   await page.getByRole("button", { name: "Create folder" }).click();
-  await expect(page.getByText("Folder created.")).toBeVisible();
+  await acknowledge("Folder created.");
   const chips = page.getByRole("group", { name: "Folders" });
   await expect(chips.getByRole("button", { name: /^Contracts/ })).toBeVisible();
-  await page.getByLabel("Move Signed contract to a folder").selectOption({ label: "Contracts" });
-  await expect(page.getByText("Document moved.")).toBeVisible();
+  await page.getByRole("button", { name: "More actions for Signed contract" }).click();
+  await page.getByRole("menuitem", { name: "Move to folder" }).click();
+  const moveDialog = page.getByRole("dialog", { name: "Move to folder" });
+  await moveDialog.getByLabel("Folder").selectOption({ label: "Contracts" });
+  await moveDialog.getByRole("button", { name: "Move document" }).click();
+  await acknowledge("Document moved.");
   await chips.getByRole("button", { name: /^Contracts/ }).click();
   await expect(page.getByRole("row", { name: /Signed contract/ })).toBeVisible();
   await chips.getByRole("button", { name: /^No folder/ }).click();
   await expect(page.getByRole("row", { name: /Signed contract/ })).toHaveCount(0);
   await chips.getByRole("button", { name: /^Contracts/ }).click();
-  page.once("dialog", (d) => void d.accept());
   await page.getByRole("button", { name: "Remove folder" }).click();
-  await expect(page.getByText("Folder removed.")).toBeVisible();
+  await page.getByRole("alertdialog").getByRole("button").last().click(); // the confirmation: Go back, then Remove
+  await acknowledge("Folder removed.");
   await expect(page.getByRole("row", { name: /Signed contract/ })).toBeVisible();
 
   // The type is a badge of its own (not buried in grey text), and the list can be searched and grouped
@@ -83,7 +102,7 @@ test("HR uploads a document, downloads it, and a disguised file is refused", asy
   await expect(all.getByRole("link", { name: new RegExp(`Docs${stamp}`) })).toBeVisible();
   await expect(all.getByText("Contract", { exact: true })).toBeVisible();
   await page.goto(`${personUrl}?tab=documents`);
-  await waitForHydration(page, "#up-file");
+  await openUpload();
 
   // A program disguised as a PDF is refused by the server and leaves nothing behind
   await fill("Sneaky", { name: "invoice.pdf", mimeType: "application/pdf", buffer: Buffer.from([0x4d, 0x5a, 0x90, 0, 3, 0, 0, 0, 4, 0, 0, 0, 0xff, 0xff, 0, 0]) });
