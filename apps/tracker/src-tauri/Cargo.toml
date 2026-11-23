@@ -1,6 +1,6 @@
 [package]
 name = "elevate-tracker"
-version = "1.0.2"
+version = "1.0.3"
 description = "ELEVATE Tracker App"
 authors = ["Elite Resource Services"]
 edition = "2021"
@@ -44,3 +44,7 @@ panic = "abort"
 
 [target."cfg(windows)".dependencies]
 windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_System_SystemInformation", "Win32_System_Threading", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-app-kit = { version = "0.3", features = ["NSWorkspace", "NSRunningApplication"] }
+objc2-foundation = { version = "0.3", features = ["NSString"] }

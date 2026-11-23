@@ -171,6 +171,16 @@ impl Engine {
             }
         }
 
+        // Whether the system lets the app see the screen (macOS): checked every tick, it is only a quick question.
+        let permissions_ok = self.d.platform.permissions_ok();
+        if let Ok(mut s) = self.d.shared.lock() {
+            if s.permissions_ok != permissions_ok {
+                s.permissions_ok = permissions_ok;
+                drop(s);
+                self.changed();
+            }
+        }
+
         let recording = self.d.shared.lock().map(|s| s.work_state == Some(WorkState::Working) && s.policy && s.update_required.is_none()).unwrap_or(false);
         if recording {
             self.was_recording = true;
@@ -319,7 +329,7 @@ impl Engine {
             return;
         }
         let queue_size = self.d.queue.len().map(|(segments, _)| segments as u32).unwrap_or(0);
-        let health = crate::api::Health { permissions_ok: true, queue_size };
+        let health = crate::api::Health { permissions_ok: self.d.platform.permissions_ok(), queue_size };
         match self.sender.run_once(&self.d.api, &token, &self.d.queue, health).await {
             SendOutcome::Sent(n) => {
                 if let Ok(mut s) = self.d.shared.lock() {

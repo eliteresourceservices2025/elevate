@@ -74,10 +74,14 @@ pub fn run() {
             commands::last_shot_thumbnail,
             commands::disconnect,
             commands::check_for_updates,
+            commands::open_permission_settings,
             commands::whats_new,
             commands::mark_whats_new_seen,
         ])
         .setup(move |app| {
+            // A menu-bar app on a Mac: no icon in the Dock, and the app stays when its window is closed.
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             let version = app.package_info().version.to_string();
             let data_dir = app.path().app_data_dir()?;
             let logger = Arc::new(Logger::new(data_dir.join("logs")));

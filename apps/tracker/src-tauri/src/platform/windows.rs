@@ -67,20 +67,6 @@ impl Platform for WindowsPlatform {
     }
 
     fn capture_all_monitors(&self) -> Result<Vec<MonitorShot>, CaptureError> {
-        let monitors = xcap::Monitor::all().map_err(|e| CaptureError::Failed(e.to_string()))?;
-        let mut out = Vec::with_capacity(monitors.len());
-        for m in monitors {
-            let (x, y) = (m.x().map_err(fail)?, m.y().map_err(fail)?);
-            let image = m.capture_image().map_err(fail)?;
-            out.push(MonitorShot { x, y, width: image.width(), height: image.height(), rgba: image.into_raw() });
-        }
-        if out.is_empty() {
-            return Err(CaptureError::NoMonitors);
-        }
-        Ok(out)
+        super::capture_with_xcap(false)
     }
-}
-
-fn fail(e: xcap::XCapError) -> CaptureError {
-    CaptureError::Failed(e.to_string())
 }

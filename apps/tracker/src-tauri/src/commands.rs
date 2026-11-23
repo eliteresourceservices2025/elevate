@@ -100,6 +100,13 @@ pub fn disconnect(core: State<'_, Arc<Core>>) -> Result<(), String> {
     core.controller.disconnect()
 }
 
+/// macOS: asks to list the app under Screen Recording and opens that page of System Settings. Does nothing on other systems.
+#[tauri::command]
+pub fn open_permission_settings() {
+    #[cfg(target_os = "macos")]
+    crate::platform::ask_for_screen_recording();
+}
+
 /// Look for an update now (the tray item, or the Update now button).
 #[tauri::command]
 pub fn check_for_updates(core: State<'_, Arc<Core>>) {

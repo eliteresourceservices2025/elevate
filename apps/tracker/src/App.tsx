@@ -56,7 +56,7 @@ export function App() {
         <SignIn onDone={reload} />
       ) : (
         <>
-          {status.updateRequired ? <RequiredUpdate minVersion={status.updateRequired} readyVersion={status.updateVersion} /> : <WhatsNew />}
+          {status.updateRequired ? <RequiredUpdate minVersion={status.updateRequired} readyVersion={status.updateVersion} autoUpdate={status.autoUpdate} /> : <WhatsNew />}
           {status.updateVersion ? <p className="notice info">Version {status.updateVersion} is ready. It installs when you are not working.</p> : null}
           <nav className="tabs" aria-label="Sections">
             <button className={tab === "status" ? "active" : ""} aria-current={tab === "status"} onClick={() => setTab("status")}>Clock</button>

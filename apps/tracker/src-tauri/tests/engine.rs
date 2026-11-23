@@ -23,6 +23,8 @@ struct FakePlatform {
     app: Mutex<Option<String>>,
     idle: AtomicU32,
     foreground_calls: AtomicUsize,
+    /// Whether the system lets the app see the screen (macOS asks the person; Windows never does).
+    allowed: AtomicBool,
 }
 
 impl Platform for FakePlatform {
@@ -32,6 +34,9 @@ impl Platform for FakePlatform {
     }
     fn idle_seconds(&self) -> u32 {
         self.idle.load(Ordering::SeqCst)
+    }
+    fn permissions_ok(&self) -> bool {
+        self.allowed.load(Ordering::SeqCst)
     }
     fn capture_all_monitors(&self) -> Result<Vec<MonitorShot>, CaptureError> {
         Ok(vec![MonitorShot { x: 0, y: 0, width: 64, height: 48, rgba: [90, 90, 90, 255].repeat(64 * 48) }])
@@ -90,7 +95,7 @@ async fn rig(signed_in: bool) -> Rig {
     says(&server, "working", true).await;
     let dir = tempfile::tempdir().unwrap();
     let queue = Arc::new(Queue::open(dir.path()).unwrap());
-    let fake = Arc::new(FakePlatform { app: Mutex::new(Some("chrome".into())), idle: AtomicU32::new(0), foreground_calls: AtomicUsize::new(0) });
+    let fake = Arc::new(FakePlatform { app: Mutex::new(Some("chrome".into())), idle: AtomicU32::new(0), foreground_calls: AtomicUsize::new(0), allowed: AtomicBool::new(true) });
     let store = Arc::new(if signed_in { MemoryStore::with("tok") } else { MemoryStore::default() });
     let shared = new_shared(signed_in);
     let poll_now = Arc::new(AtomicBool::new(false));
@@ -519,4 +524,19 @@ async fn todays_time_from_elevate_reaches_the_window_with_the_moment_it_arrived(
     let view = r.shared.lock().unwrap().view("1.0.2");
     assert_eq!(view.today.as_ref().map(|t| t.total_ms), Some(7_200_000));
     assert_eq!(view.today_received_ms, Some(T0), "counted from the moment it arrived on this computer, so a wrong computer clock cannot skew it");
+}
+
+#[tokio::test]
+async fn a_missing_screen_permission_is_shown_in_the_window_and_reported_to_elevate() {
+    let mut r = rig(true).await;
+    r.fake.allowed.store(false, Ordering::SeqCst);
+    r.run(0, 60, 5).await;
+    r.app(Some("excel")); // a finished stretch to send
+    r.run(65, 130, 5).await;
+    assert!(!r.shared.lock().unwrap().view("1.0.3").permissions_ok, "the window can tell the person to allow it");
+    let bodies: Vec<Value> = r.server.received_requests().await.unwrap().iter().filter(|q| q.url.path() == "/api/tracker/segments").map(|q| serde_json::from_slice(&q.body).unwrap()).collect();
+    assert!(!bodies.is_empty() && bodies.iter().all(|b| b["permissionsOk"] == json!(false)), "ELEVATE's Devices page can list the computer as lacking permission");
+    r.fake.allowed.store(true, Ordering::SeqCst);
+    r.run(135, 200, 5).await;
+    assert!(r.shared.lock().unwrap().view("1.0.3").permissions_ok, "allowing it clears the notice");
 }

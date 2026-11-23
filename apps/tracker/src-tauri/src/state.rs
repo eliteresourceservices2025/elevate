@@ -75,6 +75,8 @@ pub struct Status {
     /// Today's worked time as ELEVATE last counted it, and the moment (this computer's clock) it arrived, so the window can keep counting.
     pub today: Option<TodayWork>,
     pub today_received_ms: Option<i64>,
+    /// False when the system has not let the app see the screen yet (macOS Screen Recording).
+    pub permissions_ok: bool,
     pub idle_timeout_secs: u32,
     /// The last picture, already blurred: what the person can look at under "What was captured".
     pub last_shot: Option<Vec<u8>>,
@@ -99,6 +101,7 @@ impl Default for Status {
             clock_blocked_reason: None,
             today: None,
             today_received_ms: None,
+            permissions_ok: true,
             idle_timeout_secs: 180,
             last_shot: None,
         }
@@ -131,6 +134,9 @@ pub struct StatusView {
     pub clock_blocked_reason: Option<String>,
     pub today: Option<TodayWork>,
     pub today_received_ms: Option<i64>,
+    pub permissions_ok: bool,
+    /// Whether this app installs its own updates (Windows). On a Mac the person downloads the new version from ELEVATE.
+    pub auto_update: bool,
     pub has_shot: bool,
 }
 
@@ -153,6 +159,8 @@ impl Status {
             clock_blocked_reason: self.clock_blocked_reason.clone(),
             today: self.today.clone(),
             today_received_ms: self.today_received_ms,
+            permissions_ok: self.permissions_ok,
+            auto_update: cfg!(windows),
             has_shot: self.last_shot.is_some(),
         }
     }

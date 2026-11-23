@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compareVersions, detectPlatform, formatBytes, isNewer, normalizeNotes, parseVersion, pickUpdate, platformsFor } from "./releases-logic";
+import { compareVersions, detectPlatform, formatBytes, isNewer, normalizeNotes, parseVersion, pickUpdate, platformsFor, publishProblem } from "./releases-logic";
 
 describe("parseVersion and compareVersions", () => {
   it("reads MAJOR.MINOR.PATCH only", () => {
@@ -72,5 +72,30 @@ describe("pickUpdate", () => {
   it("treats a missing or unreadable current version as older than everything", () => {
     expect(pickUpdate({ platform: "windows-x86_64", currentVersion: null, published })).toBe("1.2.0");
     expect(pickUpdate({ platform: "windows-x86_64", currentVersion: "0.0.0-sim", published })).toBe("1.2.0");
+  });
+});
+
+describe("what a release needs before it can be published", () => {
+  const set = (...p: string[]) => new Set(p);
+
+  it("needs at least one installer", () => {
+    expect(publishProblem({ installers: set(), updates: set(), minRequired: false, earlierInstallers: [] })).toMatch(/no installer/);
+  });
+
+  it("needs an update file for a computer type that updates itself (Windows)", () => {
+    expect(publishProblem({ installers: set("windows-x86_64"), updates: set(), minRequired: false, earlierInstallers: [] })).toMatch(/update file and its signature for windows-x86_64/);
+    expect(publishProblem({ installers: set("windows-x86_64"), updates: set("windows-x86_64"), minRequired: false, earlierInstallers: [] })).toBeNull();
+  });
+
+  it("does not ask for an update file for a Mac: Macs do not update themselves yet", () => {
+    expect(publishProblem({ installers: set("windows-x86_64", "darwin-aarch64", "darwin-x86_64"), updates: set("windows-x86_64"), minRequired: false, earlierInstallers: [] })).toBeNull();
+    expect(publishProblem({ installers: set("darwin-aarch64"), updates: set(), minRequired: false, earlierInstallers: [] })).toBeNull();
+  });
+
+  it("a required release must have an installer for every computer type earlier releases had, so nobody is told to update to nothing", () => {
+    const earlier = ["windows-x86_64", "darwin-aarch64"];
+    expect(publishProblem({ installers: set("windows-x86_64"), updates: set("windows-x86_64"), minRequired: true, earlierInstallers: earlier })).toMatch(/must cover every computer type.*darwin-aarch64/);
+    expect(publishProblem({ installers: set("windows-x86_64", "darwin-aarch64"), updates: set("windows-x86_64"), minRequired: true, earlierInstallers: earlier })).toBeNull();
+    expect(publishProblem({ installers: set("windows-x86_64"), updates: set("windows-x86_64"), minRequired: false, earlierInstallers: earlier })).toBeNull();
   });
 });

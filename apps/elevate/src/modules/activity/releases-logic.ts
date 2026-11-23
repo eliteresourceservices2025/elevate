@@ -69,3 +69,22 @@ export function pickUpdate(input: { platform: Platform; currentVersion: string |
   }
   return best;
 }
+
+/** The computer types that install their own updates (Windows). A Mac does not yet: the person downloads each new version from ELEVATE. */
+export const SELF_UPDATING: readonly Platform[] = ["windows-x86_64"];
+
+/**
+ * What stops a draft release from being published, in plain words, or null when it can go out. At least one installer; an update file
+ * (and its signature) for each computer type that updates itself; and, for a "Required update", an installer for every computer type an
+ * earlier published release had, so no computer is told to update to a version that does not exist for it.
+ */
+export function publishProblem(input: { installers: ReadonlySet<string>; updates: ReadonlySet<string>; minRequired: boolean; earlierInstallers: readonly string[] }): string | null {
+  if (input.installers.size === 0) return "This release has no installer yet. Add builds with pnpm tracker:build first.";
+  const missing = [...input.installers].filter((p) => (SELF_UPDATING as readonly string[]).includes(p) && !input.updates.has(p));
+  if (missing.length > 0) return `Add the update file and its signature for ${missing.join(", ")}: every computer type that updates itself needs one.`;
+  if (input.minRequired) {
+    const lacking = input.earlierInstallers.filter((p) => !input.installers.has(p));
+    if (lacking.length > 0) return `A required update must cover every computer type earlier releases covered, or those computers would be refused with nothing to download. Add the installer (and the update file and its signature where the type updates itself) for ${lacking.join(", ")}.`;
+  }
+  return null;
+}

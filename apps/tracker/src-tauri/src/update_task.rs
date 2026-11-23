@@ -32,6 +32,11 @@ async fn find(core: &Arc<Core>) -> Option<(String, Vec<u8>)> {
 }
 
 pub async fn run(core: Arc<Core>, app: AppHandle) {
+    // Only Windows installs its own updates for now. On a Mac the person downloads the new version from ELEVATE (the app would ask the
+    // feed for the wrong kind of computer and could not run what it fetched).
+    if !cfg!(windows) {
+        return;
+    }
     let mut next_check = now_ms() + FIRST_CHECK_MS;
     let mut ready: Option<(String, Vec<u8>)> = None;
     let mut asked_for_required = false;
