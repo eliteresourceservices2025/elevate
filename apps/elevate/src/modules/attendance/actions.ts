@@ -551,6 +551,7 @@ export async function saveShiftNote(input: unknown): Promise<ActionResult> {
  * a refresh. Own data only: getClockStatus checks the person and reads nobody else's.
  */
 export async function refreshClockStatus(): Promise<ClockStatus | null> {
-  await requireUser();
+  const user = await requireUser();
+  await authorize(user, "attendance.clock", { ownerUserId: user.id });
   return getClockStatus();
 }

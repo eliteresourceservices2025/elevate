@@ -12,6 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { archiveClientProject, createClientProject, renameClientProject, setClientNoProjectAllowed, setClientProjectPeople, updateClient } from "../actions";
+import { keepCurrentPeople } from "../project-members";
 import { PhiToggle, useRun } from "./admin-forms";
 
 export type ClientItem = { id: string; name: string; timeZone: string; holidayCalendar: "PH" | "US"; isActive: boolean; handlesPhi: boolean; allowNoProject: boolean };
@@ -191,7 +192,7 @@ function ProjectsPanel({ client, projects, people, members }: { client: ClientIt
                     size="sm"
                     aria-expanded={editingPeople === p.id}
                     onClick={() => {
-                      setPicked(members[p.id] ?? []);
+                      setPicked(keepCurrentPeople(members[p.id], people));
                       setEditingPeople(editingPeople === p.id ? null : p.id);
                     }}
                   >
@@ -315,7 +316,19 @@ function DetailsPanel({ client, timeZones }: { client: ClientItem; timeZones: re
           <Button type="submit" size="sm" disabled={pending || !name.trim()}>
             Save
           </Button>
-          <Button type="button" size="sm" variant="ghost" onClick={() => setEditing(false)}>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              // Throw the edits away: the form shows the saved values next time.
+              setName(client.name);
+              setTimeZone(client.timeZone);
+              setHolidayCalendar(client.holidayCalendar);
+              setHandlesPhi(client.handlesPhi);
+              setEditing(false);
+            }}
+          >
             Cancel
           </Button>
         </div>

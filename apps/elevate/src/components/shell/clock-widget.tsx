@@ -270,6 +270,7 @@ export function ClockWidget({ status: statusProp }: { status: ClockStatus | null
     setStatus(statusProp);
   }
   const shown = useRef(status);
+  const clicks = useRef(0);
   useEffect(() => {
     shown.current = status;
   }, [status]);
@@ -280,8 +281,10 @@ export function ClockWidget({ status: statusProp }: { status: ClockStatus | null
     const check = async () => {
       if (busy || document.visibilityState !== "visible") return;
       busy = true;
+      const clicksBefore = clicks.current;
       try {
         const latest = await refreshClockStatus();
+        if (clicks.current !== clicksBefore) return; // the person clicked while this was on its way: the click's own refresh is newer
         if (clockStatusChanged(shown.current, latest)) {
           shown.current = latest;
           setStatus(latest);
@@ -446,7 +449,11 @@ export function ClockWidget({ status: statusProp }: { status: ClockStatus | null
     );
   }
 
-  const run = <T,>(fn: () => Promise<ActionResult<T>>, success?: string, after?: (data: T) => void) =>
+  const run = <T,>(fn: () => Promise<ActionResult<T>>, success?: string, after?: (data: T) => void) => {
+    clicks.current += 1; // a status check that started before this click must not overwrite what the click did
+    return runAction(fn, success, after);
+  };
+  const runAction = <T,>(fn: () => Promise<ActionResult<T>>, success?: string, after?: (data: T) => void) =>
     startTransition(async () => {
       try {
         const result = await fn();
