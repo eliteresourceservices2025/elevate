@@ -1,4 +1,5 @@
 "use client";
+import { ThreadToggle } from "@/components/reports/report-thread";
 import { EvidenceGallery } from "@/components/reports/evidence-gallery";
 
 import { useRouter } from "next/navigation";
@@ -265,6 +266,7 @@ function Items({ items, zone, mode, empty }: { items: ExtraItem[]; zone: string;
             </p>
             {r.decisionNote ? <p className="text-sm">Note: {r.decisionNote}</p> : null}
             <EvidenceGallery evidence={r.evidence} />
+            <ThreadToggle type="extra_hours" id={r.id} />
 
             {r.needsMyAnswer ? (
               <div className="flex flex-wrap items-end gap-2">

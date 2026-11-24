@@ -27,8 +27,10 @@ test("a contractor reports a technical issue with a screenshot and HR handles it
   await page.getByRole("button", { name: "Send report" }).click();
   await expect(page.getByText("Report sent to your lead and HR.")).toBeVisible(slow);
   await expect(section.getByText(`Jibble kept running after I clocked out ${stamp}`)).toBeVisible(slow);
+  // The reports are a list with the chosen one open beside it: open it to see its screenshots
+  await section.getByText(`Jibble kept running after I clocked out ${stamp}`).first().click();
   await expect(section.getByRole("button", { name: "View screenshot 1" })).toBeVisible();
-  await expect(section.getByText("Waiting")).toBeVisible();
+  await expect(section.getByText("Waiting").first()).toBeVisible();
 
   // HR sees it with the screenshot and marks it handled
   const hr = await (await browser.newContext()).newPage();
@@ -36,9 +38,10 @@ test("a contractor reports a technical issue with a screenshot and HR handles it
   await hr.goto("/attendance?tab=issues");
   const item = hr.getByRole("listitem").filter({ hasText: `Jibble kept running after I clocked out ${stamp}` });
   await expect(item).toBeVisible(slow);
-  await expect(item.getByRole("button", { name: "View screenshot 1" })).toBeVisible();
-  await item.getByLabel("Note for them (optional)").fill("Thanks, we are checking the Jibble link.");
-  await (await hydrated(item.getByRole("button", { name: "Mark as handled" }))).click();
+  await item.getByRole("button").first().click();
+  await expect(hr.getByRole("button", { name: "View screenshot 1" })).toBeVisible();
+  await hr.getByLabel("Note for them (optional)").fill("Thanks, we are checking the Jibble link.");
+  await (await hydrated(hr.getByRole("button", { name: "Mark as handled" }))).click();
   await expect(hr.getByText("Marked as handled.")).toBeVisible(slow);
 
   // The contractor sees the answer

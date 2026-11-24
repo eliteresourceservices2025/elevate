@@ -20,6 +20,8 @@ export const POLICIES = {
   download: { requests: 60, window: "10 m" },
   /** Screenshots shown in the page (thumbnails and the full-size viewer): a page of reports can load a few dozen. */
   evidence: { requests: 300, window: "10 m" },
+  /** Messages on a report or request. */
+  reportMessage: { requests: 30, window: "10 m" },
   clock: { requests: 30, window: "10 m" },
   /** The ELEVATE Tracker: asking for an enrollment code (per person) and trading one for a token (per address). */
   trackerEnroll: { requests: 10, window: "1 h" },

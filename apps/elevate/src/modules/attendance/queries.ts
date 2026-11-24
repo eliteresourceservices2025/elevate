@@ -9,6 +9,7 @@ import { timeDownlineEmployeeIds, timeChainUserIds, reportName, todayInZone } fr
 import { teams } from "@/modules/org/schema";
 import { employees } from "@/modules/people/schema";
 import { EOD_EDIT_WINDOW_MS, MAX_OPEN_SESSION_MS, buildDays, isPossiblyOffline, needsHrDecision, replayClock, type ClockState, type DayTotals, type SessionDetail } from "./clock";
+import { reportThreadCounts } from "@/modules/reports/queries";
 import { approvedExtra, grantedByDate } from "./extra-hours";
 import { computeStopLimit } from "./auto-stop-limit";
 import { breakLeftToday } from "./break-left";
@@ -149,6 +150,8 @@ export type CorrectionItem = {
   /** forgot, connection_problem, device_problem or other. */
   kind: string;
   evidence: EvidenceItem[];
+  /** How many messages are on the request. */
+  messageCount: number;
   /** The name of the lead or HR person who filed it for them, or null when the person filed it themselves. */
   filedBy: string | null;
   /** Distinguishes a system proposal from a request submitted by a person. */
@@ -235,6 +238,7 @@ export async function getMyTime(weekStartInput?: string): Promise<MyTime | null>
            (select e2.legal_first_name || ' ' || e2.legal_last_name from core.employees e2 where e2.user_id = c.requested_by and c.requested_by <> ${user.id}) as filed_by
     from time.clock_corrections c where c.employee_id = ${me.id} order by c.created_at desc limit 20`)) as unknown as Row[];
   const evidence = await evidenceFor(rows.map((r) => String(r.id)));
+  const counts = await reportThreadCounts("correction", rows.map((r) => String(r.id)));
   const removed = await eventsByIds(rows.flatMap((r) => (r.void_event_ids as string[] | null) ?? []));
   const sessionIds = days.flatMap((d) => d.sessionList.map((s) => s.eventId).filter((id): id is string => Boolean(id)));
   const noteRows = sessionIds.length === 0 ? [] : ((await db.execute(sql`select session_event_id, body, edited from time.shift_notes where employee_id = ${me.id} and session_event_id in (${list(sessionIds)})`)) as unknown as { session_event_id: string; body: string; edited: boolean }[]);
@@ -261,6 +265,7 @@ export async function getMyTime(weekStartInput?: string): Promise<MyTime | null>
       canDecide: false,
       kind: String(r.kind),
       evidence: evidence.get(String(r.id)) ?? [],
+      messageCount: counts.get(String(r.id)) ?? 0,
       filedBy: (r.filed_by as string | null) ?? null,
       origin: r.origin === "jibble" ? "jibble" : "human",
       originalProposed: (r.original_proposed as { type: string; at: string }[] | null) ?? null,
@@ -353,9 +358,10 @@ export async function listCorrectionQueue(): Promise<{ items: CorrectionItem[]; 
            (select e2.legal_first_name || ' ' || e2.legal_last_name from core.employees e2 where e2.user_id = c.requested_by and c.requested_by is distinct from e.user_id limit 1) as filed_by,
            e.user_id, e.legal_first_name as first, e.legal_last_name as last, e.preferred_name as preferred
     from time.clock_corrections c join core.employees e on e.id = c.employee_id
-    where c.status = 'pending' ${filter} order by c.created_at limit 100`)) as unknown as Row[];
+    where (c.status = 'pending' or c.decided_at > now() - interval '30 days') ${filter} order by (c.status = 'pending') desc, c.created_at desc limit 150`)) as unknown as Row[];
 
   const evidence = await evidenceFor(rows.map((r) => String(r.id)));
+  const counts = await reportThreadCounts("correction", rows.map((r) => String(r.id)));
   const removed = await eventsByIds(rows.flatMap((r) => (r.void_event_ids as string[] | null) ?? []));
   const items: CorrectionItem[] = [];
   for (const r of rows) {
@@ -372,11 +378,12 @@ export async function listCorrectionQueue(): Promise<{ items: CorrectionItem[]; 
       reason: String(r.reason),
       proposed: r.proposed as { type: string; at: string }[],
       status: String(r.status),
-      decisionNote: null,
+      decisionNote: (r.decision_note as string | null) ?? null,
       createdAt: new Date(r.created_at as string | Date).toISOString(),
-      canDecide: !own && allowed,
+      canDecide: r.status === "pending" && !own && allowed,
       kind: String(r.kind),
       evidence: evidence.get(String(r.id)) ?? [],
+      messageCount: counts.get(String(r.id)) ?? 0,
       filedBy: (r.filed_by as string | null) ?? null,
       origin: r.origin === "jibble" ? "jibble" : "human",
       originalProposed: (r.original_proposed as { type: string; at: string }[] | null) ?? null,

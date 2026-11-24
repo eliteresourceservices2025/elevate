@@ -1,13 +1,14 @@
 "use client";
 import { EvidenceGallery } from "@/components/reports/evidence-gallery";
+import { ReportInbox, type InboxRow } from "@/components/reports/report-inbox";
+import { ReportThread } from "@/components/reports/report-thread";
+import { StatusChip } from "@/components/status-chip";
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { fromZonedTime } from "date-fns-tz";
 import { toast } from "@/components/feedback-dialog";
 import { SelectField, TextField } from "@/components/form-fields";
-import { ClientPager, usePaged } from "@/components/client-pager";
-import { Badge } from "@/components/ui/badge";
 import { useFormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -232,104 +233,135 @@ export function FileForOthersForm({ people, zone }: { people: FilablePerson[]; z
   );
 }
 
-const STATUS_VARIANT = new Map<string, "default" | "secondary" | "outline" | "destructive">([["pending", "secondary"], ["approved", "default"], ["rejected", "destructive"], ["cancelled", "outline"]]);
+const STATUS_TONE = new Map<string, "neutral" | "warning" | "success" | "danger">([["pending", "warning"], ["approved", "success"], ["rejected", "danger"], ["cancelled", "neutral"]]);
+const STATUS_WORD = new Map<string, string>([["pending", "Waiting"], ["approved", "Approved"], ["rejected", "Rejected"], ["cancelled", "Cancelled"]]);
+const CORRECTION_GROUPS = [
+  { value: "open", label: "Waiting" },
+  { value: "done", label: "Decided" },
+];
 
-export function CorrectionList({ items, zone, mode, empty }: { items: CorrectionItem[]; zone: string; mode: "mine" | "queue"; empty: string }) {
+/** One request: the times asked for, its screenshots, the conversation and (for a reviewer) the decision. */
+function CorrectionDetail({ c, zone, mode }: { c: CorrectionItem; zone: string; mode: "mine" | "queue" }) {
   const { run, pending } = useRun();
-  const [notes, setNotes] = useState<Record<string, string>>({});
+  const [note, setNote] = useState("");
   /** Local times the reviewer typed to change a request before approving it. */
-  const [adjust, setAdjust] = useState<Record<string, string[]>>({});
-  const paged = usePaged(items, "", 10);
-  if (items.length === 0) return <p className="rounded-2xl border border-dashed p-6 text-center text-sm text-muted-foreground">{empty}</p>;
+  const [adjust, setAdjust] = useState<string[] | null>(null);
   return (
-    <div className="space-y-3">
-    <ul className="space-y-3">
-      {paged.rows.map((c) => (
-        <li key={c.id} className="space-y-2 rounded-2xl border bg-card p-5 shadow-sm">
-          <div className="flex flex-wrap items-center gap-2">
-            {mode === "queue" ? <span className="font-semibold">{c.employeeName}</span> : null}
-            <Badge variant={STATUS_VARIANT.get(c.status) ?? "outline"}>{c.status}</Badge>
-            <Badge variant="outline">{KIND_LABEL.get(c.kind) ?? c.kind}</Badge>
-            {c.hrOnly && c.status === "pending" ? <Badge variant="secondary">HR decides</Badge> : null}
-            <span className="text-xs text-muted-foreground">{formatInZone(c.createdAt, zone, "MMM d, h:mm a")}</span>
-          </div>
-          <ul className="text-sm">
-            {c.proposed.map((p, i) => (
-              <li key={i}>
-                {TYPE_LABEL.get(p.type) ?? p.type} at {formatInZone(p.at, zone, "MMM d, yyyy h:mm a")}
-              </li>
-            ))}
-          </ul>
-          {c.removes.length > 0 ? (
-            <ul className="text-sm text-destructive">
-              {c.removes.map((p, i) => (
-                <li key={i}>
-                  Remove {TYPE_LABEL.get(p.type) ?? p.type} at {formatInZone(p.at, zone, "MMM d, yyyy h:mm a")}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          {c.originalProposed ? (
-            <p className="text-xs text-muted-foreground">
-              The reviewer changed the times. First asked: {c.originalProposed.map((p) => `${TYPE_LABEL.get(p.type) ?? p.type} ${formatInZone(p.at, zone, "MMM d, h:mm a")}`).join(", ")}.
-            </p>
-          ) : null}
-          <p className="text-sm text-muted-foreground">{c.reason}</p>
-          {c.origin === "jibble" ? <p className="text-xs text-muted-foreground">System proposal based on a Jibble time entry; HR approval is required.</p> : c.filedBy ? <p className="text-xs text-muted-foreground">Filed for them by {c.filedBy}.</p> : null}
-          <EvidenceGallery evidence={c.evidence} />
-          {c.decisionNote ? <p className="text-sm">Note: {c.decisionNote}</p> : null}
-          {mode === "queue" && c.canDecide ? (
-            <div className="space-y-2">
-              {adjust[c.id] ? (
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {c.proposed.map((p, i) => (
-                    <div key={i} className="space-y-1">
-                      <Label htmlFor={`ca-${c.id}-${i}`} className="text-xs">
-                        {TYPE_LABEL.get(p.type) ?? p.type} (change if needed)
-                      </Label>
-                      <Input id={`ca-${c.id}-${i}`} type="datetime-local" value={(adjust[c.id] ?? []).at(i) ?? ""} onChange={(e) => setAdjust((a) => ({ ...a, [c.id]: a[c.id].map((v, j) => (j === i ? e.target.value : v)) }))} />
-                    </div>
-                  ))}
+    <div className="space-y-4">
+      <div className="space-y-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-lg font-semibold">{mode === "queue" ? c.employeeName : "Your request"}</h2>
+          <StatusChip tone={STATUS_TONE.get(c.status) ?? "neutral"}>{STATUS_WORD.get(c.status) ?? c.status}</StatusChip>
+          {c.hrOnly && c.status === "pending" ? <StatusChip tone="info">HR decides</StatusChip> : null}
+        </div>
+        <p className="text-sm text-muted-foreground">
+          {KIND_LABEL.get(c.kind) ?? c.kind} · sent {formatInZone(c.createdAt, zone, "MMM d, h:mm a")}
+        </p>
+      </div>
+      <ul className="text-sm">
+        {c.proposed.map((p, i) => (
+          <li key={i}>
+            {TYPE_LABEL.get(p.type) ?? p.type} at {formatInZone(p.at, zone, "MMM d, yyyy h:mm a")}
+          </li>
+        ))}
+      </ul>
+      {c.removes.length > 0 ? (
+        <ul className="text-sm text-destructive">
+          {c.removes.map((p, i) => (
+            <li key={i}>
+              Remove {TYPE_LABEL.get(p.type) ?? p.type} at {formatInZone(p.at, zone, "MMM d, yyyy h:mm a")}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {c.originalProposed ? (
+        <p className="text-xs text-muted-foreground">
+          The reviewer changed the times. First asked: {c.originalProposed.map((p) => `${TYPE_LABEL.get(p.type) ?? p.type} ${formatInZone(p.at, zone, "MMM d, h:mm a")}`).join(", ")}.
+        </p>
+      ) : null}
+      <p className="text-sm">{c.reason}</p>
+      {c.origin === "jibble" ? <p className="text-xs text-muted-foreground">System proposal based on a Jibble time entry; HR approval is required.</p> : c.filedBy ? <p className="text-xs text-muted-foreground">Filed for them by {c.filedBy}.</p> : null}
+      <EvidenceGallery evidence={c.evidence} />
+      {c.decisionNote ? <p className="rounded-lg bg-muted/50 p-2 text-sm">Note: {c.decisionNote}</p> : null}
+      <ReportThread key={c.id} type="correction" id={c.id} />
+      {mode === "queue" && c.canDecide ? (
+        <div className="space-y-2 border-t pt-3">
+          {adjust ? (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {c.proposed.map((p, i) => (
+                <div key={i} className="space-y-1">
+                  <Label htmlFor={`ca-${c.id}-${i}`} className="text-xs">
+                    {TYPE_LABEL.get(p.type) ?? p.type} (change if needed)
+                  </Label>
+                  <Input id={`ca-${c.id}-${i}`} type="datetime-local" value={adjust.at(i) ?? ""} onChange={(e) => setAdjust((a) => (a ?? []).map((v, j) => (j === i ? e.target.value : v)))} />
                 </div>
-              ) : (
-                <Button size="sm" variant="ghost" onClick={() => setAdjust((a) => ({ ...a, [c.id]: c.proposed.map((p) => formatInZone(p.at, zone, LOCAL)) }))}>
-                  Change the times
-                </Button>
-              )}
-            <div className="flex flex-wrap items-end gap-2">
-              <div className="space-y-1">
-                <Label htmlFor={`cn-${c.id}`} className="text-xs">
-                  Note (needed to reject)
-                </Label>
-                <Input id={`cn-${c.id}`} className="w-64" maxLength={300} value={notes[c.id] ?? ""} onChange={(e) => setNotes((n) => ({ ...n, [c.id]: e.target.value }))} />
-              </div>
-              <Button
-                size="sm"
-                disabled={pending}
-                onClick={() => {
-                  const edited = adjust[c.id];
-                  const events = edited ? c.proposed.map((p, i) => ({ type: p.type, at: edited.at(i) ? fromZonedTime(edited.at(i)!, zone).toISOString() : "" })) : undefined;
-                  run(() => decideCorrection({ correctionId: c.id, decision: "approve", note: notes[c.id], events }), "Correction approved.");
-                }}
-              >
-                Approve
-              </Button>
-              <Button size="sm" variant="outline" disabled={pending} onClick={() => run(() => decideCorrection({ correctionId: c.id, decision: "reject", note: notes[c.id] }), "Correction rejected.")}>
-                Reject
-              </Button>
+              ))}
             </div>
-            </div>
-          ) : null}
-          {mode === "mine" && c.status === "pending" ? (
-            <Button size="sm" variant="ghost" disabled={pending} onClick={() => run(() => cancelCorrection({ correctionId: c.id }), "Request cancelled.")}>
-              Cancel request
+          ) : (
+            <Button size="sm" variant="ghost" onClick={() => setAdjust(c.proposed.map((p) => formatInZone(p.at, zone, LOCAL)))}>
+              Change the times
             </Button>
-          ) : null}
-        </li>
-      ))}
-    </ul>
-    <ClientPager info={paged.info} onPage={paged.setPage} onSize={paged.setPageSize} label="requests" />
+          )}
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="min-w-56 flex-1 space-y-1">
+              <Label htmlFor={`cn-${c.id}`} className="text-xs">
+                Note (needed to reject)
+              </Label>
+              <Input id={`cn-${c.id}`} maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} />
+            </div>
+            <Button
+              size="sm"
+              disabled={pending}
+              onClick={() => {
+                const events = adjust ? c.proposed.map((p, i) => ({ type: p.type, at: adjust.at(i) ? fromZonedTime(adjust.at(i)!, zone).toISOString() : "" })) : undefined;
+                run(() => decideCorrection({ correctionId: c.id, decision: "approve", note, events }), "Correction approved.");
+              }}
+            >
+              Approve
+            </Button>
+            <Button size="sm" variant="outline" disabled={pending} onClick={() => run(() => decideCorrection({ correctionId: c.id, decision: "reject", note }), "Correction rejected.")}>
+              Reject
+            </Button>
+          </div>
+        </div>
+      ) : null}
+      {mode === "mine" && c.status === "pending" ? (
+        <Button size="sm" variant="ghost" disabled={pending} onClick={() => run(() => cancelCorrection({ correctionId: c.id }), "Request cancelled.")}>
+          Cancel request
+        </Button>
+      ) : null}
     </div>
+  );
+}
+
+/** The time corrections: the person's own, or the queue a lead or HR decides (waiting first, then what was decided in the last 30 days). */
+export function CorrectionList({ items, zone, mode, empty }: { items: CorrectionItem[]; zone: string; mode: "mine" | "queue"; empty: string }) {
+  const rows: InboxRow[] = items.map((c) => {
+    const times = c.proposed.map((p) => `${TYPE_LABEL.get(p.type) ?? p.type} ${formatInZone(p.at, zone, "MMM d, h:mm a")}`).join(", ");
+    return {
+      id: c.id,
+      title: mode === "queue" ? c.employeeName : (KIND_LABEL.get(c.kind) ?? c.kind),
+      subtitle: times || c.reason,
+      when: formatInZone(c.createdAt, zone, "MMM d"),
+      sortMs: new Date(c.createdAt).getTime(),
+      status: { label: STATUS_WORD.get(c.status) ?? c.status, tone: STATUS_TONE.get(c.status) ?? "neutral" },
+      group: c.status === "pending" ? "open" : "done",
+      evidence: c.evidence.length,
+      messages: c.messageCount,
+      search: `${c.employeeName} ${c.reason} ${KIND_LABEL.get(c.kind) ?? c.kind} ${times}`,
+    };
+  });
+  const byId = new Map(items.map((c) => [c.id, c]));
+  return (
+    <ReportInbox
+      rows={rows}
+      groups={CORRECTION_GROUPS}
+      defaultGroup={mode === "queue" ? "open" : "all"}
+      label="time corrections"
+      emptyTitle={mode === "queue" ? "Nothing is waiting" : "No requests yet"}
+      emptyText={empty}
+      renderDetail={(id) => <CorrectionDetail c={byId.get(id)!} zone={zone} mode={mode} />}
+    />
   );
 }
 

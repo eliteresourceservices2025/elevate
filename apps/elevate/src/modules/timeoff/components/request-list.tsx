@@ -1,4 +1,5 @@
 "use client";
+import { ThreadToggle } from "@/components/reports/report-thread";
 import { EvidenceGallery } from "@/components/reports/evidence-gallery";
 
 import { useRouter } from "next/navigation";
@@ -72,6 +73,7 @@ function RequestCard({ item, showPerson }: { item: RequestItem; showPerson: bool
       </div>
       {item.note ? <p className="text-sm">{item.note}</p> : null}
       <EvidenceGallery evidence={item.evidence} />
+      <ThreadToggle type="time_off" id={item.id} />
       {item.steps.length > 0 || item.cancelReason ? (
         <ul className="space-y-0.5 text-sm text-muted-foreground">
           {item.steps.map((s, i) => (

@@ -4,6 +4,7 @@ import { ForbiddenError, authorize, scopeFor } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { reportName, timeChainUserIds, timeDownlineEmployeeIds } from "@/modules/org/service";
+import { reportThreadCounts } from "@/modules/reports/queries";
 import { prefsFor } from "./service";
 
 // Technical issue reports. Every query starts with requireUser() and authorize(). Pages wrap them in orNotFound().
@@ -13,6 +14,8 @@ export type IssueEvidence = { id: string; purged: boolean };
 export type IssueItem = {
   /** The screenshots sent with the report (open one with openEvidence). */
   evidence: IssueEvidence[];
+  /** How many messages are on the report. */
+  messageCount: number;
   id: string;
   kind: string;
   /** ISO time the person says it started. */
@@ -55,9 +58,10 @@ export async function listMyIssues(): Promise<{ items: IssueItem[]; zone: string
     from time.tech_issue_reports r join core.employees e on e.id = r.employee_id
     where r.employee_id = ${me.id} order by r.created_at desc limit 50`)) as unknown as Row[];
   const evidence = await evidenceOf(rows.map((r) => r.id));
+  const counts = await reportThreadCounts("tech_issue", rows.map((r) => r.id));
   return {
     zone: (await prefsFor(db, me.id)).zone,
-    items: rows.map((r) => ({ evidence: evidence.get(r.id) ?? [], id: r.id, kind: r.kind, happenedAt: iso(r.happened_at)!, details: r.details, status: r.status, createdAt: iso(r.created_at)!, handledAt: iso(r.handled_at), handlingNote: r.handling_note, employeeName: null, canHandle: false })),
+    items: rows.map((r) => ({ evidence: evidence.get(r.id) ?? [], messageCount: counts.get(r.id) ?? 0, id: r.id, kind: r.kind, happenedAt: iso(r.happened_at)!, details: r.details, status: r.status, createdAt: iso(r.created_at)!, handledAt: iso(r.handled_at), handlingNote: r.handling_note, employeeName: null, canHandle: false })),
   };
 }
 
@@ -77,11 +81,12 @@ export async function listIssueQueue(): Promise<{ items: IssueItem[]; scope: "al
     order by (r.status = 'open') desc, r.created_at desc limit 100`)) as unknown as Row[];
   const items: IssueItem[] = [];
   const evidence = await evidenceOf(rows.map((r) => r.id));
+  const counts = await reportThreadCounts("tech_issue", rows.map((r) => r.id));
   for (const r of rows) {
     const own = r.user_id === user.id || r.reported_by === user.id;
     const canHandle = r.status === "open" && !own && (scope === "all" || (await timeChainUserIds(db, r.employee_id)).includes(user.id));
     items.push({
-      evidence: evidence.get(r.id) ?? [],
+      evidence: evidence.get(r.id) ?? [], messageCount: counts.get(r.id) ?? 0,
       id: r.id, kind: r.kind, happenedAt: iso(r.happened_at)!, details: r.details, status: r.status, createdAt: iso(r.created_at)!, handledAt: iso(r.handled_at), handlingNote: r.handling_note,
       employeeName: reportName({ first: r.first, last: r.last, preferred: r.preferred }), canHandle,
     });

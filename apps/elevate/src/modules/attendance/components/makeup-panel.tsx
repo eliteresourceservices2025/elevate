@@ -1,4 +1,5 @@
 "use client";
+import { ThreadToggle } from "@/components/reports/report-thread";
 
 import { useState } from "react";
 import { fromZonedTime } from "date-fns-tz";
@@ -29,6 +30,7 @@ function ItemRow({ item, zone, onCancel, onDecide, pending }: { item: MakeupItem
       <p className="text-muted-foreground">{item.reason}</p>
       {item.status === "approved" && item.madeUpMinutes > 0 ? <p className="text-muted-foreground">Made up so far: {formatDuration(item.madeUpMinutes * MINUTE)}.</p> : null}
       {item.decisionNote ? <p className="text-muted-foreground">Note: {item.decisionNote}</p> : null}
+      <ThreadToggle type="makeup" id={item.id} />
       <div className="flex flex-wrap gap-2 pt-1">
         {item.canDecide && onDecide ? (
           <>

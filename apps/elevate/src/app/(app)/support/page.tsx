@@ -19,8 +19,6 @@ export default async function SupportPage({ searchParams }: PageProps<"/support"
   const isManager = can(user, "support.manage");
   const tab = isManager && params.tab !== "mine" ? "inbox" : "mine";
   const [mine, inbox] = await Promise.all([tab === "mine" ? orNotFound(listMySupportRequests()) : Promise.resolve(null), tab === "inbox" && isManager ? orNotFound(listSupportInbox()) : Promise.resolve(null)]);
-  const open = inbox?.filter((r) => r.status === "open") ?? [];
-  const handled = inbox?.filter((r) => r.status === "closed") ?? [];
 
   return (
     <PageContainer width="form">
@@ -49,23 +47,13 @@ export default async function SupportPage({ searchParams }: PageProps<"/support"
 
       {mine ? (
         <section aria-label="Your requests" className="space-y-3">
-          <h2 className="text-lg font-semibold">Your requests</h2>
           <SupportList rows={mine} canManage={false} empty="You have not sent any requests." />
         </section>
       ) : null}
 
       {inbox ? (
         <section aria-label="Support inbox" className="space-y-3">
-          <h2 className="text-lg font-semibold">Inbox ({open.length} open)</h2>
-          <SupportList rows={open} canManage empty="Nothing is waiting." />
-          {handled.length > 0 ? (
-            <details>
-              <summary className="cursor-pointer text-sm font-medium">Handled ({handled.length})</summary>
-              <div className="mt-3">
-                <SupportList rows={handled} canManage empty="" />
-              </div>
-            </details>
-          ) : null}
+          <SupportList rows={inbox} canManage empty="Nobody has sent a request yet." />
         </section>
       ) : null}
     </PageContainer>
