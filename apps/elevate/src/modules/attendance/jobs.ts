@@ -163,6 +163,8 @@ async function rebuildRange(people: { employee_id: string }[], from: string, to:
         ? ((await db.execute(sql`select 1 as ok from time.jibble_link_log where employee_id = ${employeeId} and source = 'event' and status in ('skipped', 'failed') and last_error is distinct from 'not sent: not the production environment'
             and created_at between to_timestamp(${d.firstIn / 1000}) and to_timestamp(${(end + 3_600_000) / 1000}) limit 1`)) as unknown as { ok: number }[])
         : [];
+      // The clock stopped by itself that day (the hours ran out): a clock-out written by auto-stop.
+      const [autoStopped] = (await db.execute(sql`select 1 as ok from time.clock_events where employee_id = ${employeeId} and source = 'auto_stop' and occurred_at between to_timestamp(${d.firstIn / 1000}) and to_timestamp(${(end + 3_600_000) / 1000}) limit 1`)) as unknown as { ok: number }[];
       const [jibbleFlag] = (await db.execute(sql`select 1 as ok from time.jibble_daily where employee_id = ${employeeId} and date = ${d.date}::date and flagged`)) as unknown as { ok: number }[];
 
       // Against the person's schedule: late, left early, extra hours (a rest day or holiday counts in full).
@@ -191,6 +193,7 @@ async function rebuildRange(people: { employee_id: string }[], from: string, to:
         flagRows[0]?.corrected ? "corrected" : null,
         idle.n > 0 ? "idle_unanswered" : null,
         d.overbreakMinutes > 0 ? "overbreak" : null,
+        autoStopped ? "auto_stopped" : null,
         missingEod ? "no_eod" : null,
         jibbleFlag && !fromJibble ? "jibble_mismatch" : null,
         noShots && !fromJibble ? "no_screenshots" : null,

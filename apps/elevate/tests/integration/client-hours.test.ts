@@ -109,7 +109,7 @@ describe("switching client while working", () => {
 
     expect(await clockActions.switchClient({ clientId: c2.id })).toMatchObject({ ok: true, data: { state: "working" } });
     expect(await clockActions.switchClient({ clientId: c2.id })).toEqual({ ok: false, error: "You are already working for that client." });
-    expect((await clockActions.startBreak({})).ok).toBe(true);
+    expect((await clockActions.startBreak({ breakMinutes: 15 })).ok).toBe(true);
     expect(await clockActions.switchClient({ clientId: c1.id })).toEqual({ ok: false, error: "End your break before switching client." });
     expect((await clockActions.endBreak()).ok).toBe(true);
     expect((await clockActions.clockOut()).ok).toBe(true);

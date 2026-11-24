@@ -1,3 +1,4 @@
+import { runAutoStopSweep } from "@/modules/attendance/auto-stop";
 import { runMissedClockouts } from "@/modules/attendance/jobs";
 import { runHealthCheck } from "@/modules/health/service";
 import { cronAuthorized } from "@/modules/health/registry";
@@ -15,5 +16,6 @@ export async function GET(request: Request) {
   const mirror = await processMirrorQueue();
   const repair = await runJibbleRepair();
   const missed = await runMissedClockouts();
-  return Response.json({ ok: true, health: { lateJobs: health.lateJobs.length, queueMinutes: health.queueMinutes }, mirror, repair, missed });
+  const autoStop = await runAutoStopSweep();
+  return Response.json({ ok: true, health: { lateJobs: health.lateJobs.length, queueMinutes: health.queueMinutes }, mirror, repair, missed, autoStop });
 }

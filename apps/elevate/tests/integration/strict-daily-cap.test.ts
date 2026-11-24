@@ -31,7 +31,7 @@ const cap = async () => (await rows<{ daily_cap_minutes: number | null }>(sql`se
 beforeAll(async () => {
   hr = await makeUser("hr", ["hr_admin"]);
   const user = await makeUser("capworker", ["employee"]);
-  const [e] = await rows<{ id: string }>(sql`insert into core.employees (legal_first_name, legal_last_name, work_email, status, user_id) values ('Cap', ${uniq("Worker")}, ${user.email}, 'active', ${user.id}) returning id`);
+  const [e] = await rows<{ id: string }>(sql`insert into core.employees (legal_first_name, legal_last_name, work_email, status, user_id) values ('Cap', ${uniq("Aaa")}, ${user.email}, 'active', ${user.id}) returning id`);
   worker = { user, employeeId: e.id };
 });
 

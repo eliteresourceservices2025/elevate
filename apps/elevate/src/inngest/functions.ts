@@ -16,6 +16,7 @@ import { runHolidaySync, runLeaveExpiry } from "@/modules/timeoff/jobs";
 import { runLeaveRequestReminders } from "@/modules/timeoff/request-jobs";
 import { runDailyDigest } from "@/modules/notifications/digest";
 import { flushEmailQueue } from "@/modules/notifications/email-queue";
+import { runAutoStop, runAutoStopSweep } from "@/modules/attendance/auto-stop";
 import { addDays } from "@/modules/attendance/schedule";
 import { todayInZone } from "@/modules/org/service";
 import { runRecruitingRetention, sendCandidateEmails } from "@/modules/recruiting/jobs";
@@ -143,6 +144,25 @@ export const attendanceRebuild = inngest.createFunction(
 export const missedClockouts = inngest.createFunction(
   { id: "missed-clockouts", triggers: { cron: "5 * * * *" } },
   async ({ step }) => step.run("check", () => track("missed-clockouts", () => runMissedClockouts())),
+);
+
+/**
+ * Stops a person's clock when their hours run out. A clock-in, the end of a break or a client switch sends an event: the run waits until the
+ * person's limit, checks again (the limit may have moved) and stops the clock. A newer event for the same person replaces the older run.
+ * Every 30 minutes the schedule also checks everyone still clocked in, which covers a missed event.
+ */
+export const autoStop = inngest.createFunction(
+  { id: "auto-stop", triggers: [{ event: "attendance/auto-stop.requested" }, { cron: "*/30 * * * *" }], cancelOn: [{ event: "attendance/auto-stop.requested", match: "data.employeeId" }] },
+  async ({ event, step }) => {
+    const employeeId = (event?.data as { employeeId?: unknown } | undefined)?.employeeId;
+    if (typeof employeeId !== "string" || !/^[0-9a-f-]{36}$/i.test(employeeId)) return step.run("sweep", () => track("auto-stop", () => runAutoStopSweep()));
+    for (let i = 0; i < 8; i += 1) {
+      const result = await step.run(`check-${i}`, () => track("auto-stop", () => runAutoStop(employeeId)));
+      if (result.status !== "early") return result;
+      await step.sleepUntil(`wait-${i}`, new Date(result.limitMs));
+    }
+    return { status: "gave-up" };
+  },
 );
 
 /** Every 10 minutes: tell leads about timed breaks that are still running past their length. */
@@ -381,4 +401,4 @@ export const chatAccessNotices = inngest.createFunction(
   async ({ step }) => step.run("notices", () => track("chat-access-notices", () => runChatAccessNotices())),
 );
 
-export const functions = [documentExpiryReminders, credentialReminders, learnAssign, learnRemind, learnSync, learnPurge, anniversaryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, holidaySync, leaveRequestReminders, attendanceRebuild, missedClockouts, overbreakAlerts, selfiePurge, trackerRollup, trackerShotPurge, trackerOfflineAlerts, quietSessionAlerts, evidencePurge, jibbleMirror, jibblePeopleSync, jibbleComparison, jibbleImport, jibbleRepair, jibbleUnmatched, extraHoursReminders, extraHoursWeekly, approvalReminders, approvalSummary, healthCheck, candidateEmailSender, recruitingRetention, esignReminders, esignSealSweep, offboardingSeparations, checklistSync, checklistReminders, earlyReviews, reviewReminders, safevoiceNotify, analyticsNightly, importPurge, chatChannelSync, chatDigest, callsDaily, chatAccessNotices];
+export const functions = [documentExpiryReminders, credentialReminders, learnAssign, learnRemind, learnSync, learnPurge, anniversaryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, holidaySync, leaveRequestReminders, attendanceRebuild, missedClockouts, overbreakAlerts, autoStop, selfiePurge, trackerRollup, trackerShotPurge, trackerOfflineAlerts, quietSessionAlerts, evidencePurge, jibbleMirror, jibblePeopleSync, jibbleComparison, jibbleImport, jibbleRepair, jibbleUnmatched, extraHoursReminders, extraHoursWeekly, approvalReminders, approvalSummary, healthCheck, candidateEmailSender, recruitingRetention, esignReminders, esignSealSweep, offboardingSeparations, checklistSync, checklistReminders, earlyReviews, reviewReminders, safevoiceNotify, analyticsNightly, importPurge, chatChannelSync, chatDigest, callsDaily, chatAccessNotices];

@@ -318,6 +318,8 @@ export function ClockWidget({ status: statusProp }: { status: ClockStatus | null
   /** The shift end (and approved window end) whose reminder the person has already dismissed. */
   const [dismissedShiftEnd, setDismissedShiftEnd] = useState<number | null>(null);
   const [dismissedWindowEnd, setDismissedWindowEnd] = useState<number | null>(null);
+  /** The stop time whose "your hours are ending" warning the person has already dismissed. */
+  const [dismissedStopWarning, setDismissedStopWarning] = useState<number | null>(null);
   // Offline: the browser says so, or a request just failed. The server stays the only source of time, so buttons pause.
   const [requestFailed, setRequestFailed] = useState(false);
   const browserOnline = useSyncExternalStore(
@@ -509,6 +511,8 @@ export function ClockWidget({ status: statusProp }: { status: ClockStatus | null
   const covered = coveringWindow(status.extraWindows, nowMs);
   const shiftOver = working && status.shiftEndMs !== null && nowMs > status.shiftEndMs + 5 * MINUTE && !covered && !status.pendingClockOut;
   const showShiftPrompt = shiftOver && dismissedShiftEnd !== status.shiftEndMs;
+  // The clock stops by itself when the hours run out: warn ahead, and say how to keep working (ask for extra hours first).
+  const showStopWarning = working && !onBreak && status.stopAtMs !== null && status.warnAtMs !== null && nowMs >= status.warnAtMs && nowMs < status.stopAtMs && dismissedStopWarning !== status.stopAtMs;
   const showWindowReminder = working && covered !== null && covered.endMs - nowMs <= 5 * MINUTE && dismissedWindowEnd !== covered.endMs;
 
   const shownTime = onBreak ? (remaining === null ? formatClock(breakElapsed) : over ? `+${formatClock(-remaining)}` : formatClock(remaining)) : formatClock(worked);
@@ -696,6 +700,27 @@ export function ClockWidget({ status: statusProp }: { status: ClockStatus | null
               </Button>
               <Button variant="ghost" onClick={() => setDismissedBreak(status.breakStartMs)}>
                 Stay on break
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showStopWarning ? (
+        <div role="alertdialog" aria-modal="true" aria-labelledby="stop-warning-title" className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm space-y-4 rounded-2xl bg-card p-6 shadow-2xl">
+            <h2 id="stop-warning-title" className="text-xl font-bold">
+              Your hours are ending
+            </h2>
+            <p className="text-sm">
+              Your clock will stop by itself at {formatInZone(status.stopAtMs!, status.zone, "h:mm a")}. If you need to keep working, ask for extra hours now. Without approval, time after that is not counted.
+            </p>
+            <div className="flex flex-col gap-2">
+              <Link href="/extra-hours" onClick={() => setDismissedStopWarning(status.stopAtMs)} className={cn(buttonVariants({ size: "lg" }), "h-11 text-base font-semibold")}>
+                Ask for extra hours
+              </Link>
+              <Button variant="ghost" onClick={() => setDismissedStopWarning(status.stopAtMs)}>
+                Got it
               </Button>
             </div>
           </div>

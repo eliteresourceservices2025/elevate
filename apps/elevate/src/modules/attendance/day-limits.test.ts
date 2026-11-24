@@ -71,28 +71,28 @@ describe("stopLimit", () => {
   });
 
   it("stops at the end of the client's shift", () => {
-    expect(stopLimit(input())).toEqual({ limitMs: ms("13:00"), reason: "shift_end" });
+    expect(stopLimit(input())).toEqual({ limitMs: ms("13:00"), reason: "shift_end", overrunMs: 0 });
   });
 
   it("stops when the client's allotted minutes are used up, if that comes first", () => {
     const worked = new Map([["A", 200 * MIN]]);
     const r = stopLimit(input({ nowMs: ms("11:00"), workedMsByClient: worked, workedMsToday: 200 * MIN }));
-    expect(r).toEqual({ limitMs: ms("11:40"), reason: "client_allotment" });
+    expect(r).toEqual({ limitMs: ms("11:40"), reason: "client_allotment", overrunMs: 0 });
   });
 
   it("uses the other client's shift and allotment after a switch", () => {
     const r = stopLimit(input({ nowMs: ms("14:00"), clientId: "B", workedMsByClient: new Map([["B", 0]]) }));
-    expect(r).toEqual({ limitMs: ms("17:20"), reason: "client_allotment" });
+    expect(r).toEqual({ limitMs: ms("17:20"), reason: "client_allotment", overrunMs: 0 });
   });
 
   it("with no schedule, stops at the person's own daily cap", () => {
     const r = stopLimit(input({ hasSchedule: false, shifts: [], clientId: null, nowMs: ms("09:00") + 100 * MIN, workedMsToday: 100 * MIN, dailyCapMinutes: 240 }));
-    expect(r).toEqual({ limitMs: ms("09:00") + 100 * MIN + 140 * MIN, reason: "daily_cap" });
+    expect(r).toEqual({ limitMs: ms("09:00") + 100 * MIN + 140 * MIN, reason: "daily_cap", overrunMs: 0 });
   });
 
   it("with no schedule and no personal cap, uses the company default", () => {
     const r = stopLimit(input({ hasSchedule: false, shifts: [], clientId: null, nowMs: ms("09:00"), workedMsToday: 0 }));
-    expect(r).toEqual({ limitMs: ms("09:00") + 8 * HOUR, reason: "daily_cap" });
+    expect(r).toEqual({ limitMs: ms("09:00") + 8 * HOUR, reason: "daily_cap", overrunMs: 0 });
   });
 
   it("a personal cap beats the company default", () => {
@@ -102,7 +102,7 @@ describe("stopLimit", () => {
 
   it("an approved extra-hours window that starts at the limit moves the limit to its end", () => {
     const r = stopLimit(input({ approvedWindows: [{ startMs: ms("13:00"), endMs: ms("15:00") }] }));
-    expect(r).toEqual({ limitMs: ms("15:00"), reason: "approved_extra_end" });
+    expect(r).toEqual({ limitMs: ms("15:00"), reason: "approved_extra_end", overrunMs: 0 });
   });
 
   it("an approved window that does not touch the limit changes nothing", () => {
@@ -120,7 +120,7 @@ describe("stopLimit", () => {
   it("on a rest day of someone with a schedule the limit is already now unless extra hours were approved", () => {
     expect(stopLimit(input({ shifts: [], nowMs: ms("10:00") })).limitMs).toBe(ms("10:00"));
     const lifted = stopLimit(input({ shifts: [], nowMs: ms("10:00"), approvedWindows: [{ startMs: ms("09:30"), endMs: ms("12:00") }] }));
-    expect(lifted).toEqual({ limitMs: ms("12:00"), reason: "approved_extra_end" });
+    expect(lifted).toEqual({ limitMs: ms("12:00"), reason: "approved_extra_end", overrunMs: 0 });
   });
 
   it("after the shift has ended the limit is now, so the person is stopped, not left running", () => {
@@ -162,5 +162,29 @@ describe("shiftOn with several schedules", () => {
     expect(hoursOverlap(clientA, { ...clientB, startTime: "12:00" })).toBe(true);
     expect(hoursOverlap(clientA, { ...clientB, startTime: "12:00", weekdays: [6, 7] })).toBe(false);
     expect(hoursOverlap({ ...clientA, startTime: "22:00", endTime: "06:00" }, { ...clientB, startTime: "05:00", endTime: "07:00" })).toBe(true);
+  });
+});
+
+describe("stopLimit overrun (how long past the limit the person already is)", () => {
+  const shifts = shiftsOn([clientA], PHX, DATE) as Shift[];
+  const base = { hasSchedule: true, shifts, clientId: "A" as string | null, workedMsByClient: new Map<string | null, number>(), workedMsToday: 0, dailyCapMinutes: null, companyDefaultCapMinutes: 480, approvedWindows: [] };
+
+  it("is the time past the cap when the cap was already used up", () => {
+    const r = stopLimit({ ...base, hasSchedule: false, shifts: [], clientId: null, nowMs: ms("12:00"), workedMsToday: 300 * MIN, dailyCapMinutes: 240 });
+    expect(r).toMatchObject({ limitMs: ms("12:00"), reason: "daily_cap", overrunMs: 60 * MIN });
+  });
+
+  it("is the time past the client's allotment", () => {
+    const r = stopLimit({ ...base, nowMs: ms("12:00"), workedMsByClient: new Map([["A", 250 * MIN]]), workedMsToday: 250 * MIN });
+    expect(r).toMatchObject({ reason: "client_allotment", overrunMs: 10 * MIN });
+  });
+
+  it("is the time since the shift ended", () => {
+    const r = stopLimit({ ...base, nowMs: ms("13:45") });
+    expect(r).toMatchObject({ limitMs: ms("13:45"), reason: "shift_end", overrunMs: 45 * MIN });
+  });
+
+  it("is unlimited on a rest day, so the stop is stamped at the session's own start", () => {
+    expect(stopLimit({ ...base, shifts: [], nowMs: ms("10:00") }).overrunMs).toBe(Infinity);
   });
 });

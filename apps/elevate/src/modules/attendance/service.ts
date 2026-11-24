@@ -16,6 +16,7 @@ import { isSelfTestEmail } from "@/modules/jibble/mirror-rules";
 import { clientProjects, employees } from "@/modules/people/schema";
 import { projectOpenTo, projectRequired } from "./project-access";
 import { MINUTE, breakLabel, ipAllowed, overbreakOf, replayClock, roundCoordinate, transition, validCoordinates, type ClockEventLite, type ClockState, type ClockType } from "./clock";
+import { computeStopLimit, requestAutoStop } from "./auto-stop-limit";
 import { breakLeftToday } from "./break-left";
 import { clockSourceOf } from "./clock-source";
 import { assignedClients } from "./extra-hours-service";
@@ -142,11 +143,12 @@ export type ClockResult = {
  * Records one clock event for the signed-in person. The time is the database clock and the IP comes from the request;
  * nothing the browser sends can change either. Everything is checked inside the person's lock.
  */
-export async function performClock(actor: { id: string; email: string }, type: ClockType, input: ClockInput): Promise<ClockResult> {
+export async function performClock(actor: { id: string; email: string }, type: ClockType, input: ClockInput, system?: { stampMs: number }): Promise<ClockResult> {
   const person = await personForUser(db, actor.id);
   if ((await clockSourceOf(db, person.id)) === "jibble") throw new ActionFailure("You clock in Jibble. ELEVATE reads your hours from there, so the ELEVATE clock is not used.");
-  if (!(await allowRequest("clock", person.id))) throw new ActionFailure("Too many clock actions. Wait a minute and try again.");
-  const rawIp = await clientIp();
+  // `system` is the clock stopping by itself (auto-stop): the events carry source 'auto_stop' and the moment the limit was reached.
+  if (!system && !(await allowRequest("clock", person.id))) throw new ActionFailure("Too many clock actions. Wait a minute and try again.");
+  const rawIp = system ? "unknown" : await clientIp();
   const ip = rawIp === "unknown" ? null : rawIp.slice(0, 64);
 
   let mirrored = 0;
@@ -164,7 +166,7 @@ export async function performClock(actor: { id: string; email: string }, type: C
       throw new ActionFailure(REFUSALS[`${replay.state}:${type}`] ?? "That is not possible right now.");
     }
 
-    if (replay.state !== "out" && (await pendingClockOut(tx, person.id))) {
+    if (!system && replay.state !== "out" && (await pendingClockOut(tx, person.id))) {
       throw new ActionFailure("Your clock-out request is waiting for approval. Cancel it first if you are still working.");
     }
 
@@ -212,6 +214,19 @@ export async function performClock(actor: { id: string; email: string }, type: C
       if (clientId !== null && projectId === null && (await projectRequired(tx, clientId, person.id))) throw new ActionFailure("Choose a project for this client.");
     }
 
+    // Strict time: starting work, or switching to a client, needs hours left (the schedule, the client's allotted hours, the daily cap, or
+    // approved extra or make-up hours). Otherwise the clock would stop the moment it started.
+    if (type === "clock_in" || type === "switch_client") {
+      const limit = await computeStopLimit(tx, person.id, Date.now(), { replay, clientId });
+      if (limit && limit.limitMs <= Date.now()) {
+        throw new ActionFailure(
+          type === "switch_client"
+            ? "You have no hours left for that client today. Ask your lead about extra hours if you need to keep working."
+            : "You have no hours left for today. If you need to work, ask your lead for extra hours or make-up hours first.",
+        );
+      }
+    }
+
     const location =
       type === "clock_in" && prefs.shareLocation && monitoring && input.latitude !== undefined && input.longitude !== undefined && validCoordinates(input.latitude, input.longitude)
         ? { lat: String(roundCoordinate(input.latitude)), lng: String(roundCoordinate(input.longitude)) }
@@ -228,8 +243,8 @@ export async function performClock(actor: { id: string; email: string }, type: C
         .values({
           employeeId: person.id,
           type: t,
-          occurredAt: sql`clock_timestamp()` as unknown as Date, // the real moment, so the two events of a clock-out stay in order
-          source: "web",
+          occurredAt: system ? new Date(system.stampMs) : (sql`clock_timestamp()` as unknown as Date), // the real moment, so the two events of a clock-out stay in order
+          source: system ? "auto_stop" : "web",
           ip,
           outsideAllowedRange,
           plannedBreakMinutes: t === "break_start" ? (input.breakMinutes ?? null) : null,
@@ -254,7 +269,7 @@ export async function performClock(actor: { id: string; email: string }, type: C
     if (type === "clock_in" && input.selfiePath && rules.selfieRequired && monitoring && last) {
       await tx.insert(clockSelfies).values({ eventId: last.id, employeeId: person.id, storagePath: input.selfiePath });
     }
-    await writeAudit({ actor, action: `clock.${type}`, targetType: "employee", targetId: person.id, metadata: { outsideAllowedRange, withLocation: Boolean(location), withSelfie: Boolean(input.selfiePath && rules.selfieRequired), withProject: Boolean(projectId), via: input.via ?? "web" } }, tx);
+    await writeAudit({ actor, action: `clock.${type}`, targetType: "employee", targetId: person.id, metadata: { outsideAllowedRange, withLocation: Boolean(location), withSelfie: Boolean(input.selfiePath && rules.selfieRequired), withProject: Boolean(projectId), via: system ? "auto_stop" : (input.via ?? "web") } }, tx);
     if (type === "clock_in") await touchPresence(tx, person.id);
     // Jibble screenshots: queued in this same transaction when the team uses Jibble and monitoring is published (never blocks the clock).
     // A person listed in JIBBLE_SELF_TEST_EMAILS is testing the link on their own account: allowed without the policy and team switch.
@@ -270,6 +285,8 @@ export async function performClock(actor: { id: string; email: string }, type: C
     };
   });
   if (mirrored > 0) await kickMirror(mirroredEmployeeId);
+  // The limit can change when work starts or resumes or the client changes: ask for a stop at the new limit (replaces any older request).
+  if (!system && (type === "clock_in" || type === "break_end" || type === "switch_client")) await requestAutoStop(person.id);
   return result;
 }
 

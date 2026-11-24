@@ -39,26 +39,35 @@ export type StopLimitInput = {
  * the daily cap. An approved window that starts at or before that moment moves it to the window's end. On a rest day, or after the shift
  * has ended, the limit is "now" unless a window covers it: the person is past what they were assigned.
  */
-export function stopLimit(input: StopLimitInput): { limitMs: number; reason: StopReason } {
+export type StopLimit = {
+  limitMs: number;
+  reason: StopReason;
+  /** How long ago the limit was reached (0 while there is still time left; Infinity when the person was never allowed to work now, such as a rest day). */
+  overrunMs: number;
+};
+
+export function stopLimit(input: StopLimitInput): StopLimit {
   const { nowMs } = input;
-  let limit: { limitMs: number; reason: StopReason };
+  let limit: StopLimit;
 
   if (!input.hasSchedule) {
     const cap = input.dailyCapMinutes ?? input.companyDefaultCapMinutes;
-    limit = { limitMs: nowMs + Math.max(0, cap * MINUTE - input.workedMsToday), reason: "daily_cap" };
+    limit = { limitMs: nowMs + Math.max(0, cap * MINUTE - input.workedMsToday), reason: "daily_cap", overrunMs: Math.max(0, input.workedMsToday - cap * MINUTE) };
   } else {
     const forClient = input.shifts.filter((s) => (s.schedule.clientId ?? null) === input.clientId);
     const candidates = forClient.length > 0 ? forClient : input.shifts;
     // The shift being worked now, else the next one that has not ended; none means the person is outside every shift.
     const shift = candidates.find((s) => s.startMs <= nowMs && nowMs < s.endMs) ?? candidates.find((s) => s.startMs > nowMs);
     if (!shift) {
-      limit = { limitMs: nowMs, reason: "shift_end" };
+      const lastEnd = Math.max(-Infinity, ...candidates.filter((s) => s.endMs <= nowMs).map((s) => s.endMs));
+      limit = { limitMs: nowMs, reason: "shift_end", overrunMs: lastEnd === -Infinity ? Infinity : nowMs - lastEnd };
     } else {
-      limit = { limitMs: shift.endMs, reason: "shift_end" };
+      limit = { limitMs: shift.endMs, reason: "shift_end", overrunMs: 0 };
       const allotted = shift.schedule.allottedMinutesPerDay ?? null;
       if (allotted !== null) {
-        const left = Math.max(0, allotted * MINUTE - (input.workedMsByClient.get(input.clientId) ?? 0));
-        if (nowMs + left < limit.limitMs) limit = { limitMs: nowMs + left, reason: "client_allotment" };
+        const worked = input.workedMsByClient.get(input.clientId) ?? 0;
+        const left = Math.max(0, allotted * MINUTE - worked);
+        if (nowMs + left < limit.limitMs) limit = { limitMs: nowMs + left, reason: "client_allotment", overrunMs: Math.max(0, worked - allotted * MINUTE) };
       }
     }
   }
@@ -66,7 +75,7 @@ export function stopLimit(input: StopLimitInput): { limitMs: number; reason: Sto
   // Approved windows chain: one that starts at or before the limit moves it to its end, and so can the next.
   const windows = [...input.approvedWindows].sort((a, b) => a.startMs - b.startMs);
   for (const w of windows) {
-    if (w.startMs <= limit.limitMs && w.endMs > limit.limitMs) limit = { limitMs: w.endMs, reason: "approved_extra_end" };
+    if (w.startMs <= limit.limitMs && w.endMs > limit.limitMs) limit = { limitMs: w.endMs, reason: "approved_extra_end", overrunMs: Math.max(0, nowMs - w.endMs) };
   }
   return limit;
 }

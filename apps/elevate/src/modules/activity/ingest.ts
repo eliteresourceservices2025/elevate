@@ -4,6 +4,7 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { clientProjects, clients as clientsTable } from "@/modules/people/schema";
 import { db } from "@/lib/db";
 import { replayClock } from "@/modules/attendance/clock";
+import { computeStopLimit } from "@/modules/attendance/auto-stop-limit";
 import { clockSourceOf } from "@/modules/attendance/clock-source";
 import { loadEventsBetween, monitoringPolicyPublished, rulesFor } from "@/modules/attendance/service";
 import { fromZonedTime } from "date-fns-tz";
@@ -56,6 +57,8 @@ export async function clockStateFor(employeeId: string, now = new Date()) {
   const dayStart = fromZonedTime(`${formatInZone(now, zone, "yyyy-MM-dd")}T00:00:00`, zone).getTime();
   const today = { asOf: now.toISOString(), ...summarizeToday(await loadWorkLog(db, employeeId, dayStart, nowMs)) };
   const clockBlockedReason: "jibble" | "selfie" | null = (await clockSourceOf(db, employeeId)) === "jibble" ? "jibble" : rules.selfieRequired && policy ? "selfie" : null;
+  // When the clock will stop by itself (the person's hours run out), so the app can warn; null when not working or on the Jibble clock.
+  const stopLimit = replay.state === "out" ? null : await computeStopLimit(db, employeeId, nowMs, { replay });
   return {
     state: replay.state,
     since,
@@ -70,6 +73,8 @@ export async function clockStateFor(employeeId: string, now = new Date()) {
     today,
     /** Why the app's clock buttons are off: a Jibble-clock person, or a team that needs a selfie (the app cannot take one). */
     clockBlockedReason,
+    stopAt: stopLimit ? new Date(stopLimit.limitMs).toISOString() : null,
+    warnAt: stopLimit ? new Date(stopLimit.limitMs - rules.autoStopWarnMinutes * 60_000).toISOString() : null,
     policy,
     settings: { idleTimeoutSeconds: settings?.idleTimeoutSeconds ?? 180, shotIntervalMinutes: SHOT_WINDOW_MS / 60_000 },
   };

@@ -10,6 +10,7 @@ import { teams } from "@/modules/org/schema";
 import { employees } from "@/modules/people/schema";
 import { EOD_EDIT_WINDOW_MS, MAX_OPEN_SESSION_MS, buildDays, isPossiblyOffline, needsHrDecision, replayClock, type ClockState, type DayTotals, type SessionDetail } from "./clock";
 import { approvedExtra, grantedByDate } from "./extra-hours";
+import { computeStopLimit } from "./auto-stop-limit";
 import { breakLeftToday } from "./break-left";
 import { clockSourceOf } from "./clock-source";
 import { approvedWindows } from "./extra-hours-service";
@@ -59,6 +60,9 @@ export type ClockStatus = {
   currentProjectId: string | null;
   /** The client the session is working for now (null when not working, or when the session has no client). */
   currentClientId: string | null;
+  /** When the clock will stop by itself (the person's hours run out), and when it starts warning. Null when not working, or on the Jibble clock. */
+  stopAtMs: number | null;
+  warnAtMs: number | null;
   /** Where this person's hours come from. "jibble": they clock in Jibble and ELEVATE shows the state but has no clock buttons. */
   clockSource: "elevate" | "jibble";
 };
@@ -96,7 +100,14 @@ export async function getClockStatus(): Promise<ClockStatus | null> {
     currentProjectId: live ? (live.switches.length > 0 ? live.switches[live.switches.length - 1].projectId : live.projectId) : null,
     currentClientId: live ? (live.switches[live.switches.length - 1]?.clientId ?? live.clientId) : null,
     clockSource: await clockSourceOf(db, me.id),
+    ...(await stopTimes(me.id, replay, rules.autoStopWarnMinutes)),
   };
+}
+
+async function stopTimes(employeeId: string, replay: ReturnType<typeof replayClock>, warnMinutes: number): Promise<{ stopAtMs: number | null; warnAtMs: number | null }> {
+  if (replay.state === "out") return { stopAtMs: null, warnAtMs: null };
+  const limit = await computeStopLimit(db, employeeId, Date.now(), { replay });
+  return limit ? { stopAtMs: limit.limitMs, warnAtMs: limit.limitMs - warnMinutes * 60_000 } : { stopAtMs: null, warnAtMs: null };
 }
 
 async function currentShiftEnd(employeeId: string, zone: string, aroundMs: number): Promise<number | null> {
