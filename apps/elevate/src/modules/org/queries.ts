@@ -98,7 +98,17 @@ export async function getOrgChart(): Promise<ChartNode[]> {
     .where(and(isNull(employees.archivedAt), sql`${employees.status} <> 'separated'`))
     .orderBy(employees.legalLastName, employees.legalFirstName);
 
-  const byId = new Map(rows.map((r) => [r.id, r]));
+  const everyone = new Map(rows.map((r) => [r.id, r]));
+  // A contractor/VA sees only the line above them (top of the organization down to their team lead) and themselves: never teammates,
+  // other branches or the people below. Everyone else sees the whole chart.
+  let visible = rows;
+  if (!can(user, "org.view_full_chart")) {
+    const mine = rows.find((r) => r.userId === user.id);
+    const line = new Set<string>();
+    for (let cur = mine?.id ?? null; cur && !line.has(cur); cur = everyone.get(cur)?.managerId ?? null) line.add(cur);
+    visible = rows.filter((r) => line.has(r.id));
+  }
+  const byId = new Map(visible.map((r) => [r.id, r]));
 
   // The accounts above each person, found by walking up the in-memory tree (no extra queries).
   const chainUsers = (id: string): string[] => {
@@ -115,7 +125,7 @@ export async function getOrgChart(): Promise<ChartNode[]> {
     return out;
   };
 
-  return rows.map((r) => ({
+  return visible.map((r) => ({
     id: r.id,
     // A manager who is no longer listed (separated) leaves their reports as top-level people.
     managerId: r.managerId && byId.has(r.managerId) ? r.managerId : null,

@@ -71,7 +71,7 @@ describe("people actions, every role", () => {
 
 describe("people queries, every role", () => {
   const queryCases: { name: string; call: () => Promise<unknown>; allowed: RoleSlug[] }[] = [
-    { name: "listDirectory", call: () => queries.listDirectory({}), allowed: [...ROLE_SLUGS] },
+    { name: "listDirectory", call: () => queries.listDirectory({}), allowed: ROLE_SLUGS.filter((r) => r !== "employee") },
     { name: "listChangeRequests", call: () => queries.listChangeRequests(), allowed: HR },
     { name: "viewBankChangeRequest", call: () => queries.viewBankChangeRequest(ID), allowed: HR },
     { name: "listRecordsToClaim", call: () => duplicateQueries.listRecordsToClaim(), allowed: HR },

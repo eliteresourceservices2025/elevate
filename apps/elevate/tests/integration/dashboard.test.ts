@@ -110,13 +110,15 @@ describe("work anniversaries follow the profile scope", () => {
 });
 
 describe("search follows each source's own rules", () => {
-  it("everyone finds a colleague by name; HR gets a profile link, others the directory", async () => {
+  it("everyone above the VA role finds a colleague by name (HR gets a profile link, others the directory); a VA finds nobody", async () => {
     as(hr);
     const forHr = await search.runSearch(hr, ANNIVERSARY_FIRST);
     expect(forHr.find((h) => h.kind === "person")?.href).toMatch(/^\/people\/[0-9a-f-]{36}$/);
+    as(lead);
+    const forLead = await search.runSearch(lead, ANNIVERSARY_FIRST);
+    expect(forLead.find((h) => h.kind === "person")?.href).toMatch(/^\/people\?q=/);
     as(employee);
-    const forEmployee = await search.runSearch(employee, ANNIVERSARY_FIRST);
-    expect(forEmployee.find((h) => h.kind === "person")?.href).toMatch(/^\/people\?q=/);
+    expect((await search.runSearch(employee, ANNIVERSARY_FIRST)).some((h) => h.kind === "person")).toBe(false); // a VA finds nobody
   });
 
   it("applicants are found by HR and recruiters only", async () => {

@@ -35,7 +35,7 @@ export async function runSearch(user: AuthzUser, rawQuery: string): Promise<Sear
 
   const [people, assetHits, applicants, notices] = await Promise.all([
     orNone(async () => {
-      await authorize(user, "people.view_directory");
+      await authorize(user, "people.browse_directory");
       // A full profile opens for HR (all scope); for anyone else the link goes to the directory, which every role may open.
       const seesProfiles = scopeFor(user, "people.view_profile") === "all";
       const rows = await db

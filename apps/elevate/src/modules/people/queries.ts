@@ -54,7 +54,7 @@ export type DirectoryRow = {
  */
 export async function listDirectory(rawQuery: unknown) {
   const user = await requireUser();
-  await authorize(user, "people.view_directory");
+  await authorize(user, "people.browse_directory");
 
   const q = directoryQuerySchema.parse(rawQuery ?? {});
   const seesClients = scopeFor(user, "people.view_client_assignments") === "all";

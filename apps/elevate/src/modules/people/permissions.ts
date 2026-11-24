@@ -7,6 +7,8 @@ export const peoplePermissions = definePermissions({
   "people.view_directory": {
     roles: { super_admin: "all", hr_admin: "all", team_lead: "all", recruiter: "all", executive: "all", employee: "all" },
   },
+  // The People list and the name search (owner decision 2026-11-24): everyone above the contractor/VA role. A VA keeps their own profile.
+  "people.browse_directory": { roles: { super_admin: "all", hr_admin: "all", team_lead: "all", recruiter: "all", executive: "all" } },
   // A profile photo: everyone sets and removes their own; HR and Super Admin can also remove anyone's.
   "people.manage_photo": { roles: { super_admin: "all", hr_admin: "all", team_lead: "own", recruiter: "own", executive: "own", employee: "own" } },
   "people.view_profile": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team", employee: "own" } },

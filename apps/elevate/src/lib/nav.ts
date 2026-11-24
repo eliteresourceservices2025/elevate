@@ -59,7 +59,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: "Core HR",
     items: [
-      { href: "/people", label: "People", icon: Users, description: "Profiles, employment details and client assignments." },
+      { href: "/people", label: "People", icon: Users, description: "Profiles, employment details and client assignments.", access: { action: "people.browse_directory", scopes: ["all"] } },
       { href: "/people/me", label: "My profile", icon: UserRound, description: "Your own details, documents and requests." },
       { href: "/my-data", label: "My data", icon: ShieldCheck, description: "What ELEVATE holds about you, downloads and privacy requests." },
       { href: "/my-pay", label: PAYSLIP_LABELS.pageTitle, icon: Wallet, description: "Your contractor payment statements, once the pay run they belong to is paid.", access: { action: "payroll.view_own", scopes: ["own"] } },
