@@ -19,8 +19,9 @@ const LABEL: Record<Platform, string> = {
  */
 export function DownloadHero({ os, releases, zone }: { os: "windows" | "mac" | "other"; releases: PublishedRelease[]; zone: string }) {
   if (releases.length === 0) return <EmptyState icon={Download} title="The app is not ready to download yet" description="When HR publishes the first version, it appears here." />;
-  const shown: Platform[] = os === "other" ? [...PLATFORMS] : platformsFor(os);
+  // Every download is shown (people often download for someone else's computer); the visitor's own comes first and is the filled button.
   const primary = new Set<Platform>(os === "other" ? [] : platformsFor(os));
+  const shown: Platform[] = [...PLATFORMS].sort((a, b) => Number(primary.has(b)) - Number(primary.has(a)));
   return (
     <section aria-label="Download" className="space-y-4 rounded-2xl border bg-card p-5 shadow-sm">
       {os === "other" ? (
