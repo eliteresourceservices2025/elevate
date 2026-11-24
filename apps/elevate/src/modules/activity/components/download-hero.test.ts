@@ -26,14 +26,15 @@ const render = (os: "windows" | "mac" | "other", current: PublishedRelease | Pub
   renderToStaticMarkup(createElement(DownloadHero, { os, releases: current === null ? [] : Array.isArray(current) ? current : [current], zone: "America/Phoenix" }));
 
 describe("DownloadHero", () => {
-  it("offers one Windows download to a Windows visitor, with version, date and size", () => {
+  it("offers the Windows download first to a Windows visitor, with version, date and size, and still lists the Mac ones", () => {
     const html = render("windows", release());
     expect(html).toContain('href="/api/tracker/download/windows-x86_64"');
     expect(html).toContain("Download for Windows");
     expect(html).toContain("1.2.0");
     expect(html).toContain("Nov 20, 2026");
     expect(html).toContain("8.4 MB");
-    expect(html).not.toContain("Apple silicon");
+    expect(html.indexOf("Download for Windows")).toBeLessThan(html.indexOf("Download for Apple silicon"));
+    expect(html).toContain('href="/api/tracker/download/darwin-aarch64"');
   });
   it("offers both Macs to a Mac visitor, and says plainly when one has no build yet", () => {
     const html = render("mac", release());
@@ -60,7 +61,8 @@ describe("DownloadHero", () => {
     const html = render("windows", [macOnly, release()]);
     expect(html).toContain('href="/api/tracker/download/windows-x86_64"');
     expect(html).toContain("Version 1.2.0");
-    expect(html).not.toContain("Not available yet");
+    expect(html).toContain("Version 1.3.0"); // Apple silicon, from the newer Mac-only release
+    expect(html).not.toMatch(/Windows<\/p><p[^>]*>Not available yet/);
     const mac = render("mac", [macOnly, release()]);
     expect(mac).toContain("Version 1.3.0");
   });
