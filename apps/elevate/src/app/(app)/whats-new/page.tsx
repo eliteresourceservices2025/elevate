@@ -13,7 +13,7 @@ export default async function WhatsNewPage() {
   await requireUser();
   return (
     <PageContainer width="medium">
-      <PageHeader title="What's new" description={`You are using ELEVATE ${APP_VERSION}. Every release is listed here, newest first. We call it version 1.0 once everyone has been invited.`} />
+      <PageHeader title="What's new" description={`You are using ELEVATE ${APP_VERSION}. Every release is listed here, newest first.`} />
       <ol className="space-y-4">
         {RELEASES.map((r) => (
           <li key={r.version}>
