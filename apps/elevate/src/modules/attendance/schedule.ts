@@ -85,8 +85,37 @@ export function shiftsOn(schedules: readonly ScheduleLite[], personZone: string,
   return shifts.sort((a, b) => a.startMs - b.startMs);
 }
 
-/** The first shift that starts on this calendar day in the person's own zone, or null on a rest day. */
-export const shiftOn = (schedules: readonly ScheduleLite[], personZone: string, date: string): Shift | null => shiftsOn(schedules, personZone, date)[0] ?? null;
+/**
+ * The day's shift as one: when a person has several schedules (one per client) on a day, the flags, late and extra-hours rules see one shift
+ * from the first start to the last end whose scheduled minutes add up (the gap between them is not scheduled time). With one schedule it is
+ * that shift itself. Null on a rest day.
+ */
+export function shiftOn(schedules: readonly ScheduleLite[], personZone: string, date: string): Shift | null {
+  const shifts = shiftsOn(schedules, personZone, date);
+  if (shifts.length <= 1) return shifts[0] ?? null;
+  const first = shifts[0];
+  return {
+    date,
+    startMs: first.startMs,
+    endMs: Math.max(...shifts.map((s) => s.endMs)),
+    scheduledMinutes: shifts.reduce((sum, s) => sum + s.scheduledMinutes, 0),
+    schedule: { ...first.schedule, breakMinutes: shifts.reduce((sum, s) => sum + s.schedule.breakMinutes, 0), clientId: null, allottedMinutesPerDay: null },
+  };
+}
+
+const minuteOfDay = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
+
+/** Whether two schedules of one person would put them in two places at once: same zone, a shared weekday, hours that cross (dates are checked by the database). */
+export function hoursOverlap(a: ScheduleLite, b: ScheduleLite): boolean {
+  if (a.zone !== b.zone || !a.weekdays.some((d) => b.weekdays.includes(d))) return false;
+  const aStart = minuteOfDay(a.startTime);
+  const aEnd = minuteOfDay(a.endTime) + (a.endTime <= a.startTime ? 1440 : 0);
+  const bStart = minuteOfDay(b.startTime);
+  const bEnd = minuteOfDay(b.endTime) + (b.endTime <= b.startTime ? 1440 : 0);
+  // A shift that runs past midnight also meets the other one's hours on the next (or previous) day.
+  const crosses = aEnd > 1440 || bEnd > 1440;
+  return (crosses ? [-1440, 0, 1440] : [0]).some((o) => aStart < bEnd + o && bStart + o < aEnd);
+}
 
 /** Whether the person has any schedule at all in force around this date (so a day with no shift is a rest day, not "unscheduled"). */
 export const hasScheduleAround = (schedules: readonly ScheduleLite[], date: string) => [addDays(date, -1), date, addDays(date, 1)].some((d) => scheduleFor(schedules, d) !== null);

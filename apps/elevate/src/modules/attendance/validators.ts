@@ -103,6 +103,9 @@ export const assignScheduleSchema = z.object({
   endTime: hhmm,
   weekdays: z.array(z.number().int().min(1).max(7)).min(1, "Choose at least one working day").max(7).transform((d) => [...new Set(d)].sort((a, b) => a - b)),
   breakMinutes: z.preprocess(toNumber, z.number().int().min(0, "Zero or more").max(240, "240 at most")).default(0),
+  /** The client this schedule is for (empty = the person's general schedule), and the minutes a day allotted to that client (empty = no separate limit). */
+  clientId: z.preprocess(blankToUndefined, uuid.optional()),
+  allottedMinutesPerDay: z.preprocess(blankToUndefined, z.preprocess(toNumber, z.number().int().min(1, "At least 1 minute").max(960, "960 minutes (16 hours) at most")).optional()),
   /** Empty = each person's client zone (or the company zone). */
   zone: z.preprocess(blankToUndefined, z.string().refine(isValidTimeZone, "Choose a valid time zone").optional()),
 });
@@ -111,10 +114,14 @@ export const endScheduleSchema = z.object({ employeeId: uuid, endDate: ymd });
 export const endSchedulesSchema = z.object({
   employeeIds: z.array(uuid).min(1, "Choose at least one person").max(200, "Choose 200 people at most"),
   endDate: ymd,
+  /** Only this client's schedule (leave out to end every schedule in force that day). */
+  clientId: z.preprocess(blankToUndefined, uuid.optional()),
 });
 /** HR fixes a recent schedule in place (a mistake), with a reason. Dates are not changed here. */
 export const correctScheduleSchema = z.object({
   employeeId: uuid,
+  /** Only this client's recent schedules (leave out for the general schedule). */
+  clientId: z.preprocess(blankToUndefined, uuid.optional()),
   startTime: hhmm,
   endTime: hhmm,
   weekdays: z.array(z.number().int().min(1).max(7)).min(1, "Choose at least one working day").max(7).transform((d) => [...new Set(d)].sort((a, b) => a - b)),

@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import type { db } from "@/lib/db";
 import { DEFAULT_TIMEZONE } from "@/lib/time";
 import { prefsFor } from "./service";
-import { scheduleFor, workingWeekdaysInZone, type ScheduleLite } from "./schedule";
+import { schedulesFor, workingWeekdaysInZone, type ScheduleLite } from "./schedule";
 
 // Server-only helpers for schedules (not server actions, so they may take a transaction). Callers authorize first.
 
@@ -45,7 +45,9 @@ export async function defaultScheduleZone(executor: Executor, employeeId: string
  */
 export async function workingWeekdaysFor(executor: Executor, employeeId: string, onDate: string): Promise<ReadonlySet<number> | undefined> {
   const schedules = await loadSchedules(executor, employeeId);
-  const current = scheduleFor(schedules, onDate);
-  if (!current) return undefined;
-  return workingWeekdaysInZone(current, (await prefsFor(executor, employeeId)).zone);
+  const current = schedulesFor(schedules, onDate);
+  if (current.length === 0) return undefined;
+  const zone = (await prefsFor(executor, employeeId)).zone;
+  // A person with several schedules works the days of any of them.
+  return new Set(current.flatMap((s) => [...workingWeekdaysInZone(s, zone)]));
 }

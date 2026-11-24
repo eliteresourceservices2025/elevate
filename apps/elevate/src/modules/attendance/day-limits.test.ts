@@ -140,3 +140,27 @@ describe("dailyBreakAllowance", () => {
     expect(dailyBreakAllowance({ shifts: [], defaultBreakMinutes: 45 })).toBe(45);
   });
 });
+
+describe("shiftOn with several schedules", () => {
+  it("merges a day's shifts into one: first start, last end, scheduled minutes added up", async () => {
+    const { shiftOn } = await import("./schedule");
+    const s = shiftOn([{ ...clientA, breakMinutes: 15 }, { ...clientB, breakMinutes: 30 }], PHX, DATE)!;
+    expect(s.startMs).toBe(ms("09:00"));
+    expect(s.endMs).toBe(ms("18:00"));
+    expect(s.scheduledMinutes).toBe(225 + 210);
+    expect(s.schedule.breakMinutes).toBe(45);
+  });
+
+  it("is the single shift itself when there is one", async () => {
+    const { shiftOn } = await import("./schedule");
+    expect(shiftOn([clientA], PHX, DATE)!.scheduledMinutes).toBe(240);
+  });
+
+  it("knows when two schedules' hours overlap", async () => {
+    const { hoursOverlap } = await import("./schedule");
+    expect(hoursOverlap(clientA, clientB)).toBe(false);
+    expect(hoursOverlap(clientA, { ...clientB, startTime: "12:00" })).toBe(true);
+    expect(hoursOverlap(clientA, { ...clientB, startTime: "12:00", weekdays: [6, 7] })).toBe(false);
+    expect(hoursOverlap({ ...clientA, startTime: "22:00", endTime: "06:00" }, { ...clientB, startTime: "05:00", endTime: "07:00" })).toBe(true);
+  });
+});

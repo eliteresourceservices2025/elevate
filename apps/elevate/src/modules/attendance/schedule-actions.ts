@@ -11,7 +11,8 @@ import { writeAudit } from "@/modules/audit/write";
 import { notify } from "@/modules/notifications/service";
 import { reportName, todayInZone } from "@/modules/org/service";
 import { employees } from "@/modules/people/schema";
-import { addDays, describeSchedule } from "./schedule";
+import { addDays, describeSchedule, hoursOverlap } from "./schedule";
+import { assignedToClient } from "./extra-hours-service";
 import { schedules } from "./schema";
 import { defaultScheduleZone, loadSchedules } from "./schedule-service";
 import { lockEmployeeClock } from "./service";
@@ -51,17 +52,24 @@ export async function assignSchedule(input: unknown): Promise<ActionResult<{ ass
         const name = reportName({ first: person.first, last: person.last, preferred: person.preferred });
 
         await lockEmployeeClock(tx, employeeId);
-        const existing = await loadSchedules(tx, employeeId);
+        const clientId = v.clientId ?? null;
+        if (clientId && !(await assignedToClient(tx, employeeId, clientId, v.effectiveFrom))) throw new ActionFailure(`${name} is not assigned to that client on ${formatDateOnly(v.effectiveFrom)}.`);
+        const all = await loadSchedules(tx, employeeId);
+        // A person holds one schedule per client at a time (the general schedule counts as its own): only that one is replaced.
+        const existing = all.filter((s) => (s.clientId ?? null) === clientId);
         const later = existing.find((s) => s.effectiveFrom >= v.effectiveFrom);
         if (later) throw new ActionFailure(`${name} already has a schedule starting ${formatDateOnly(later.effectiveFrom)}. Choose a date after it.`);
         const open = existing.find((s) => s.effectiveTo === null || s.effectiveTo >= v.effectiveFrom);
+        const zone = v.zone ?? (await defaultScheduleZone(tx, employeeId));
+        const mine = { startTime: v.startTime, endTime: v.endTime, weekdays: v.weekdays, zone, effectiveFrom: v.effectiveFrom, effectiveTo: null, breakMinutes: v.breakMinutes };
+        const clash = all.find((s) => (s.clientId ?? null) !== clientId && (s.effectiveTo === null || s.effectiveTo >= v.effectiveFrom) && hoursOverlap(s, mine));
+        if (clash) throw new ActionFailure(`${name} already works ${clash.startTime} to ${clash.endTime} on some of those days for another schedule, so these hours overlap. Change the hours, or end that schedule first.`);
         if (open) await tx.update(schedules).set({ effectiveTo: addDays(v.effectiveFrom, -1) }).where(eq(schedules.id, open.id));
 
-        const zone = v.zone ?? (await defaultScheduleZone(tx, employeeId));
-        const row = { employeeId, effectiveFrom: v.effectiveFrom, effectiveTo: null, startTime: v.startTime, endTime: v.endTime, weekdays: v.weekdays, breakMinutes: v.breakMinutes, zone, createdBy: actor.id };
+        const row = { employeeId, effectiveFrom: v.effectiveFrom, effectiveTo: null, startTime: v.startTime, endTime: v.endTime, weekdays: v.weekdays, breakMinutes: v.breakMinutes, zone, clientId, allottedMinutesPerDay: v.allottedMinutesPerDay ?? null, createdBy: actor.id };
         await tx.insert(schedules).values(row);
         await writeAudit(
-          { actor, action: "schedule.assign", targetType: "employee", targetId: employeeId, before: open ? { effectiveFrom: open.effectiveFrom, startTime: open.startTime, endTime: open.endTime, weekdays: open.weekdays, zone: open.zone } : null, after: { effectiveFrom: v.effectiveFrom, startTime: v.startTime, endTime: v.endTime, weekdays: v.weekdays, breakMinutes: v.breakMinutes, zone } },
+          { actor, action: "schedule.assign", targetType: "employee", targetId: employeeId, before: open ? { effectiveFrom: open.effectiveFrom, startTime: open.startTime, endTime: open.endTime, weekdays: open.weekdays, zone: open.zone } : null, after: { effectiveFrom: v.effectiveFrom, startTime: v.startTime, endTime: v.endTime, weekdays: v.weekdays, breakMinutes: v.breakMinutes, zone, clientId, allottedMinutesPerDay: v.allottedMinutesPerDay ?? null } },
           tx,
         );
         if (person.userId) {
@@ -101,7 +109,7 @@ export async function correctSchedule(input: unknown): Promise<ActionResult<{ co
       if (!person) throw new ActionFailure("That person was not found.");
       await lockEmployeeClock(tx, v.employeeId);
 
-      const recent = (await loadSchedules(tx, v.employeeId)).filter((s) => s.effectiveFrom >= cutoff);
+      const recent = (await loadSchedules(tx, v.employeeId)).filter((s) => s.effectiveFrom >= cutoff && (s.clientId ?? null) === (v.clientId ?? null));
       if (recent.length === 0) throw new ActionFailure(`They have no schedule that started in the last ${MAX_BACKDATE_DAYS} days. Set a new schedule from a date instead.`);
       from = recent[0].effectiveFrom;
 
@@ -179,14 +187,17 @@ export async function endSchedules(input: unknown): Promise<ActionResult<{ ended
 
         await lockEmployeeClock(tx, employeeId);
         const existing = await loadSchedules(tx, employeeId);
-        const inForce = existing.find((s) => s.effectiveFrom <= endDate && (s.effectiveTo === null || s.effectiveTo >= endDate));
-        const later = existing.find((s) => s.effectiveFrom > endDate);
+        const wanted = (s: (typeof existing)[number]) => !parsed.data.clientId || s.clientId === parsed.data.clientId;
+        const inForceAll = existing.filter((s) => wanted(s) && s.effectiveFrom <= endDate && (s.effectiveTo === null || s.effectiveTo >= endDate));
+        const later = existing.find((s) => wanted(s) && s.effectiveFrom > endDate);
         if (later) throw new ActionFailure(`${name} has a schedule that starts ${formatDateOnly(later.effectiveFrom)}, after that date. Choose a later end date.`);
-        if (!inForce) continue;
-        if (inForce.effectiveTo === endDate) continue; // already ends that day
+        const toEnd = inForceAll.filter((s) => s.effectiveTo !== endDate); // one that already ends that day needs nothing
+        if (toEnd.length === 0) continue;
 
-        await tx.update(schedules).set({ effectiveTo: endDate }).where(eq(schedules.id, inForce.id));
-        await writeAudit({ actor, action: "schedule.end", targetType: "employee", targetId: employeeId, before: { effectiveTo: inForce.effectiveTo }, after: { effectiveTo: endDate }, metadata: { bulk: ids.length } }, tx);
+        for (const inForce of toEnd) {
+          await tx.update(schedules).set({ effectiveTo: endDate }).where(eq(schedules.id, inForce.id));
+          await writeAudit({ actor, action: "schedule.end", targetType: "employee", targetId: employeeId, before: { effectiveTo: inForce.effectiveTo }, after: { effectiveTo: endDate }, metadata: { bulk: ids.length, clientId: inForce.clientId ?? null } }, tx);
+        }
         if (person.userId) {
           await notify(tx, {
             userId: person.userId,
