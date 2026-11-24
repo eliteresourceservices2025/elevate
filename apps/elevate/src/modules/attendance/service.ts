@@ -16,6 +16,7 @@ import { isSelfTestEmail } from "@/modules/jibble/mirror-rules";
 import { clientProjects, employees } from "@/modules/people/schema";
 import { projectOpenTo, projectRequired } from "./project-access";
 import { MINUTE, breakLabel, ipAllowed, overbreakOf, replayClock, roundCoordinate, transition, validCoordinates, type ClockEventLite, type ClockState, type ClockType } from "./clock";
+import { breakLeftToday } from "./break-left";
 import { clockSourceOf } from "./clock-source";
 import { assignedClients } from "./extra-hours-service";
 import { clockEvents, clockPrefs, clockRules, clockSelfies, correctionEvidence, overbreakNotices } from "./schema";
@@ -53,13 +54,13 @@ export async function loadEventsBetween(executor: Executor, employeeId: string, 
   return rows.map((r) => ({ id: r.id, type: r.type, at: Number(r.at), createdAtMs: Number(r.created_ms), plannedBreakMinutes: r.planned, clientId: r.client_id, projectId: r.project_id }));
 }
 
-export type EffectiveRules = { allowedCidrs: string[]; selfieRequired: boolean; idleMinutes: number | null; graceMinutes: number; eodExpected: boolean; jibbleMirror: boolean; lateGraceMinutes: number; maxExtraMinutesPerDay: number; maxDayMinutes: number };
-export const DEFAULT_RULES: EffectiveRules = { allowedCidrs: [], selfieRequired: false, idleMinutes: 30, graceMinutes: 60, eodExpected: false, jibbleMirror: false, lateGraceMinutes: 10, maxExtraMinutesPerDay: 240, maxDayMinutes: 720 };
+export type EffectiveRules = { allowedCidrs: string[]; selfieRequired: boolean; idleMinutes: number | null; graceMinutes: number; eodExpected: boolean; jibbleMirror: boolean; lateGraceMinutes: number; maxExtraMinutesPerDay: number; maxDayMinutes: number; defaultDailyCapMinutes: number; defaultBreakMinutes: number; autoStopWarnMinutes: number };
+export const DEFAULT_RULES: EffectiveRules = { allowedCidrs: [], selfieRequired: false, idleMinutes: 30, graceMinutes: 60, eodExpected: false, jibbleMirror: false, lateGraceMinutes: 10, maxExtraMinutesPerDay: 240, maxDayMinutes: 720, defaultDailyCapMinutes: 480, defaultBreakMinutes: 60, autoStopWarnMinutes: 10 };
 
 /** The rules of the person's team (or the defaults when the team has none). */
 export async function rulesFor(executor: Executor, employeeId: string): Promise<EffectiveRules> {
   const [row] = await executor
-    .select({ allowedCidrs: clockRules.allowedCidrs, selfieRequired: clockRules.selfieRequired, idleMinutes: clockRules.idleMinutes, graceMinutes: clockRules.graceMinutes, eodExpected: clockRules.eodExpected, jibbleMirror: clockRules.jibbleMirror, lateGraceMinutes: clockRules.lateGraceMinutes, maxExtraMinutesPerDay: clockRules.maxExtraMinutesPerDay, maxDayMinutes: clockRules.maxDayMinutes })
+    .select({ allowedCidrs: clockRules.allowedCidrs, selfieRequired: clockRules.selfieRequired, idleMinutes: clockRules.idleMinutes, graceMinutes: clockRules.graceMinutes, eodExpected: clockRules.eodExpected, jibbleMirror: clockRules.jibbleMirror, lateGraceMinutes: clockRules.lateGraceMinutes, maxExtraMinutesPerDay: clockRules.maxExtraMinutesPerDay, maxDayMinutes: clockRules.maxDayMinutes, defaultDailyCapMinutes: clockRules.defaultDailyCapMinutes, defaultBreakMinutes: clockRules.defaultBreakMinutes, autoStopWarnMinutes: clockRules.autoStopWarnMinutes })
     .from(employees)
     .innerJoin(clockRules, eq(clockRules.teamId, employees.teamId))
     .where(eq(employees.id, employeeId))
@@ -165,6 +166,14 @@ export async function performClock(actor: { id: string; email: string }, type: C
 
     if (replay.state !== "out" && (await pendingClockOut(tx, person.id))) {
       throw new ActionFailure("Your clock-out request is waiting for approval. Cancel it first if you are still working.");
+    }
+
+    // Breaks are a limited daily allowance taken in 15, 30 or 60 minute pieces; no open-ended breaks (strict time rules, 2026-11-24).
+    if (type === "break_start") {
+      if (input.breakMinutes === undefined) throw new ActionFailure("Choose 15, 30 or 60 minutes for your break.");
+      const left = await breakLeftToday(tx, { employeeId: person.id, zone: prefs.zone, replay, defaultBreakMinutes: rules.defaultBreakMinutes, nowMs: Date.now() });
+      if (left <= 0) throw new ActionFailure("You have no break time left today.");
+      if (input.breakMinutes > left) throw new ActionFailure(`You only have ${left} minutes of break left today.`);
     }
 
     if (type === "clock_in") {

@@ -9,13 +9,13 @@ import { scheduleFor, workingWeekdaysInZone, type ScheduleLite } from "./schedul
 
 type Executor = Pick<typeof db, "execute" | "insert" | "select" | "update" | "delete">;
 
-type Row = { effective_from: string; effective_to: string | null; start_time: string; end_time: string; weekdays: number[]; break_minutes: number; zone: string; id: string };
-const toLite = (r: Row): ScheduleLite & { id: string } => ({ id: r.id, effectiveFrom: r.effective_from, effectiveTo: r.effective_to, startTime: r.start_time, endTime: r.end_time, weekdays: r.weekdays.map(Number), breakMinutes: Number(r.break_minutes), zone: r.zone });
+type Row = { effective_from: string; effective_to: string | null; start_time: string; end_time: string; weekdays: number[]; break_minutes: number; zone: string; id: string; client_id: string | null; allotted_minutes_per_day: number | null };
+const toLite = (r: Row): ScheduleLite & { id: string } => ({ id: r.id, effectiveFrom: r.effective_from, effectiveTo: r.effective_to, startTime: r.start_time, endTime: r.end_time, weekdays: r.weekdays.map(Number), breakMinutes: Number(r.break_minutes), zone: r.zone, clientId: r.client_id, allottedMinutesPerDay: r.allotted_minutes_per_day === null ? null : Number(r.allotted_minutes_per_day) });
 
 /** Every schedule a person has had, oldest first. */
 export async function loadSchedules(executor: Executor, employeeId: string): Promise<(ScheduleLite & { id: string })[]> {
   const rows = (await executor.execute(sql`
-    select id, effective_from::text, effective_to::text, start_time, end_time, weekdays, break_minutes, zone
+    select id, effective_from::text, effective_to::text, start_time, end_time, weekdays, break_minutes, zone, client_id, allotted_minutes_per_day
     from time.schedules where employee_id = ${employeeId} order by effective_from`)) as unknown as Row[];
   return rows.map(toLite);
 }
@@ -25,7 +25,7 @@ export async function loadSchedulesFor(executor: Executor, employeeIds: string[]
   const out = new Map<string, (ScheduleLite & { id: string })[]>();
   if (employeeIds.length === 0) return out;
   const rows = (await executor.execute(sql`
-    select employee_id, id, effective_from::text, effective_to::text, start_time, end_time, weekdays, break_minutes, zone
+    select employee_id, id, effective_from::text, effective_to::text, start_time, end_time, weekdays, break_minutes, zone, client_id, allotted_minutes_per_day
     from time.schedules where employee_id in (${sql.join(employeeIds.map((id) => sql`${id}`), sql`, `)}) order by effective_from`)) as unknown as (Row & { employee_id: string })[];
   for (const r of rows) out.set(r.employee_id, [...(out.get(r.employee_id) ?? []), toLite(r)]);
   return out;

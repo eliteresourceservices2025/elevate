@@ -13,7 +13,7 @@ export type StopReason = "shift_end" | "client_allotment" | "daily_cap" | "appro
  *  ran over leaves less, and a short one gives back what it did not use. Never below zero. */
 export function breakAllowanceLeft(input: { allowanceMinutes: number; breaks: readonly Break[]; nowMs: number }): number {
   const takenMs = input.breaks.reduce((sum, b) => sum + Math.max(0, (b.endAt ?? input.nowMs) - b.startAt), 0);
-  return Math.max(0, Math.floor((input.allowanceMinutes * MINUTE - takenMs) / MINUTE));
+  return Math.max(0, input.allowanceMinutes - Math.round(takenMs / MINUTE)); // whole minutes: a few seconds either way is the same break
 }
 
 export type StopLimitInput = {
@@ -69,4 +69,10 @@ export function stopLimit(input: StopLimitInput): { limitMs: number; reason: Sto
     if (w.startMs <= limit.limitMs && w.endMs > limit.limitMs) limit = { limitMs: w.endMs, reason: "approved_extra_end" };
   }
   return limit;
+}
+
+/** Minutes of break a person may take in a day: the break time of today's shifts, or the company default when they have none (no schedule, or schedules with no break set). */
+export function dailyBreakAllowance(input: { shifts: readonly Shift[]; defaultBreakMinutes: number }): number {
+  const scheduled = input.shifts.reduce((sum, s) => sum + s.schedule.breakMinutes, 0);
+  return scheduled > 0 ? scheduled : input.defaultBreakMinutes;
 }

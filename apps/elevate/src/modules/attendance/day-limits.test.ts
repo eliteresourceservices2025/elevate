@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { fromZonedTime } from "date-fns-tz";
-import { breakAllowanceLeft, stopLimit, type StopLimitInput } from "./day-limits";
+import { breakAllowanceLeft, dailyBreakAllowance, stopLimit, type StopLimitInput } from "./day-limits";
 import { shiftsOn, type ScheduleLite, type Shift } from "./schedule";
 import type { Break } from "./clock";
 
@@ -126,5 +126,17 @@ describe("stopLimit", () => {
   it("after the shift has ended the limit is now, so the person is stopped, not left running", () => {
     const r = stopLimit(input({ nowMs: ms("13:30") }));
     expect(r.limitMs).toBe(ms("13:30"));
+  });
+});
+
+describe("dailyBreakAllowance", () => {
+  it("adds up the break time of today's shifts", () => {
+    const shifts = shiftsOn([{ ...clientA, breakMinutes: 15 }, { ...clientB, breakMinutes: 30 }], PHX, DATE);
+    expect(dailyBreakAllowance({ shifts, defaultBreakMinutes: 60 })).toBe(45);
+  });
+
+  it("falls back to the company default when the shifts have no break time or there is no shift", () => {
+    expect(dailyBreakAllowance({ shifts: shiftsOn([clientA], PHX, DATE), defaultBreakMinutes: 60 })).toBe(60);
+    expect(dailyBreakAllowance({ shifts: [], defaultBreakMinutes: 45 })).toBe(45);
   });
 });

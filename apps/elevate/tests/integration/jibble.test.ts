@@ -255,7 +255,7 @@ describe("when a clock click is queued for Jibble", () => {
       await attendance.clockIn({});
       await attendance.startBreak({ breakMinutes: 15 });
       await attendance.endBreak();
-      await attendance.startBreak({});
+      await attendance.startBreak({ breakMinutes: 15 });
       await attendance.clockOut(); // ends the break and the shift together
       const actionsInOrder = (await rows<{ action: string }>(sql`select action from time.jibble_link_log where employee_id = ${bea.employeeId} order by created_at`)).map((r) => r.action);
       expect(actionsInOrder).toEqual(["In", "Out", "In", "Out", "Out"]); // in, break out, break in, break out, then the shift ends
@@ -264,7 +264,7 @@ describe("when a clock click is queued for Jibble", () => {
       const cy = await person("Cy", { teamId: team });
       as(cy.user);
       await attendance.clockIn({});
-      await attendance.startBreak({});
+      await attendance.startBreak({ breakMinutes: 15 });
       await attendance.endBreak();
       expect((await logOf(cy.employeeId)).map((l) => l.action)).toEqual(["In"]);
 
@@ -272,7 +272,7 @@ describe("when a clock click is queued for Jibble", () => {
       const di = await person("Di", { teamId: team });
       as(di.user);
       await attendance.clockIn({});
-      await attendance.startBreak({});
+      await attendance.startBreak({ breakMinutes: 15 });
       await attendance.endBreak();
       expect((await rows<{ action: string }>(sql`select action from time.jibble_link_log where employee_id = ${di.employeeId} order by created_at`)).map((r) => r.action)).toEqual(["In", "StartBreak", "EndBreak"]);
     });
@@ -287,13 +287,13 @@ describe("when a clock click is queued for Jibble", () => {
       await attendance.clockIn({});
       await attendance.startBreak({ breakMinutes: 30 });
       await attendance.endBreak();
-      await attendance.startBreak({}); // no time limit
+      await attendance.startBreak({ breakMinutes: 15 });
       await attendance.endBreak();
       await jobs.processMirrorQueue();
       const mine = fake.calls.filter((c) => c.personId === fayJibbleId(fay.employeeId));
       expect(mine.map((c) => c.action)).toEqual(["In", "StartBreak", "EndBreak", "StartBreak", "EndBreak"]);
       expect(mine[1].options).toEqual({ breakMinutes: 30 });
-      expect(mine[3].options).toEqual({ breakMinutes: null });
+      expect(mine[3].options).toEqual({ breakMinutes: 15 });
       // Each break end points at the entry its own break start returned (entry ids come from the fake in call order)
       expect(mine[2].options?.previousEntryId).toMatch(/^entry-/);
       expect(mine[4].options?.previousEntryId).toMatch(/^entry-/);

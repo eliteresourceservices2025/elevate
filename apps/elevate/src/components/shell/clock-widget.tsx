@@ -630,20 +630,21 @@ export function ClockWidget({ status: statusProp }: { status: ClockStatus | null
               </Button>
               {breakMenu ? (
                 <div role="menu" aria-label="Choose a break" className="absolute right-0 top-full z-50 mt-1 w-48 overflow-hidden rounded-xl border bg-popover py-1 shadow-lg">
-                  {[...BREAK_CHOICES, null].map((m) => (
+                  {BREAK_CHOICES.filter((m) => m <= status.breakLeftMinutes).map((m) => (
                     <button
-                      key={m ?? "open"}
+                      key={m}
                       type="button"
                       role="menuitem"
                       className="block w-full px-3 py-2 text-left text-sm hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
                       onClick={() => {
                         setBreakMenu(false);
-                        run(() => startBreak(m === null ? {} : { breakMinutes: m }), "Break started.");
+                        run(() => startBreak({ breakMinutes: m }), "Break started.");
                       }}
                     >
                       {breakLabel(m)}
                     </button>
                   ))}
+                  <p className="px-3 py-2 text-xs text-muted-foreground">{status.breakLeftMinutes > 0 ? `${status.breakLeftMinutes} minutes of break left today` : "No break time left today"}</p>
                 </div>
               ) : null}
             </div>

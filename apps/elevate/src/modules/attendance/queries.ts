@@ -10,6 +10,7 @@ import { teams } from "@/modules/org/schema";
 import { employees } from "@/modules/people/schema";
 import { EOD_EDIT_WINDOW_MS, MAX_OPEN_SESSION_MS, buildDays, isPossiblyOffline, needsHrDecision, replayClock, type ClockState, type DayTotals, type SessionDetail } from "./clock";
 import { approvedExtra, grantedByDate } from "./extra-hours";
+import { breakLeftToday } from "./break-left";
 import { clockSourceOf } from "./clock-source";
 import { approvedWindows } from "./extra-hours-service";
 import { assignedClientsWithProjects, loadCurrentWork } from "./work-log";
@@ -38,6 +39,8 @@ export type ClockStatus = {
   breakStartMs: number | null;
   /** The length chosen for the break in progress (15, 30 or 60), or null for no limit. */
   breakPlannedMinutes: number | null;
+  /** Minutes of today's break allowance not used yet (the picker offers only the pieces that fit). */
+  breakLeftMinutes: number;
   /** The server's clock, so the browser counts from the server's time and not its own. */
   serverNowMs: number;
   idleMinutes: number | null;
@@ -80,6 +83,7 @@ export async function getClockStatus(): Promise<ClockStatus | null> {
     breakDoneMs: live ? live.breaks.filter((b) => b.endAt !== null).reduce((sum, b) => sum + (b.endAt! - b.startAt), 0) : 0,
     breakStartMs: openBreak?.startAt ?? null,
     breakPlannedMinutes: openBreak?.plannedMinutes ?? null,
+    breakLeftMinutes: await breakLeftToday(db, { employeeId: me.id, zone: prefs.zone, replay, defaultBreakMinutes: rules.defaultBreakMinutes, nowMs: Date.now() }),
     serverNowMs: Date.now(),
     idleMinutes: rules.idleMinutes,
     needsSelfie: rules.selfieRequired && monitoring,
