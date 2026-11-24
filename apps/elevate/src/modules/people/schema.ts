@@ -66,6 +66,8 @@ export const employees = core
       // Display title, kept in sync with the positions catalog (and what the history shows).
       position: text("position"),
       status: text("status").notNull().default("onboarding"),
+      /** The most this person may work in a day (minutes) when they have no schedule: the clock stops itself there. HR sets it; null = the company default. */
+      dailyCapMinutes: smallint("daily_cap_minutes"),
       workerType: text("worker_type").notNull().default("contractor"),
       startDate: date("start_date", { mode: "string" }),
       endDate: date("end_date", { mode: "string" }),

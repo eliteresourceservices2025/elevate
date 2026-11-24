@@ -50,8 +50,8 @@ export const clockEvents = time
       check("clock_events_type_chk", sql`${t.type} in ('clock_in','break_start','break_end','clock_out','switch_client')`),
       check("clock_events_client_chk", sql`(${t.clientId} is null or ${t.type} in ('clock_in','switch_client')) and (${t.type} <> 'switch_client' or ${t.clientId} is not null)`),
       check("clock_events_project_chk", sql`${t.projectId} is null or (${t.clientId} is not null and ${t.type} in ('clock_in','switch_client'))`),
-      check("clock_events_source_chk", sql`${t.source} in ('web','admin_correction','jibble')`),
-      check("clock_events_correction_chk", sql`(${t.source} in ('web','jibble')) or (${t.correctionId} is not null and coalesce(length(trim(${t.correctionReason})), 0) > 0)`),
+      check("clock_events_source_chk", sql`${t.source} in ('web','admin_correction','jibble','auto_stop')`),
+      check("clock_events_correction_chk", sql`(${t.source} in ('web','jibble','auto_stop')) or (${t.correctionId} is not null and coalesce(length(trim(${t.correctionReason})), 0) > 0)`),
       check("clock_events_planned_chk", sql`${t.plannedBreakMinutes} is null or (${t.type} = 'break_start' and ${t.plannedBreakMinutes} in (15, 30, 60))`),
       check("clock_events_location_chk", sql`(${t.approxLat} is null) = (${t.approxLng} is null)`),
     ],
@@ -126,6 +126,10 @@ export const clockRules = time
     /** Most extra hours one person may be approved for in a day, and the total hours in a day past which a request shows a warning. */
     maxExtraMinutesPerDay: integer("max_extra_minutes_per_day").notNull().default(240),
     maxDayMinutes: integer("max_day_minutes").notNull().default(720),
+    /** Strict time (2026-11-24): the daily limit for people with no schedule and no personal cap, the break allowance for people with no schedule, and the minutes of warning before the clock stops by itself. */
+    defaultDailyCapMinutes: integer("default_daily_cap_minutes").notNull().default(480),
+    defaultBreakMinutes: integer("default_break_minutes").notNull().default(60),
+    autoStopWarnMinutes: integer("auto_stop_warn_minutes").notNull().default(10),
     updatedBy: uuid("updated_by"),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   })
@@ -248,6 +252,10 @@ export const schedules = time
       /** ISO weekdays worked: 1 = Monday ... 7 = Sunday. The others are rest days. */
       weekdays: smallint("weekdays").array().notNull(),
       breakMinutes: smallint("break_minutes").notNull().default(0),
+      /** The client this schedule is for (null = the person's one general schedule). A person can have one schedule per client at the same time, as long as the hours do not overlap. */
+      clientId: uuid("client_id").references(() => clients.id),
+      /** Minutes of work per scheduled day allotted to that client; the clock stops at this much for the client (null = no separate limit). */
+      allottedMinutesPerDay: smallint("allotted_minutes_per_day"),
       zone: text("zone").notNull(),
       createdBy: uuid("created_by"),
       createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -258,6 +266,7 @@ export const schedules = time
       check("schedules_times_chk", sql`${t.startTime} ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$' and ${t.endTime} ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'`),
       check("schedules_weekdays_chk", sql`cardinality(${t.weekdays}) between 1 and 7 and ${t.weekdays} <@ array[1,2,3,4,5,6,7]::smallint[]`),
       check("schedules_break_chk", sql`${t.breakMinutes} between 0 and 240`),
+      check("schedules_allotted_chk", sql`${t.allottedMinutesPerDay} is null or ${t.allottedMinutesPerDay} between 1 and 960`),
     ],
   )
   .enableRLS();
