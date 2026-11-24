@@ -188,3 +188,38 @@ describe("stopLimit overrun (how long past the limit the person already is)", ()
     expect(stopLimit({ ...base, shifts: [], nowMs: ms("10:00") }).overrunMs).toBe(Infinity);
   });
 });
+
+describe("stopLimit with a window that already ended", () => {
+  it("stops at the end of an approved window that covered the moment the cap was reached", () => {
+    const r = stopLimit({
+      nowMs: ms("12:00"),
+      hasSchedule: false,
+      shifts: [],
+      clientId: null,
+      workedMsByClient: new Map(),
+      workedMsToday: 6 * HOUR,
+      dailyCapMinutes: 240,
+      companyDefaultCapMinutes: 480,
+      approvedWindows: [{ startMs: ms("08:00"), endMs: ms("11:10") }],
+    });
+    // 6 hours worked by 12:00 means the 4 hour cap was reached at 10:00, inside the window that ends at 11:10
+    expect(r).toEqual({ limitMs: ms("12:00"), reason: "approved_extra_end", overrunMs: 50 * MIN });
+  });
+});
+
+describe("stopLimit with a window that opens after the limit", () => {
+  it("keeps a person working while a window is open now, even though it began after the cap was reached", () => {
+    const r = stopLimit({
+      nowMs: ms("12:00"),
+      hasSchedule: false,
+      shifts: [],
+      clientId: null,
+      workedMsByClient: new Map(),
+      workedMsToday: 6 * HOUR,
+      dailyCapMinutes: 240,
+      companyDefaultCapMinutes: 480,
+      approvedWindows: [{ startMs: ms("11:30"), endMs: ms("13:00") }],
+    });
+    expect(r).toEqual({ limitMs: ms("13:00"), reason: "approved_extra_end", overrunMs: 0 });
+  });
+});

@@ -72,10 +72,23 @@ export function stopLimit(input: StopLimitInput): StopLimit {
     }
   }
 
-  // Approved windows chain: one that starts at or before the limit moves it to its end, and so can the next.
+  // Approved windows chain from the moment the limit was reached: one that covers that moment moves it to the window's end, and so can the
+  // next. (A person who was never allowed to work now, such as on a rest day, is measured from now.)
   const windows = [...input.approvedWindows].sort((a, b) => a.startMs - b.startMs);
+  let reached = Number.isFinite(limit.overrunMs) ? limit.limitMs - limit.overrunMs : nowMs;
+  let lifted = false;
   for (const w of windows) {
-    if (w.startMs <= limit.limitMs && w.endMs > limit.limitMs) limit = { limitMs: w.endMs, reason: "approved_extra_end", overrunMs: Math.max(0, nowMs - w.endMs) };
+    if (w.startMs <= reached && w.endMs > reached) {
+      reached = w.endMs;
+      lifted = true;
+    }
+  }
+  if (lifted) limit = reached > nowMs ? { limitMs: reached, reason: "approved_extra_end", overrunMs: 0 } : { limitMs: nowMs, reason: "approved_extra_end", overrunMs: nowMs - reached };
+  // A window that is open right now keeps the person working even when it began after the limit was reached (the gap before it shows up as
+  // unapproved extra time in hours review; the clock is not stopped over it).
+  if (limit.limitMs <= nowMs) {
+    const open = windows.filter((w) => w.startMs <= nowMs && w.endMs > nowMs).sort((a, b) => b.endMs - a.endMs)[0];
+    if (open) limit = { limitMs: open.endMs, reason: "approved_extra_end", overrunMs: 0 };
   }
   return limit;
 }

@@ -158,3 +158,57 @@ describe("the clock status", () => {
     expect((await queries.getClockStatus())?.stopAtMs).toBeNull();
   });
 });
+
+describe("approved extra hours", () => {
+  const approveWindow = async (w: { employeeId: string; lead: TestUser }, clientId: string, fromMin: number, toMin: number) => {
+    await db.execute(sql`insert into time.extra_hours_requests (employee_id, client_id, source, status, window_start, window_end, minutes, contact_name, reason, filed_by, decided_by, decided_at)
+      values (${w.employeeId}, ${clientId}, 'va', 'approved', ${at(fromMin)}, ${at(toMin)}, ${toMin - fromMin}, 'Pat', 'Client asked', ${w.lead.id}, ${w.lead.id}, now())`);
+  };
+  const clientRow = async () => (await rows<{ id: string }>(sql`insert into core.clients (name) values (${uniq("Extra Client ")}) returning id`))[0].id;
+
+  it("lets a person who passed their cap keep working until the approved window ends", async () => {
+    const w = await worker("extraok");
+    const client = await clientRow();
+    await event(w.employeeId, "clock_in", at(-300));
+    await approveWindow(w, client, -30, 60);
+    const r = await runAutoStop(w.employeeId);
+    expect(r.status).toBe("early");
+    expect(Math.abs((r.status === "early" ? r.limitMs : 0) - (Date.now() + 60 * MIN))).toBeLessThan(2 * MIN);
+    expect((await eventsOf(w.employeeId)).at(-1)!.type).toBe("clock_in");
+  });
+
+  it("stops them at the end of the window", async () => {
+    const w = await worker("extraend");
+    const client = await clientRow();
+    await event(w.employeeId, "clock_in", at(-400));
+    await approveWindow(w, client, -200, -50);
+    expect(await runAutoStop(w.employeeId)).toEqual({ status: "stopped" });
+    const ev = await eventsOf(w.employeeId);
+    const stoppedMin = (ev.at(-1)!.at - ev[0].at) / MIN;
+    expect(stoppedMin).toBeGreaterThan(349);
+    expect(stoppedMin).toBeLessThan(351); // 400 - 50 minutes after the clock-in
+  });
+
+  it("does not count a window approved for another client than the one being worked for", async () => {
+    const w = await worker("extraother");
+    const a = await clientRow();
+    const b = await clientRow();
+    await db.execute(sql`insert into core.client_assignments (employee_id, client_id, start_date) values (${w.employeeId}, ${a}, current_date - 30), (${w.employeeId}, ${b}, current_date - 30)`);
+    await db.execute(sql`insert into time.clock_events (employee_id, type, occurred_at, client_id) values (${w.employeeId}, 'clock_in', ${at(-300)}, ${a})`);
+    await approveWindow(w, b, -30, 60);
+    expect(await runAutoStop(w.employeeId)).toEqual({ status: "stopped" });
+  });
+
+  it("lets a person clock in inside an approved window when their own hours are used up", async () => {
+    const w = await worker("extraclockin", 1);
+    const client = await clientRow();
+    await db.execute(sql`insert into core.client_assignments (employee_id, client_id, start_date) values (${w.employeeId}, ${client}, current_date - 30)`);
+    const midnight = fromZonedTime(`${formatInTimeZone(Date.now(), "America/Phoenix", "yyyy-MM-dd")}T00:00:00`, "America/Phoenix").getTime();
+    await event(w.employeeId, "clock_in", new Date(midnight).toISOString());
+    await event(w.employeeId, "clock_out", new Date(midnight + 2 * MIN).toISOString());
+    current.user = w.user;
+    expect((await actions.clockIn({})).ok).toBe(false);
+    await approveWindow(w, client, -5, 120);
+    expect((await actions.clockIn({})).ok).toBe(true);
+  });
+});
