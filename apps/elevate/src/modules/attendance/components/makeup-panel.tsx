@@ -1,4 +1,5 @@
 "use client";
+import { ThreadToggle } from "@/components/reports/report-thread";
 
 import { useState } from "react";
 import { fromZonedTime } from "date-fns-tz";
@@ -29,6 +30,7 @@ function ItemRow({ item, zone, onCancel, onDecide, pending }: { item: MakeupItem
       <p className="text-muted-foreground">{item.reason}</p>
       {item.status === "approved" && item.madeUpMinutes > 0 ? <p className="text-muted-foreground">Made up so far: {formatDuration(item.madeUpMinutes * MINUTE)}.</p> : null}
       {item.decisionNote ? <p className="text-muted-foreground">Note: {item.decisionNote}</p> : null}
+      <ThreadToggle type="makeup" id={item.id} />
       <div className="flex flex-wrap gap-2 pt-1">
         {item.canDecide && onDecide ? (
           <>
@@ -81,7 +83,7 @@ function RequestForm({ mine }: { mine: MyMakeup }) {
     >
       <h2 className="text-lg font-semibold">Ask to make up missed hours</h2>
       {mine.days.length === 0 ? (
-        <p className="text-sm text-muted-foreground">You have no missed hours from the last 31 days to make up. Only days with scheduled hours that were not fully worked show here.</p>
+        <p className="text-sm text-muted-foreground">You have no missed hours from the last 31 days to make up. Weekdays (or your scheduled days) where you worked less than expected show here. Holidays and approved leave do not.</p>
       ) : (
         <>
           <SelectField id="mk-day" label="The day you are making up for" value={absence} onChange={(e) => setAbsence(e.target.value)} required>

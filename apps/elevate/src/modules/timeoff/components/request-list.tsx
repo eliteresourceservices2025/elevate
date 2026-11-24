@@ -1,4 +1,6 @@
 "use client";
+import { ThreadToggle } from "@/components/reports/report-thread";
+import { EvidenceGallery } from "@/components/reports/evidence-gallery";
 
 import { useRouter } from "next/navigation";
 import { ClientPager, usePaged } from "@/components/client-pager";
@@ -10,7 +12,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatDateOnly } from "@/lib/time";
 import { formatDays } from "../ledger";
-import { openEvidence } from "@/modules/attendance/actions";
 import { cancelRequest, decideRequest, getLeaveInvite } from "../request-actions";
 import type { RequestItem } from "../request-queries";
 import { useAsk } from "@/components/confirm-dialog";
@@ -71,31 +72,8 @@ function RequestCard({ item, showPerson }: { item: RequestItem; showPerson: bool
         <Badge variant={status.variant}>{status.label}</Badge>
       </div>
       {item.note ? <p className="text-sm">{item.note}</p> : null}
-      {item.evidence.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          <span className="text-muted-foreground">Client approval:</span>
-          {item.evidence.map((ev, i) =>
-            ev.purged ? (
-              <span key={ev.id} className="text-muted-foreground">
-                Screenshot {i + 1} (deleted)
-              </span>
-            ) : (
-              <Button
-                key={ev.id}
-                size="sm"
-                variant="outline"
-                onClick={async () => {
-                  const result = await openEvidence({ evidenceId: ev.id });
-                  if (!result.ok) return void toast.error(result.error);
-                  window.open(result.data.url, "_blank", "noopener,noreferrer");
-                }}
-              >
-                View screenshot {i + 1}
-              </Button>
-            ),
-          )}
-        </div>
-      ) : null}
+      <EvidenceGallery evidence={item.evidence} />
+      <ThreadToggle type="time_off" id={item.id} />
       {item.steps.length > 0 || item.cancelReason ? (
         <ul className="space-y-0.5 text-sm text-muted-foreground">
           {item.steps.map((s, i) => (

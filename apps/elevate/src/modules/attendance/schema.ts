@@ -402,6 +402,27 @@ export const extraHoursRequests = time
   .enableRLS();
 
 /**
+ * Hours for one specific day of a person with no fixed schedule (a contractor whose hours change from day to day), set by HR on top of their usual
+ * "hours per day". The clock's stop, the extra hours prompt and make-up hours use the day's number when there is one. Ignored for a person who has a schedule.
+ */
+export const dailyHours = time
+  .table(
+    "daily_hours",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      employeeId: uuid("employee_id")
+        .notNull()
+        .references(() => employees.id),
+      date: date("date", { mode: "string" }).notNull(),
+      minutes: integer("minutes").notNull(),
+      setBy: uuid("set_by").notNull(),
+      setAt: timestamp("set_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [uniqueIndex("daily_hours_unique_idx").on(t.employeeId, t.date), check("daily_hours_minutes_chk", sql`${t.minutes} between 1 and 960`)],
+  )
+  .enableRLS();
+
+/**
  * Make-up hours (strict time, 2026-11-24): someone who was absent or unavailable asks, BEFORE working it, to make up the missed time in
  * another window so they are not short. A lead approves. Time worked inside an approved window is straight time (never extra hours) and is
  * credited to the missed day it names. At most one live (waiting or approved) window can cover any moment of one person's time.

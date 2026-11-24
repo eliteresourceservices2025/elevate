@@ -6,7 +6,6 @@ import { useState, useTransition } from "react";
 import { toast } from "@/components/feedback-dialog";
 import { SelectField, TextField } from "@/components/form-fields";
 import { useFormDialog } from "@/components/form-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,6 +14,9 @@ import { replyIncident, reportIncident, setIncidentStatus, setPrivacyOfficer } f
 import { INCIDENT_KINDS, LIMITS, NO_PATIENT_DATA_WARNING, kindLabel, statusLabel } from "../constants";
 import type { IncidentDetail, IncidentRow } from "../queries";
 import { Alert } from "@/components/ui/alert";
+import { Inbox } from "lucide-react";
+import { EmptyState } from "@/components/empty-state";
+import { StatusChip } from "@/components/status-chip";
 
 const when = (iso: string) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -24,8 +26,8 @@ const blank = { kind: "wrong_recipient", happenedOn: "", ongoing: false, howFoun
 export function StatusBadge({ status, ongoing }: { status: string; ongoing?: boolean }) {
   return (
     <span className="inline-flex items-center gap-1.5">
-      <Badge variant={status === "closed" ? "outline" : "default"}>{statusLabel(status)}</Badge>
-      {ongoing ? <Badge variant="destructive">Ongoing</Badge> : null}
+      <StatusChip tone={status === "closed" ? "success" : status === "in_review" ? "info" : "warning"}>{statusLabel(status)}</StatusChip>
+      {ongoing ? <StatusChip tone="danger">Ongoing</StatusChip> : null}
     </span>
   );
 }
@@ -127,12 +129,12 @@ export function IncidentForm({ clients }: { clients: { id: string; name: string 
 
 /** A list of reports as links. The privacy team's version also shows who filed it and the client. */
 export function IncidentList({ rows, empty }: { rows: IncidentRow[]; empty: string }) {
-  if (rows.length === 0) return <p className="text-sm text-muted-foreground">{empty}</p>;
+  if (rows.length === 0) return <EmptyState icon={Inbox} title="Nothing here" description={empty} />;
   return (
-    <ul className="space-y-2">
+    <ul className="space-y-1.5">
       {rows.map((r) => (
         <li key={r.id}>
-          <Link href={`/incidents/${r.id}`} className="block space-y-1 rounded-lg border bg-card p-3 text-sm hover:bg-secondary/40">
+          <Link href={`/incidents/${r.id}`} className="block space-y-1 rounded-xl border bg-card p-3 text-sm outline-none transition-colors hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring">
             <span className="flex flex-wrap items-center gap-2">
               <span className="font-medium">{r.reference}</span>
               <span>{kindLabel(r.kind)}</span>

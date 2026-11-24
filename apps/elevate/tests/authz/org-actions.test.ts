@@ -39,6 +39,7 @@ const actionCases: { name: string; call: () => Promise<{ ok: boolean; error?: st
   { name: "setReporting", call: () => actions.setReporting({ employeeId: ID, managerId: OTHER, effectiveDate: today }), allowed: HR },
   { name: "setAttendanceLead", call: () => actions.setAttendanceLead({ employeeId: ID, leadEmployeeId: OTHER }), allowed: HR },
   { name: "setDailyCap", call: () => actions.setDailyCap({ employeeId: ID, minutes: 300 }), allowed: HR },
+  { name: "setDailyCaps", call: () => actions.setDailyCaps({ employeeIds: [ID], minutes: 300 }), allowed: HR },
   { name: "reassignReports", call: () => actions.reassignReports({ fromManagerId: ID, toManagerId: OTHER, effectiveDate: today }), allowed: HR },
 ];
 

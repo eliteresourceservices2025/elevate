@@ -58,6 +58,7 @@ const actionCases: { name: string; call: () => Promise<{ ok: boolean; error?: st
   { name: "requestEvidenceUpload", call: () => actions.requestEvidenceUpload({ mime: "image/png", size: 1000 }), allowed: EVERYONE },
   { name: "saveShiftNote", call: () => actions.saveShiftNote({ sessionId: ID, body: "Finished the inbox." }), allowed: EVERYONE },
   { name: "fileCorrectionForOthers", call: () => actions.fileCorrectionForOthers(claim), allowed: TEAM_OR_HR },
+  { name: "setDayHours", call: () => scheduleActions.setDayHours({ employeeIds: [ID], days: [{ date: "2026-12-01", minutes: 240 }] }), allowed: HR },
   { name: "assignSchedule", call: () => scheduleActions.assignSchedule({ employeeIds: [ID], effectiveFrom: "2026-10-01", startTime: "09:00", endTime: "17:00", weekdays: [1, 2, 3, 4, 5], breakMinutes: 60 }), allowed: HR },
   { name: "correctSchedule", call: () => scheduleActions.correctSchedule({ employeeId: ID, startTime: "08:00", endTime: "17:00", weekdays: [1, 2, 3, 4, 5], breakMinutes: 60, reason: "Two clients, one shift" }), allowed: HR },
   { name: "endSchedule", call: () => scheduleActions.endSchedule({ employeeId: ID, endDate: "2026-10-01" }), allowed: HR },

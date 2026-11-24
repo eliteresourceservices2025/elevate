@@ -1,17 +1,18 @@
 "use client";
+import { EvidenceGallery } from "@/components/reports/evidence-gallery";
+import { ReportInbox, type InboxRow } from "@/components/reports/report-inbox";
+import { ReportThread } from "@/components/reports/report-thread";
+import { StatusChip } from "@/components/status-chip";
 
 import { fromZonedTime } from "date-fns-tz";
 import { useState } from "react";
-import { toast } from "@/components/feedback-dialog";
 import { SelectField, TextField } from "@/components/form-fields";
 import { useFormDialogWork } from "@/components/form-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { formatInZone } from "@/lib/time";
 import { useRun } from "@/modules/recruiting/components/use-run";
-import { openEvidence } from "../actions";
 import { handleTechIssue, reportTechIssue } from "../issue-actions";
 import { EvidenceField, uploadEvidence } from "./evidence-field";
 import { ISSUE_KIND_LABELS } from "../issue-labels";
@@ -73,58 +74,90 @@ export function ReportIssueForm({ zone }: { zone: string }) {
   );
 }
 
-/** A list of reports: the person's own, or the queue a lead or HR handles (with a note and a "Mark as handled" button). */
-export function IssueList({ items, zone, mode, empty }: { items: IssueItem[]; zone: string; mode: "mine" | "queue"; empty: string }) {
+const ISSUE_GROUPS = [
+  { value: "open", label: "Waiting" },
+  { value: "done", label: "Handled" },
+];
+
+/** One report: what happened, its screenshots, the handler's note (and, for a handler, the button), and the conversation. */
+function IssueDetail({ item, zone, mode }: { item: IssueItem; zone: string; mode: "mine" | "queue" }) {
   const { run, pending } = useRun();
-  const [notes, setNotes] = useState<Record<string, string>>({});
-  const open = async (evidenceId: string) => {
-    const result = await openEvidence({ evidenceId });
-    if (!result.ok) return void toast.error(result.error);
-    window.open(result.data.url, "_blank", "noopener,noreferrer");
-  };
-  if (items.length === 0) return <p className="rounded-2xl border border-dashed p-6 text-center text-sm text-muted-foreground">{empty}</p>;
+  const [note, setNote] = useState("");
   return (
-    <ul className="space-y-3">
-      {items.map((i) => (
-        <li key={i.id} className="space-y-2 rounded-xl border bg-card p-4 shadow-sm">
-          <div className="flex flex-wrap items-center gap-2">
-            {mode === "queue" && i.employeeName ? <span className="font-medium">{i.employeeName}</span> : null}
-            <Badge variant="outline">{ISSUE_KIND_LABELS[i.kind as keyof typeof ISSUE_KIND_LABELS] ?? i.kind}</Badge>
-            <Badge variant={i.status === "open" ? "secondary" : "default"}>{i.status === "open" ? "Waiting" : "Handled"}</Badge>
-            <span className="text-xs text-muted-foreground">Started {formatInZone(new Date(i.happenedAt).getTime(), zone, "MMM d, h:mm a")}</span>
-          </div>
-          <p className="whitespace-pre-wrap text-sm">{i.details}</p>
-          {i.evidence.length > 0 ? (
+    <div className="space-y-4">
+      <div className="space-y-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-lg font-semibold">{mode === "queue" && item.employeeName ? item.employeeName : "Your report"}</h2>
+          <StatusChip tone={item.status === "open" ? "warning" : "success"}>{item.status === "open" ? "Waiting" : "Handled"}</StatusChip>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          {ISSUE_KIND_LABELS[item.kind as keyof typeof ISSUE_KIND_LABELS] ?? item.kind} · started {formatInZone(new Date(item.happenedAt).getTime(), zone, "MMM d, h:mm a")}
+        </p>
+      </div>
+      <p className="whitespace-pre-wrap text-sm">{item.details}</p>
+      <EvidenceGallery evidence={item.evidence} />
+      {item.status === "handled" && item.handlingNote ? <p className="rounded-lg bg-muted/50 p-2 text-sm">Handled: {item.handlingNote}</p> : null}
+      <ReportThread key={item.id} type="tech_issue" id={item.id} />
+      {mode === "queue" && item.canHandle ? (
+        <div className="space-y-2 border-t pt-3">
+          <Label htmlFor={`ti-note-${item.id}`} className="text-xs">
+            Note for them (optional)
+          </Label>
+          <Textarea id={`ti-note-${item.id}`} rows={2} maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} />
+          <Button type="button" size="sm" disabled={pending} onClick={() => run(() => handleTechIssue({ issueId: item.id, note }), "Marked as handled.")}>
+            Mark as handled
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** The reports: the person's own, or the queue a lead or HR handles. Compact is the short list on My time (no filters, no panel). */
+export function IssueList({ items, zone, mode, empty, compact = false }: { items: IssueItem[]; zone: string; mode: "mine" | "queue"; empty: string; compact?: boolean }) {
+  if (compact) {
+    if (items.length === 0) return <p className="rounded-2xl border border-dashed p-6 text-center text-sm text-muted-foreground">{empty}</p>;
+    return (
+      <ul className="space-y-2">
+        {items.map((i) => (
+          <li key={i.id} className="space-y-1 rounded-xl border bg-card p-3">
             <div className="flex flex-wrap items-center gap-2">
-              {i.evidence.map((ev, n) =>
-                ev.purged ? (
-                  <span key={ev.id} className="text-xs text-muted-foreground">
-                    Screenshot {n + 1} was deleted after 90 days
-                  </span>
-                ) : (
-                  <Button key={ev.id} size="sm" variant="outline" type="button" onClick={() => void open(ev.id)}>
-                    View screenshot {n + 1}
-                  </Button>
-                ),
-              )}
+              <span className="text-sm font-medium">{ISSUE_KIND_LABELS[i.kind as keyof typeof ISSUE_KIND_LABELS] ?? i.kind}</span>
+              <StatusChip tone={i.status === "open" ? "warning" : "success"}>{i.status === "open" ? "Waiting" : "Handled"}</StatusChip>
+              <span className="text-xs text-muted-foreground">{formatInZone(new Date(i.happenedAt).getTime(), zone, "MMM d, h:mm a")}</span>
             </div>
-          ) : null}
-          {i.status === "handled" && i.handlingNote ? <p className="rounded-lg bg-muted/50 p-2 text-sm">{i.handlingNote}</p> : null}
-          {mode === "queue" && i.canHandle ? (
-            <div className="flex flex-wrap items-end gap-2">
-              <div className="min-w-64 flex-1 space-y-1">
-                <Label htmlFor={`ti-note-${i.id}`} className="text-xs">
-                  Note for them (optional)
-                </Label>
-                <Textarea id={`ti-note-${i.id}`} rows={2} maxLength={500} value={notes[i.id] ?? ""} onChange={(e) => setNotes((n) => ({ ...n, [i.id]: e.target.value }))} />
-              </div>
-              <Button type="button" size="sm" disabled={pending} onClick={() => run(() => handleTechIssue({ issueId: i.id, note: notes[i.id] ?? "" }), "Marked as handled.")}>
-                Mark as handled
-              </Button>
-            </div>
-          ) : null}
-        </li>
-      ))}
-    </ul>
+            <p className="line-clamp-2 text-sm text-muted-foreground">{i.details}</p>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+  const rows: InboxRow[] = items.map((i) => {
+    const kind = ISSUE_KIND_LABELS[i.kind as keyof typeof ISSUE_KIND_LABELS] ?? i.kind;
+    const who = mode === "queue" && i.employeeName ? i.employeeName : kind;
+    return {
+      id: i.id,
+      title: who,
+      subtitle: mode === "queue" ? `${kind}: ${i.details}` : i.details,
+      when: formatInZone(new Date(i.createdAt).getTime(), zone, "MMM d"),
+      sortMs: new Date(i.createdAt).getTime(),
+      status: { label: i.status === "open" ? "Waiting" : "Handled", tone: i.status === "open" ? "warning" : "success" },
+      group: i.status === "open" ? "open" : "done",
+      evidence: i.evidence.length,
+      messages: i.messageCount,
+      search: `${who} ${kind} ${i.details}`,
+    };
+  });
+  const byId = new Map(items.map((i) => [i.id, i]));
+  return (
+    <ReportInbox
+      rows={rows}
+      groups={ISSUE_GROUPS}
+      defaultGroup={mode === "queue" ? "open" : "all"}
+      label="technical issues"
+      emptyTitle={mode === "queue" ? "Nothing is waiting" : "No reports yet"}
+      emptyText={empty}
+      renderDetail={(id) => <IssueDetail item={byId.get(id)!} zone={zone} mode={mode} />}
+    />
   );
 }

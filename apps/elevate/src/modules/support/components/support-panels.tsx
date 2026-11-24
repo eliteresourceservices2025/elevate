@@ -4,9 +4,10 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { useFormDialog } from "@/components/form-dialog";
 import { toast } from "@/components/feedback-dialog";
-import { ClientPager, usePaged } from "@/components/client-pager";
+import { ReportInbox, type InboxRow } from "@/components/reports/report-inbox";
+import { ReportThread } from "@/components/reports/report-thread";
+import { StatusChip } from "@/components/status-chip";
 import { SelectField, TextField } from "@/components/form-fields";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -87,15 +88,18 @@ export function SupportForm({ page, email }: { page: string | null; email: strin
   );
 }
 
-/** A list of requests: the person's own (read only) or the inbox (HR and Super Admin can mark them handled). */
-export function SupportList({ rows, canManage, empty }: { rows: SupportRow[]; canManage: boolean; empty: string }) {
+const SUPPORT_GROUPS = [
+  { value: "open", label: "Open" },
+  { value: "done", label: "Handled" },
+];
+
+function SupportDetail({ row, canManage }: { row: SupportRow; canManage: boolean }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const paged = usePaged(rows, String(rows.length));
-  const act = (id: string, reopen: boolean) =>
+  const act = (reopen: boolean) =>
     startTransition(async () => {
       try {
-        const result = await closeSupportRequest({ id, reopen });
+        const result = await closeSupportRequest({ id: row.id, reopen });
         if (!result.ok) return void toast.error(result.error);
         toast.success(reopen ? "Reopened." : "Marked as handled.");
         router.refresh();
@@ -103,31 +107,55 @@ export function SupportList({ rows, canManage, empty }: { rows: SupportRow[]; ca
         toast.error("No connection. Try again.");
       }
     });
-  if (rows.length === 0) return <p className="text-sm text-muted-foreground">{empty}</p>;
   return (
-    <div className="space-y-3">
-      <ul className="space-y-2">
-        {paged.rows.map((r) => (
-          <li key={r.id} className="space-y-1 rounded-lg border bg-card p-3 text-sm">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-medium">{r.subject}</span>
-              <Badge variant={r.status === "open" ? "default" : "outline"}>{r.status === "open" ? "Open" : "Handled"}</Badge>
-              <span className="text-xs text-muted-foreground">
-                {topicLabel(r.topic)} · {when(r.createdAt)}
-                {r.from ? ` · ${r.from}` : ""}
-              </span>
-            </div>
-            <p className="whitespace-pre-wrap text-muted-foreground">{r.message}</p>
-            {r.page ? <p className="text-xs text-muted-foreground">Page: {r.page}</p> : null}
-            {canManage ? (
-              <Button size="xs" variant="outline" disabled={pending} onClick={() => act(r.id, r.status === "closed")}>
-                {r.status === "open" ? "Mark as handled" : "Reopen"}
-              </Button>
-            ) : null}
-          </li>
-        ))}
-      </ul>
-      <ClientPager info={paged.info} onPage={paged.setPage} onSize={paged.setPageSize} label="requests" />
+    <div className="space-y-4">
+      <div className="space-y-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-lg font-semibold">{row.subject}</h2>
+          <StatusChip tone={row.status === "open" ? "warning" : "success"}>{row.status === "open" ? "Open" : "Handled"}</StatusChip>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          {topicLabel(row.topic)} · {when(row.createdAt)}
+          {row.from ? ` · ${row.from}` : ""}
+        </p>
+      </div>
+      <p className="whitespace-pre-wrap text-sm">{row.message}</p>
+      {row.page ? <p className="text-xs text-muted-foreground">Page: {row.page}</p> : null}
+      <ReportThread key={row.id} type="support" id={row.id} />
+      {canManage ? (
+        <div className="border-t pt-3">
+          <Button size="sm" variant={row.status === "open" ? "default" : "outline"} disabled={pending} onClick={() => act(row.status === "closed")}>
+            {row.status === "open" ? "Mark as handled" : "Reopen"}
+          </Button>
+        </div>
+      ) : null}
     </div>
+  );
+}
+
+/** The requests: the person's own, or the inbox (HR and Super Admin read, write back and mark them handled). */
+export function SupportList({ rows, canManage, empty }: { rows: SupportRow[]; canManage: boolean; empty: string }) {
+  const items: InboxRow[] = rows.map((r) => ({
+    id: r.id,
+    title: canManage && r.from ? r.from : r.subject,
+    subtitle: canManage ? `${r.subject}: ${r.message}` : r.message,
+    when: new Date(r.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+    sortMs: new Date(r.createdAt).getTime(),
+    status: { label: r.status === "open" ? "Open" : "Handled", tone: r.status === "open" ? "warning" : "success" },
+    group: r.status === "open" ? "open" : "done",
+    messages: r.messageCount,
+    search: `${r.subject} ${r.message} ${r.from ?? ""} ${topicLabel(r.topic)}`,
+  }));
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  return (
+    <ReportInbox
+      rows={items}
+      groups={SUPPORT_GROUPS}
+      defaultGroup={canManage ? "open" : "all"}
+      label="support requests"
+      emptyTitle={canManage ? "Nothing is waiting" : "No requests yet"}
+      emptyText={empty}
+      renderDetail={(id) => <SupportDetail row={byId.get(id)!} canManage={canManage} />}
+    />
   );
 }

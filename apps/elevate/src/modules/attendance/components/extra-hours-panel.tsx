@@ -1,4 +1,6 @@
 "use client";
+import { ThreadToggle } from "@/components/reports/report-thread";
+import { EvidenceGallery } from "@/components/reports/evidence-gallery";
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -12,7 +14,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { formatInZone } from "@/lib/time";
-import { openEvidence } from "../actions";
 import { answerExtraHours, cancelExtraHours, decideExtraHours, fileExtraHoursFor, requestExtraEvidenceUpload, requestExtraHours } from "../extra-hours-actions";
 import type { ExtraItem, MyExtraHours } from "../extra-hours-queries";
 import type { FilablePerson } from "../queries";
@@ -236,11 +237,6 @@ function Items({ items, zone, mode, empty }: { items: ExtraItem[]; zone: string;
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [edit, setEdit] = useState<Record<string, { start: string; end: string }>>({});
   const paged = usePaged(items, "", 10);
-  const open = async (evidenceId: string) => {
-    const result = await openEvidence({ evidenceId });
-    if (!result.ok) return void toast.error(result.error);
-    window.open(result.data.url, "_blank", "noopener,noreferrer");
-  };
   if (items.length === 0) return <p className="text-muted-foreground">{empty}</p>;
   return (
     <div className="space-y-3">
@@ -269,21 +265,8 @@ function Items({ items, zone, mode, empty }: { items: ExtraItem[]; zone: string;
               {r.confirmedByPhone ? " Confirmed with the client by phone." : ""}
             </p>
             {r.decisionNote ? <p className="text-sm">Note: {r.decisionNote}</p> : null}
-            {r.evidence.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {r.evidence.map((ev, i) =>
-                  ev.purged ? (
-                    <span key={ev.id} className="text-xs text-muted-foreground">
-                      Screenshot {i + 1} was deleted after 90 days
-                    </span>
-                  ) : (
-                    <Button key={ev.id} size="sm" variant="outline" onClick={() => void open(ev.id)}>
-                      View screenshot {i + 1}
-                    </Button>
-                  ),
-                )}
-              </div>
-            ) : null}
+            <EvidenceGallery evidence={r.evidence} />
+            <ThreadToggle type="extra_hours" id={r.id} />
 
             {r.needsMyAnswer ? (
               <div className="flex flex-wrap items-end gap-2">

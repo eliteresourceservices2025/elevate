@@ -4,9 +4,15 @@ import { authorize } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { users } from "@/modules/core/schema";
+import { reportThreadCounts } from "@/modules/reports/queries";
 import { supportRequests } from "./schema";
 
-export type SupportRow = { id: string; topic: string; subject: string; message: string; page: string | null; status: "open" | "closed"; emailed: boolean; createdAt: string; closedAt: string | null; from: string | null };
+async function withCounts(rows: SupportRow[]): Promise<SupportRow[]> {
+  const counts = await reportThreadCounts("support", rows.map((r) => r.id));
+  return rows.map((r) => ({ ...r, messageCount: counts.get(r.id) ?? 0 }));
+}
+
+export type SupportRow = { id: string; topic: string; subject: string; message: string; page: string | null; status: "open" | "closed"; emailed: boolean; messageCount: number; createdAt: string; closedAt: string | null; from: string | null };
 
 /** Count only, for an authorized handler's navigation badge. */
 export async function countOpenSupportRequests(): Promise<number> {
@@ -24,6 +30,7 @@ const toRow = (r: { id: string; topic: string; subject: string; message: string;
   page: r.page,
   status: r.status === "closed" ? "closed" : "open",
   emailed: r.emailed,
+  messageCount: 0,
   createdAt: r.createdAt.toISOString(),
   closedAt: r.closedAt ? r.closedAt.toISOString() : null,
   from,
@@ -34,7 +41,7 @@ export async function listMySupportRequests(): Promise<SupportRow[]> {
   const user = await requireUser();
   await authorize(user, "support.create", { ownerUserId: user.id });
   const rows = await db.select().from(supportRequests).where(eq(supportRequests.userId, user.id)).orderBy(desc(supportRequests.createdAt)).limit(50);
-  return rows.map((r) => toRow(r, null));
+  return withCounts(rows.map((r) => toRow(r, null)));
 }
 
 /** Everyone's requests, open first (HR and Super Admin). */
@@ -47,5 +54,5 @@ export async function listSupportInbox(): Promise<SupportRow[]> {
     .innerJoin(users, eq(users.id, supportRequests.userId))
     .orderBy(sql`${supportRequests.status} = 'closed'`, desc(supportRequests.createdAt))
     .limit(300);
-  return rows.map((x) => toRow(x.r, x.name ? `${x.name} (${x.email})` : x.email));
+  return withCounts(rows.map((x) => toRow(x.r, x.name ? `${x.name} (${x.email})` : x.email)));
 }

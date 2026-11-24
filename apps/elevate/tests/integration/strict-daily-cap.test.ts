@@ -69,3 +69,43 @@ describe("setDailyCap", () => {
     expect(again.current).toBeNull();
   });
 });
+
+describe("setDailyCaps (several people at once, from the Set a schedule form)", () => {
+  async function another(label: string) {
+    const user = await makeUser(label, ["employee"]);
+    const [e] = await rows<{ id: string }>(sql`insert into core.employees (legal_first_name, legal_last_name, work_email, status, user_id) values (${label}, ${uniq("Aab")}, ${user.email}, 'active', ${user.id}) returning id`);
+    return { user, employeeId: e.id };
+  }
+  const capOf = async (id: string) => (await rows<{ daily_cap_minutes: number | null }>(sql`select daily_cap_minutes from core.employees where id = ${id}`))[0].daily_cap_minutes;
+
+  it("sets the same daily hours for everyone picked, one audit row each, and clears them again", async () => {
+    const a = await another("capA");
+    const b = await another("capB");
+    current.user = hr;
+    expect(await orgActions.setDailyCaps({ employeeIds: [a.employeeId, b.employeeId], minutes: 300 })).toEqual({ ok: true, data: { changed: 2 } });
+    expect([await capOf(a.employeeId), await capOf(b.employeeId)]).toEqual([300, 300]);
+    const audit = await rows(sql`select 1 from ops.audit_log where action = 'employee.daily_cap' and target_id in (${a.employeeId}, ${b.employeeId})`);
+    expect(audit).toHaveLength(2);
+    // someone already at that value is skipped, not an error
+    expect(await orgActions.setDailyCaps({ employeeIds: [a.employeeId, b.employeeId], minutes: 300 })).toEqual({ ok: true, data: { changed: 0 } });
+    expect(await orgActions.setDailyCaps({ employeeIds: [a.employeeId], minutes: null })).toEqual({ ok: true, data: { changed: 1 } });
+    expect(await capOf(a.employeeId)).toBeNull();
+  });
+
+  it("is all or nothing: one person who is not found stops the whole change", async () => {
+    const a = await another("capC");
+    current.user = hr;
+    const r = await orgActions.setDailyCaps({ employeeIds: [a.employeeId, randomUUID()], minutes: 360 });
+    expect(r.ok).toBe(false);
+    expect(await capOf(a.employeeId)).toBeNull();
+  });
+
+  it("refuses a bad number of hours, nobody picked, and anyone who is not HR", async () => {
+    const a = await another("capD");
+    current.user = hr;
+    for (const minutes of [0, 961, 2.5]) expect((await orgActions.setDailyCaps({ employeeIds: [a.employeeId], minutes })).ok).toBe(false);
+    expect((await orgActions.setDailyCaps({ employeeIds: [], minutes: 300 })).ok).toBe(false);
+    current.user = a.user;
+    expect(await orgActions.setDailyCaps({ employeeIds: [a.employeeId], minutes: 300 })).toEqual({ ok: false, error: "You do not have access to do that." });
+  });
+});

@@ -270,6 +270,8 @@ test("a time claim with a screenshot is reviewed by the lead, who can open the p
   const leadPage = await (await browser.newContext()).newPage();
   await signInEnrollingMfa(leadPage, lead);
   await leadPage.goto("/attendance?tab=corrections");
+  // The requests are a list with the chosen one open beside it
+  await leadPage.getByRole("button").filter({ hasText: "Waiting" }).first().click();
   await expect(leadPage.getByText("I started work but forgot to clock in")).toBeVisible(slow);
   await expect(leadPage.getByRole("button", { name: "View screenshot 1" })).toBeVisible();
   await (await hydrated(leadPage.getByRole("button", { name: "Approve" }))).click();

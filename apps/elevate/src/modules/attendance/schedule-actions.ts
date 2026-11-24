@@ -13,11 +13,11 @@ import { reportName, todayInZone } from "@/modules/org/service";
 import { employees } from "@/modules/people/schema";
 import { addDays, describeSchedule, hoursOverlap } from "./schedule";
 import { assignedToClient } from "./extra-hours-service";
-import { schedules } from "./schema";
+import { dailyHours, schedules } from "./schema";
 import { defaultScheduleZone, loadSchedules } from "./schedule-service";
 import { lockEmployeeClock } from "./service";
 import { rebuildAttendanceDays } from "./jobs";
-import { assignScheduleSchema, correctScheduleSchema, endScheduleSchema, endSchedulesSchema } from "./validators";
+import { assignScheduleSchema, correctScheduleSchema, endScheduleSchema, endSchedulesSchema, setDayHoursSchema } from "./validators";
 
 // HR (and Super Admin) set shifts. Leads and people read them. Every change is a dated row; the past is never edited.
 
@@ -260,5 +260,51 @@ export async function endSchedule(input: unknown): Promise<ActionResult> {
     }
     refresh();
     return { ok: true, data: undefined };
+  });
+}
+
+const DAY_HOURS_BACK = 31;
+const DAY_HOURS_AHEAD = 120;
+
+/**
+ * HR sets the hours of specific days for people with no fixed schedule (a contractor who works 4 hours today and other hours tomorrow): the clock
+ * stops after that many hours that day, the extra hours prompt follows it and make-up hours count it. A day with minutes null goes back to their
+ * usual hours per day. All or nothing: someone not found stops the whole change. One audit row per person says how many days, never the hours.
+ */
+export async function setDayHours(input: unknown): Promise<ActionResult<{ changed: number }>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "schedules.manage");
+    const parsed = setDayHoursSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const { days } = parsed.data;
+    const ids = [...new Set(parsed.data.employeeIds)];
+    const today = todayInZone();
+    if (days.some((d) => d.date < addDays(today, -DAY_HOURS_BACK) || d.date > addDays(today, DAY_HOURS_AHEAD))) return fail(`Choose days from the last ${DAY_HOURS_BACK} days to the next ${DAY_HOURS_AHEAD} days.`);
+
+    let changed = 0;
+    await db.transaction(async (tx) => {
+      for (const employeeId of ids) {
+        const [person] = await tx.select({ id: employees.id }).from(employees).where(and(eq(employees.id, employeeId), isNull(employees.archivedAt), sql`${employees.status} <> 'separated'`));
+        if (!person) throw new ActionFailure("One of those people was not found.");
+        let touched = 0;
+        for (const d of days) {
+          const [row] = await tx.select({ minutes: dailyHours.minutes }).from(dailyHours).where(and(eq(dailyHours.employeeId, employeeId), eq(dailyHours.date, d.date)));
+          if (d.minutes === null) {
+            if (!row) continue;
+            await tx.delete(dailyHours).where(and(eq(dailyHours.employeeId, employeeId), eq(dailyHours.date, d.date)));
+          } else if (!row) {
+            await tx.insert(dailyHours).values({ employeeId, date: d.date, minutes: d.minutes, setBy: actor.id });
+          } else if (row.minutes !== d.minutes) {
+            await tx.update(dailyHours).set({ minutes: d.minutes, setBy: actor.id, setAt: new Date() }).where(and(eq(dailyHours.employeeId, employeeId), eq(dailyHours.date, d.date)));
+          } else continue;
+          touched += 1;
+        }
+        if (touched > 0) await writeAudit({ actor, action: "schedule.day_hours", targetType: "employee", targetId: employeeId, metadata: { days: touched, bulk: ids.length } }, tx);
+        changed += touched;
+      }
+    });
+    refresh();
+    return { ok: true, data: { changed } };
   });
 }

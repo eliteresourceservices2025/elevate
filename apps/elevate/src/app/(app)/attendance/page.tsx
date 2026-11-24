@@ -124,7 +124,7 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <h2 className="text-lg font-semibold">My technical issue reports</h2>
                 </div>
-                {myIssues ? <IssueList items={myIssues.items.slice(0, 5)} zone={myIssues.zone} mode="mine" empty="You have not reported any technical issues." /> : null}
+                {myIssues ? <IssueList items={myIssues.items.slice(0, 5)} zone={myIssues.zone} mode="mine" compact empty="You have not reported any technical issues." /> : null}
                 {myIssues && myIssues.items.length > 5 ? (
                   <p className="text-sm">
                     <Link href="/attendance?tab=issues" className="text-primary underline-offset-4 hover:underline">

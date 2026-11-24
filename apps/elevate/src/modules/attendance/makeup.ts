@@ -42,3 +42,14 @@ export function absenceDateProblem(absenceDate: string, today: string): string |
   if (days > MAKEUP_DAYS_BACK) return `Make-up hours can only cover the last ${MAKEUP_DAYS_BACK} days.`;
   return null;
 }
+
+/**
+ * What a day expected of the person, in minutes, or null when it expected nothing (nothing to make up). With a shift that is the shift's scheduled
+ * minutes. With no schedule at all (HR, leads, executives and recruiters usually have none) a weekday expects the person's daily hours
+ * (`capMinutes`: HR's per-person setting, else the company default) and a weekend nothing. A rest day of someone who does have a schedule expects nothing.
+ */
+export function expectedMinutesOn(input: { scheduledMinutes: number | null; hasSchedule: boolean; isoWeekday: number; capMinutes: number }): number | null {
+  if (input.scheduledMinutes !== null) return input.scheduledMinutes;
+  if (input.hasSchedule) return null;
+  return input.isoWeekday <= 5 ? input.capMinutes : null;
+}
