@@ -48,3 +48,7 @@ Day-by-client schedules (one shift per client on different days), and the in-app
 
 ## Related, outside the app
 `apps/elevate/scripts/schedule-import-*.ts` and `rebuild-historical-october.mts` are the guarded command-line importer used for the October 2026 backfill (runbook 5b7a and 5b7b). They share the same reading and matching ideas; the in-app version replaces them for future sheets.
+
+## Per-client schedules (2026-11-24)
+
+The import still creates general (no-client) schedules only. A person can now have one schedule per client (with the client's allotted hours); HR sets those on the Schedules page by hand. A general schedule and client schedules of the same person must not overlap in hours.
