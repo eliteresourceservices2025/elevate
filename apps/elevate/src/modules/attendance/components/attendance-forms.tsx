@@ -1,4 +1,5 @@
 "use client";
+import { EvidenceGallery } from "@/components/reports/evidence-gallery";
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -16,7 +17,7 @@ import { DEFAULT_TIMEZONE, formatInZone } from "@/lib/time";
 import { createMyProfile } from "@/modules/people/actions";
 import { claimMyProfile } from "@/modules/people/duplicates-actions";
 import { EvidenceField, uploadEvidence } from "./evidence-field";
-import { cancelCorrection, decideCorrection, fileCorrectionForOthers, openEvidence, requestCorrection, saveClockRules, savePreferences, saveShiftNote } from "../actions";
+import { cancelCorrection, decideCorrection, fileCorrectionForOthers, requestCorrection, saveClockRules, savePreferences, saveShiftNote } from "../actions";
 import { EOD_TEMPLATE } from "../clock";
 import type { CorrectionItem, FilablePerson, RulesRow } from "../queries";
 import { useAsk } from "@/components/confirm-dialog";
@@ -239,11 +240,6 @@ export function CorrectionList({ items, zone, mode, empty }: { items: Correction
   /** Local times the reviewer typed to change a request before approving it. */
   const [adjust, setAdjust] = useState<Record<string, string[]>>({});
   const paged = usePaged(items, "", 10);
-  const open = async (evidenceId: string) => {
-    const result = await openEvidence({ evidenceId });
-    if (!result.ok) return void toast.error(result.error);
-    window.open(result.data.url, "_blank", "noopener,noreferrer");
-  };
   if (items.length === 0) return <p className="rounded-2xl border border-dashed p-6 text-center text-sm text-muted-foreground">{empty}</p>;
   return (
     <div className="space-y-3">
@@ -280,21 +276,7 @@ export function CorrectionList({ items, zone, mode, empty }: { items: Correction
           ) : null}
           <p className="text-sm text-muted-foreground">{c.reason}</p>
           {c.origin === "jibble" ? <p className="text-xs text-muted-foreground">System proposal based on a Jibble time entry; HR approval is required.</p> : c.filedBy ? <p className="text-xs text-muted-foreground">Filed for them by {c.filedBy}.</p> : null}
-          {c.evidence.length > 0 ? (
-            <div className="flex flex-wrap items-center gap-2">
-              {c.evidence.map((ev, i) =>
-                ev.purged ? (
-                  <span key={ev.id} className="text-xs text-muted-foreground">
-                    Screenshot {i + 1} was deleted after 90 days
-                  </span>
-                ) : (
-                  <Button key={ev.id} size="sm" variant="outline" onClick={() => void open(ev.id)}>
-                    View screenshot {i + 1}
-                  </Button>
-                ),
-              )}
-            </div>
-          ) : null}
+          <EvidenceGallery evidence={c.evidence} />
           {c.decisionNote ? <p className="text-sm">Note: {c.decisionNote}</p> : null}
           {mode === "queue" && c.canDecide ? (
             <div className="space-y-2">

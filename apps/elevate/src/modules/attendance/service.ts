@@ -8,6 +8,7 @@ import { formatInZone, resolveTimeZone } from "@/lib/time";
 import { writeAudit } from "@/modules/audit/write";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { hrUserIds, notify } from "@/modules/notifications/service";
+import { authorize, can, type AuthzUser } from "@/lib/authz";
 import { timeChainUserIds, reportName } from "@/modules/org/service";
 import { selfTestEmails } from "@/modules/jibble/client";
 import { trackerReplacesJibble } from "@/modules/jibble/applies";
@@ -389,6 +390,31 @@ export async function issueEvidenceTicket(employeeId: string, uploadedBy: string
   const { token } = await getDocumentStorage().createSignedUpload(BUCKETS.employee, path);
   const [row] = await db.insert(correctionEvidence).values({ employeeId, storagePath: path, mime, uploadedBy }).returning({ id: correctionEvidence.id });
   return { id: row.id, path, token };
+}
+
+export type EvidenceView = { id: string; employeeId: string; storagePath: string; mime: string; correctionId: string | null; extraRequestId: string | null; issueId: string | null; leaveRequestId: string | null };
+
+/**
+ * Who may see a screenshot, shared by the download link (`openEvidence`) and the in-page picture route: the person who sent it, their lead
+ * (the time chain, or the time-off chain for a time-off request's proof) and HR. Throws ForbiddenError without access and ActionFailure when the
+ * file is gone. The rate limit is the caller's.
+ */
+export async function authorizeEvidenceView(actor: AuthzUser, evidenceId: string): Promise<EvidenceView> {
+  const [ev] = await db.select().from(correctionEvidence).where(eq(correctionEvidence.id, evidenceId)).limit(1);
+  if (!ev || (!ev.correctionId && !ev.extraRequestId && !ev.issueId && !ev.leaveRequestId) || ev.purgedAt) throw new ActionFailure("That screenshot is no longer available.");
+  const [person] = await db.select({ userId: employees.userId }).from(employees).where(eq(employees.id, ev.employeeId));
+  if (ev.leaveRequestId) {
+    // A time off request's proof: the person, their lead (the time-off chain) and HR.
+    if (person?.userId === actor.id) await authorize(actor, "timeoff.request", { ownerUserId: actor.id });
+    else if (!can(actor, "timeoff.approve", { ownerUserId: person?.userId ?? undefined, managerChainUserIds: await timeChainUserIds(db, ev.employeeId) })) await authorize(actor, "timeoff.approve_final");
+  } else if (person?.userId === actor.id) await authorize(actor, "attendance.request_correction", { ownerUserId: actor.id });
+  else await authorize(actor, "attendance.approve_correction", { ownerUserId: person?.userId ?? undefined, managerChainUserIds: await timeChainUserIds(db, ev.employeeId) });
+  return { id: ev.id, employeeId: ev.employeeId, storagePath: ev.storagePath, mime: ev.mime, correctionId: ev.correctionId, extraRequestId: ev.extraRequestId, issueId: ev.issueId, leaveRequestId: ev.leaveRequestId };
+}
+
+/** Audits one full-size open of a screenshot (ids only, never the picture). */
+export async function auditEvidenceView(actor: AuthzUser & { email?: string }, ev: EvidenceView): Promise<void> {
+  await writeAudit({ actor: { id: actor.id, email: actor.email ?? "" }, action: "clock.evidence_view", targetType: "employee", targetId: ev.employeeId, metadata: { evidenceId: ev.id, correctionId: ev.correctionId, extraRequestId: ev.extraRequestId, issueId: ev.issueId, leaveRequestId: ev.leaveRequestId } });
 }
 
 /** Attaches screenshots that were just verified (verifyEvidence) to a time off request. Call inside the transaction that creates the request. */

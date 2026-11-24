@@ -1,8 +1,8 @@
 "use client";
+import { EvidenceGallery } from "@/components/reports/evidence-gallery";
 
 import { fromZonedTime } from "date-fns-tz";
 import { useState } from "react";
-import { toast } from "@/components/feedback-dialog";
 import { SelectField, TextField } from "@/components/form-fields";
 import { useFormDialogWork } from "@/components/form-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +11,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { formatInZone } from "@/lib/time";
 import { useRun } from "@/modules/recruiting/components/use-run";
-import { openEvidence } from "../actions";
 import { handleTechIssue, reportTechIssue } from "../issue-actions";
 import { EvidenceField, uploadEvidence } from "./evidence-field";
 import { ISSUE_KIND_LABELS } from "../issue-labels";
@@ -77,11 +76,6 @@ export function ReportIssueForm({ zone }: { zone: string }) {
 export function IssueList({ items, zone, mode, empty }: { items: IssueItem[]; zone: string; mode: "mine" | "queue"; empty: string }) {
   const { run, pending } = useRun();
   const [notes, setNotes] = useState<Record<string, string>>({});
-  const open = async (evidenceId: string) => {
-    const result = await openEvidence({ evidenceId });
-    if (!result.ok) return void toast.error(result.error);
-    window.open(result.data.url, "_blank", "noopener,noreferrer");
-  };
   if (items.length === 0) return <p className="rounded-2xl border border-dashed p-6 text-center text-sm text-muted-foreground">{empty}</p>;
   return (
     <ul className="space-y-3">
@@ -94,21 +88,7 @@ export function IssueList({ items, zone, mode, empty }: { items: IssueItem[]; zo
             <span className="text-xs text-muted-foreground">Started {formatInZone(new Date(i.happenedAt).getTime(), zone, "MMM d, h:mm a")}</span>
           </div>
           <p className="whitespace-pre-wrap text-sm">{i.details}</p>
-          {i.evidence.length > 0 ? (
-            <div className="flex flex-wrap items-center gap-2">
-              {i.evidence.map((ev, n) =>
-                ev.purged ? (
-                  <span key={ev.id} className="text-xs text-muted-foreground">
-                    Screenshot {n + 1} was deleted after 90 days
-                  </span>
-                ) : (
-                  <Button key={ev.id} size="sm" variant="outline" type="button" onClick={() => void open(ev.id)}>
-                    View screenshot {n + 1}
-                  </Button>
-                ),
-              )}
-            </div>
-          ) : null}
+          <EvidenceGallery evidence={i.evidence} />
           {i.status === "handled" && i.handlingNote ? <p className="rounded-lg bg-muted/50 p-2 text-sm">{i.handlingNote}</p> : null}
           {mode === "queue" && i.canHandle ? (
             <div className="flex flex-wrap items-end gap-2">
