@@ -34,7 +34,7 @@ export default async function TrackerDownloadPage({ searchParams }: PageProps<"/
         </Alert>
       ) : null}
 
-      <DownloadHero os={os} current={data.current} zone={zone} />
+      <DownloadHero os={os} releases={data.releases} zone={zone} />
 
       <section aria-label="Install in three steps" className="space-y-3 rounded-2xl border bg-card p-5">
         <h2 className="text-lg font-semibold">Install in three steps</h2>

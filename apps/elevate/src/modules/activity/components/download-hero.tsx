@@ -4,7 +4,7 @@ import { EmptyState } from "@/components/empty-state";
 import { buttonVariants } from "@/components/ui/button";
 import { formatInZone } from "@/lib/time";
 import { cn } from "@/lib/utils";
-import { PLATFORMS, formatBytes, platformsFor, type Platform } from "../releases-logic";
+import { PLATFORMS, formatBytes, newestWithInstaller, platformsFor, type Platform } from "../releases-logic";
 import type { PublishedRelease } from "../releases-service";
 
 const LABEL: Record<Platform, string> = {
@@ -17,8 +17,8 @@ const LABEL: Record<Platform, string> = {
  * The download buttons. The visitor's computer picks the primary one; a platform with no installer is said to be unavailable rather than
  * linked (no dead link). The link goes to our own signed-in route, never a storage address, and no file name or path is shown.
  */
-export function DownloadHero({ os, current, zone }: { os: "windows" | "mac" | "other"; current: PublishedRelease | null; zone: string }) {
-  if (!current) return <EmptyState icon={Download} title="The app is not ready to download yet" description="When HR publishes the first version, it appears here." />;
+export function DownloadHero({ os, releases, zone }: { os: "windows" | "mac" | "other"; releases: PublishedRelease[]; zone: string }) {
+  if (releases.length === 0) return <EmptyState icon={Download} title="The app is not ready to download yet" description="When HR publishes the first version, it appears here." />;
   const shown: Platform[] = os === "other" ? [...PLATFORMS] : platformsFor(os);
   const primary = new Set<Platform>(os === "other" ? [] : platformsFor(os));
   return (
@@ -31,10 +31,12 @@ export function DownloadHero({ os, current, zone }: { os: "windows" | "mac" | "o
       ) : null}
       <ul className="grid gap-4 sm:grid-cols-2">
         {shown.map((platform) => {
-          const installer = current.builds.find((b) => b.platform === platform && b.kind === "installer");
+          // Each computer type shows the newest release that has its installer, so a release for only one type hides nothing for the other.
+          const current = newestWithInstaller(releases, platform);
+          const installer = current?.builds.find((b) => b.platform === platform && b.kind === "installer");
           return (
             <li key={platform} className="space-y-2 rounded-xl border p-4">
-              {installer ? (
+              {current && installer ? (
                 <>
                   <Link href={`/api/tracker/download/${platform}`} className={cn(buttonVariants({ variant: primary.has(platform) ? "default" : "outline", size: "lg" }), "w-full")}>
                     <Download aria-hidden className="size-4" /> {LABEL[platform]}

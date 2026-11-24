@@ -59,6 +59,14 @@ export function formatBytes(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/**
+ * The newest published (not withdrawn) release that has an installer for the platform, from a list that is already newest first.
+ * A release may cover only some computer types (a Mac-only release must not hide the Windows download), so each platform looks for its own.
+ */
+export function newestWithInstaller<T extends { status: string; builds: readonly { platform: string; kind: string }[] }>(releases: readonly T[], platform: Platform): T | null {
+  return releases.find((r) => r.status === "published" && r.builds.some((b) => b.platform === platform && b.kind === "installer")) ?? null;
+}
+
 /** The newest published (not withdrawn) version that has a build for the platform and is newer than the current one; otherwise null. */
 export function pickUpdate(input: { platform: Platform; currentVersion: string | null; published: readonly { version: string; platforms: readonly Platform[]; status: "published" | "withdrawn" }[] }): string | null {
   const current = input.currentVersion ?? "";
