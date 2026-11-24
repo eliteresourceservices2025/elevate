@@ -32,6 +32,10 @@ export type ScheduleLite = {
   /** Planned unpaid break inside the shift. */
   breakMinutes: number;
   zone: string;
+  /** The client this schedule is for (strict time rules); a person can have one schedule per client at once. Absent or null = the general schedule. */
+  clientId?: string | null;
+  /** Minutes of work per scheduled day allotted to that client (absent or null = no separate limit). */
+  allottedMinutesPerDay?: number | null;
 };
 
 export type Shift = { date: string; startMs: number; endMs: number; scheduledMinutes: number; schedule: ScheduleLite };
@@ -51,21 +55,38 @@ export function scheduleFor(schedules: readonly ScheduleLite[], date: string): S
   return best;
 }
 
-/** The shift that starts on this calendar day in the person's own zone, or null on a rest day. */
-export function shiftOn(schedules: readonly ScheduleLite[], personZone: string, date: string): Shift | null {
+/** Every schedule in force on a calendar date of the schedule zone: the latest one that started, for each client. */
+export function schedulesFor(schedules: readonly ScheduleLite[], date: string): ScheduleLite[] {
+  const best = new Map<string | null, ScheduleLite>();
+  for (const s of schedules) {
+    if (!(s.effectiveFrom <= date && (s.effectiveTo === null || date <= s.effectiveTo))) continue;
+    const key = s.clientId ?? null;
+    const held = best.get(key);
+    if (!held || s.effectiveFrom > held.effectiveFrom) best.set(key, s);
+  }
+  return [...best.values()];
+}
+
+/** Every shift that starts on this calendar day in the person's own zone, earliest first (one per client schedule). Empty on a rest day. */
+export function shiftsOn(schedules: readonly ScheduleLite[], personZone: string, date: string): Shift[] {
+  const shifts: Shift[] = [];
   // The schedule zone can be a day ahead of or behind the person, so look a day either side.
   for (const d of [addDays(date, -1), date, addDays(date, 1)]) {
-    const s = scheduleFor(schedules, d);
-    if (!s || !s.weekdays.includes(isoWeekday(d))) continue;
-    const startMs = fromZonedTime(`${d}T${s.startTime}:00`, s.zone).getTime();
-    let endMs = fromZonedTime(`${d}T${s.endTime}:00`, s.zone).getTime();
-    if (endMs <= startMs) endMs = fromZonedTime(`${addDays(d, 1)}T${s.endTime}:00`, s.zone).getTime();
-    if (formatInTimeZone(startMs, personZone, "yyyy-MM-dd") === date) {
-      return { date, startMs, endMs, scheduledMinutes: Math.max(0, Math.round((endMs - startMs) / MINUTE) - s.breakMinutes), schedule: s };
+    for (const s of schedulesFor(schedules, d)) {
+      if (!s.weekdays.includes(isoWeekday(d))) continue;
+      const startMs = fromZonedTime(`${d}T${s.startTime}:00`, s.zone).getTime();
+      let endMs = fromZonedTime(`${d}T${s.endTime}:00`, s.zone).getTime();
+      if (endMs <= startMs) endMs = fromZonedTime(`${addDays(d, 1)}T${s.endTime}:00`, s.zone).getTime();
+      if (formatInTimeZone(startMs, personZone, "yyyy-MM-dd") === date) {
+        shifts.push({ date, startMs, endMs, scheduledMinutes: Math.max(0, Math.round((endMs - startMs) / MINUTE) - s.breakMinutes), schedule: s });
+      }
     }
   }
-  return null;
+  return shifts.sort((a, b) => a.startMs - b.startMs);
 }
+
+/** The first shift that starts on this calendar day in the person's own zone, or null on a rest day. */
+export const shiftOn = (schedules: readonly ScheduleLite[], personZone: string, date: string): Shift | null => shiftsOn(schedules, personZone, date)[0] ?? null;
 
 /** Whether the person has any schedule at all in force around this date (so a day with no shift is a rest day, not "unscheduled"). */
 export const hasScheduleAround = (schedules: readonly ScheduleLite[], date: string) => [addDays(date, -1), date, addDays(date, 1)].some((d) => scheduleFor(schedules, d) !== null);

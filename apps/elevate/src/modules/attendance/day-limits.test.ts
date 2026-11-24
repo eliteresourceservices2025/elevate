@@ -1,0 +1,130 @@
+import { describe, expect, it } from "vitest";
+import { fromZonedTime } from "date-fns-tz";
+import { breakAllowanceLeft, stopLimit, type StopLimitInput } from "./day-limits";
+import { shiftsOn, type ScheduleLite, type Shift } from "./schedule";
+import type { Break } from "./clock";
+
+const PHX = "America/Phoenix";
+const MIN = 60_000;
+const HOUR = 60 * MIN;
+const DATE = "2030-03-04"; // a Monday
+const ms = (time: string, date = DATE) => fromZonedTime(`${date}T${time}:00`, PHX).getTime();
+
+const base: ScheduleLite = { effectiveFrom: "2030-01-01", effectiveTo: null, startTime: "09:00", endTime: "13:00", weekdays: [1, 2, 3, 4, 5], breakMinutes: 0, zone: PHX, clientId: "A", allottedMinutesPerDay: 240 };
+const clientA: ScheduleLite = base;
+const clientB: ScheduleLite = { ...base, startTime: "14:00", endTime: "18:00", clientId: "B", allottedMinutesPerDay: 200 };
+
+describe("shiftsOn", () => {
+  it("returns every shift that starts on the day, earliest first, each with its own break taken out", () => {
+    const withBreak: ScheduleLite = { ...clientB, breakMinutes: 30 };
+    const shifts = shiftsOn([withBreak, clientA], PHX, DATE);
+    expect(shifts.map((s) => s.schedule.clientId)).toEqual(["A", "B"]);
+    expect(shifts.map((s) => s.scheduledMinutes)).toEqual([240, 210]);
+  });
+
+  it("returns nothing on a rest day", () => {
+    expect(shiftsOn([clientA, clientB], PHX, "2030-03-09")).toEqual([]);
+  });
+
+  it("uses only the latest schedule of one client when two overlap by date", () => {
+    const old: ScheduleLite = { ...clientA, effectiveFrom: "2030-01-01", effectiveTo: "2030-03-31", endTime: "12:00" };
+    const current: ScheduleLite = { ...clientA, effectiveFrom: "2030-03-01" };
+    expect(shiftsOn([old, current], PHX, DATE)).toHaveLength(1);
+    expect(shiftsOn([old, current], PHX, DATE)[0].schedule).toBe(current);
+  });
+});
+
+describe("breakAllowanceLeft", () => {
+  const brk = (from: string, to: string | null, planned: number | null = null): Break => ({ startAt: ms(from), endAt: to ? ms(to) : null, plannedMinutes: planned });
+
+  it("is the whole allowance when no break was taken", () => {
+    expect(breakAllowanceLeft({ allowanceMinutes: 60, breaks: [], nowMs: ms("10:00") })).toBe(60);
+  });
+
+  it("counts the time actually taken, so a break that ran over leaves less", () => {
+    const breaks = [brk("10:00", "10:15", 15), brk("12:00", "12:40", 30)];
+    expect(breakAllowanceLeft({ allowanceMinutes: 60, breaks, nowMs: ms("13:00") })).toBe(5);
+  });
+
+  it("gives back what a short break did not use", () => {
+    expect(breakAllowanceLeft({ allowanceMinutes: 60, breaks: [brk("10:00", "10:10", 30)], nowMs: ms("11:00") })).toBe(50);
+  });
+
+  it("counts an open break up to now and never goes below zero", () => {
+    expect(breakAllowanceLeft({ allowanceMinutes: 30, breaks: [brk("10:00", null, 30)], nowMs: ms("11:00") })).toBe(0);
+  });
+});
+
+describe("stopLimit", () => {
+  const shifts = shiftsOn([clientA, clientB], PHX, DATE) as Shift[];
+  const input = (over: Partial<StopLimitInput> = {}): StopLimitInput => ({
+    nowMs: ms("09:00"),
+    hasSchedule: true,
+    shifts,
+    clientId: "A",
+    workedMsByClient: new Map(),
+    workedMsToday: 0,
+    dailyCapMinutes: null,
+    companyDefaultCapMinutes: 480,
+    approvedWindows: [],
+    ...over,
+  });
+
+  it("stops at the end of the client's shift", () => {
+    expect(stopLimit(input())).toEqual({ limitMs: ms("13:00"), reason: "shift_end" });
+  });
+
+  it("stops when the client's allotted minutes are used up, if that comes first", () => {
+    const worked = new Map([["A", 200 * MIN]]);
+    const r = stopLimit(input({ nowMs: ms("11:00"), workedMsByClient: worked, workedMsToday: 200 * MIN }));
+    expect(r).toEqual({ limitMs: ms("11:40"), reason: "client_allotment" });
+  });
+
+  it("uses the other client's shift and allotment after a switch", () => {
+    const r = stopLimit(input({ nowMs: ms("14:00"), clientId: "B", workedMsByClient: new Map([["B", 0]]) }));
+    expect(r).toEqual({ limitMs: ms("17:20"), reason: "client_allotment" });
+  });
+
+  it("with no schedule, stops at the person's own daily cap", () => {
+    const r = stopLimit(input({ hasSchedule: false, shifts: [], clientId: null, nowMs: ms("09:00") + 100 * MIN, workedMsToday: 100 * MIN, dailyCapMinutes: 240 }));
+    expect(r).toEqual({ limitMs: ms("09:00") + 100 * MIN + 140 * MIN, reason: "daily_cap" });
+  });
+
+  it("with no schedule and no personal cap, uses the company default", () => {
+    const r = stopLimit(input({ hasSchedule: false, shifts: [], clientId: null, nowMs: ms("09:00"), workedMsToday: 0 }));
+    expect(r).toEqual({ limitMs: ms("09:00") + 8 * HOUR, reason: "daily_cap" });
+  });
+
+  it("a personal cap beats the company default", () => {
+    const r = stopLimit(input({ hasSchedule: false, shifts: [], clientId: null, nowMs: ms("09:00"), dailyCapMinutes: 300 }));
+    expect(r.limitMs).toBe(ms("09:00") + 5 * HOUR);
+  });
+
+  it("an approved extra-hours window that starts at the limit moves the limit to its end", () => {
+    const r = stopLimit(input({ approvedWindows: [{ startMs: ms("13:00"), endMs: ms("15:00") }] }));
+    expect(r).toEqual({ limitMs: ms("15:00"), reason: "approved_extra_end" });
+  });
+
+  it("an approved window that does not touch the limit changes nothing", () => {
+    const r = stopLimit(input({ approvedWindows: [{ startMs: ms("19:00"), endMs: ms("20:00") }] }));
+    expect(r.limitMs).toBe(ms("13:00"));
+  });
+
+  it("a shift that crosses midnight stops at its own end the next morning", () => {
+    const night: ScheduleLite = { ...clientA, startTime: "22:00", endTime: "06:00", allottedMinutesPerDay: null };
+    const nightShifts = shiftsOn([night], PHX, DATE);
+    const r = stopLimit(input({ shifts: nightShifts, nowMs: ms("22:00") }));
+    expect(r.limitMs).toBe(ms("06:00", "2030-03-05"));
+  });
+
+  it("on a rest day of someone with a schedule the limit is already now unless extra hours were approved", () => {
+    expect(stopLimit(input({ shifts: [], nowMs: ms("10:00") })).limitMs).toBe(ms("10:00"));
+    const lifted = stopLimit(input({ shifts: [], nowMs: ms("10:00"), approvedWindows: [{ startMs: ms("09:30"), endMs: ms("12:00") }] }));
+    expect(lifted).toEqual({ limitMs: ms("12:00"), reason: "approved_extra_end" });
+  });
+
+  it("after the shift has ended the limit is now, so the person is stopped, not left running", () => {
+    const r = stopLimit(input({ nowMs: ms("13:30") }));
+    expect(r.limitMs).toBe(ms("13:30"));
+  });
+});
