@@ -446,6 +446,8 @@ export type ScheduleListRow = {
   /** A schedule that starts later, when one is already set. */
   upcoming: { effectiveFrom: string; days: string; client: string } | null;
   /** Recent schedules HR may correct in place (started in the last 7 days or later), with the newest one's shift to prefill. */
+  /** HR's daily cap in minutes for this person (used when they have no schedule); null = the company default. */
+  dailyCapMinutes: number | null;
   correctable: { count: number; startTime: string; endTime: string; weekdays: number[]; breakMinutes: number; zone: string; clientId: string | null } | null;
 };
 export type CurrentScheduleLine = { days: string; client: string; manila: string; effectiveFrom: string; breakMinutes: number; clientName: string | null; allottedMinutes: number | null };
@@ -471,9 +473,9 @@ export async function listSchedules(): Promise<{ rows: ScheduleListRow[]; withou
   const user = await requireUser();
   await authorize(user, "schedules.manage");
   const people = (await db.execute(sql`
-    select e.id, e.legal_first_name as first, e.legal_last_name as last, e.preferred_name as preferred, t.name as team
+    select e.id, e.legal_first_name as first, e.legal_last_name as last, e.preferred_name as preferred, t.name as team, e.daily_cap_minutes as cap
     from core.employees e left join core.teams t on t.id = e.team_id
-    where e.archived_at is null and e.status <> 'separated' order by e.legal_last_name, e.legal_first_name limit 1000`)) as unknown as { id: string; first: string; last: string; preferred: string | null; team: string | null }[];
+    where e.archived_at is null and e.status <> 'separated' order by e.legal_last_name, e.legal_first_name limit 1000`)) as unknown as { id: string; first: string; last: string; preferred: string | null; team: string | null; cap: number | null }[];
   const byPerson = await loadSchedulesFor(db, people.map((p) => p.id));
   const names = await scheduleClientNames(byPerson.values());
   const today = todayInZone();
@@ -489,6 +491,7 @@ export async function listSchedules(): Promise<{ rows: ScheduleListRow[]; withou
       zone: now?.zone ?? later?.zone ?? null,
       current: now ? currentLine(now, today, names) : null,
       others: nowAll.slice(1).map((s) => currentLine(s, today, names)),
+      dailyCapMinutes: p.cap === null ? null : Number(p.cap),
       correctable: (() => {
         const lastAny = list.filter((s) => s.effectiveFrom >= addDays(today, -7)).pop();
         const recent = list.filter((s) => s.effectiveFrom >= addDays(today, -7) && (s.clientId ?? null) === (lastAny?.clientId ?? null));
@@ -574,6 +577,7 @@ export async function listTeamSchedules(): Promise<{ rows: ScheduleListRow[] }> 
         zone: now?.zone ?? later?.zone ?? null,
         current: now ? currentLine(now, today, names) : null,
         others: nowAll.slice(1).map((s) => currentLine(s, today, names)),
+        dailyCapMinutes: null,
         correctable: null,
         upcoming: later ? { effectiveFrom: later.effectiveFrom, days: describeSchedule(later, later.effectiveFrom).days, client: describeSchedule(later, later.effectiveFrom).client } : null,
       };

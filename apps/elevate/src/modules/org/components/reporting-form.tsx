@@ -6,11 +6,11 @@ import { toast } from "@/components/feedback-dialog";
 import { SelectField, TextField } from "@/components/form-fields";
 import { PersonPicker, type PickerOption } from "@/components/person-picker";
 import { Button } from "@/components/ui/button";
-import { reassignReports, setAttendanceLead, setReporting } from "../actions";
+import { reassignReports, setAttendanceLead, setDailyCap, setReporting } from "../actions";
 
 type Props = {
   employeeId: string;
-  current: { teamId: string | null; managerId: string | null; attendanceLeadId: string | null };
+  current: { teamId: string | null; managerId: string | null; attendanceLeadId: string | null; dailyCapMinutes: number | null };
   teams: { id: string; name: string }[];
   /** Everyone who could be a manager, without this person. */
   managers: PickerOption[];
@@ -33,6 +33,7 @@ export function ReportingForm({ employeeId, current, teams, managers, today, rep
   const [lead, setLead] = useState<string | undefined>(current.attendanceLeadId ?? undefined);
   const leadInvalid = lead !== undefined && !UUID.test(lead);
 
+  const [capHours, setCapHours] = useState(current.dailyCapMinutes === null ? "" : String(current.dailyCapMinutes / 60));
   const [moveTo, setMoveTo] = useState<string | undefined>(undefined);
   const [moveDate, setMoveDate] = useState(today);
 
@@ -65,6 +66,18 @@ export function ReportingForm({ employeeId, current, teams, managers, today, rep
       const result = await setAttendanceLead({ employeeId, leadEmployeeId: lead ?? null });
       if (!result.ok) return void toast.error(result.error);
       toast.success(lead ? "Attendance lead saved." : "Attendance lead removed.");
+      router.refresh();
+    });
+  }
+
+  function saveCap(e: React.FormEvent) {
+    e.preventDefault();
+    const hours = capHours.trim() === "" ? null : Number(capHours);
+    if (hours !== null && (!Number.isFinite(hours) || hours <= 0 || hours > 16)) return toast.error("Enter hours between 0.25 and 16, or leave it empty.");
+    startTransition(async () => {
+      const result = await setDailyCap({ employeeId, minutes: hours === null ? null : Math.round(hours * 60) });
+      if (!result.ok) return void toast.error(result.error);
+      toast.success(hours === null ? "Daily hours cleared. The company default applies." : "Daily hours saved.");
       router.refresh();
     });
   }
@@ -112,6 +125,19 @@ export function ReportingForm({ employeeId, current, teams, managers, today, rep
         </div>
         <Button type="submit" variant="outline" disabled={pending}>
           Save attendance lead
+        </Button>
+      </form>
+
+      <form onSubmit={saveCap} className="space-y-4 rounded-xl border bg-card p-4" noValidate>
+        <h3 className="text-sm font-semibold">Hours per day (when there is no schedule)</h3>
+        <p className="text-sm text-muted-foreground">
+          The most this person may work in a day when they have no schedule. The clock warns them, then stops by itself, unless they have approved extra hours. Leave it empty to use the company default.
+        </p>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <TextField id="r-cap" label="Hours per day" type="number" min="0.25" max="16" step="0.25" value={capHours} onChange={(e) => setCapHours(e.target.value)} hint="For example 4, 5, 8 or 10." />
+        </div>
+        <Button type="submit" variant="outline" disabled={pending}>
+          Save hours per day
         </Button>
       </form>
 

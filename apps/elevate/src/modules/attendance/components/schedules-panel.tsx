@@ -370,7 +370,10 @@ export function SchedulesPanel({ rows, withoutSchedule, today, clients }: { rows
                         ))}
                       </span>
                     ) : (
-                      <Badge variant="outline">No schedule</Badge>
+                      <>
+                        <Badge variant="outline">No schedule</Badge>
+                        <span className="block text-xs text-muted-foreground">{r.dailyCapMinutes ? `Daily hours: ${r.dailyCapMinutes / 60} h` : "No daily hours set: company default"}</span>
+                      </>
                     )}
                     {r.upcoming ? (
                       <span className="block text-xs text-muted-foreground">
