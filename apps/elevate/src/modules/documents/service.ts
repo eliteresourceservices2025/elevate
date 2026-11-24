@@ -10,6 +10,7 @@ import { isUniqueViolation } from "@/lib/db-errors";
 import { writeAudit } from "@/modules/audit/write";
 import { employees } from "@/modules/people/schema";
 import { clientAssignments, clients } from "@/modules/people/schema";
+import { inAudience } from "./audience";
 import { docxToPreviewBody, previewPage } from "./docx";
 import { MAX_FILE_BYTES, mimeOf, sanitizeFileName, sniffFileKind } from "./files";
 import { documentTypes, documents, systemDocuments, SYSTEM_SOURCE_KINDS } from "./schema";
@@ -143,6 +144,8 @@ export async function authorizeDocumentView(actor: AuthUser, documentId: string)
   else await authorize(actor, "documents.view_company");
   if (!found) throw new ActionFailure("That document was not found.");
   if (!found.employeeId && found.audience === "hr_only" && !can(actor, "documents.manage_company")) throw new ActionFailure(NO_ACCESS);
+  // A file for selected groups: HR and Super Admin always; anyone else only when they are in one of its groups.
+  if (!found.employeeId && found.audience === "restricted" && !can(actor, "documents.manage_company") && !(await inAudience(db, actor, found.id))) throw new ActionFailure(NO_ACCESS);
   if (found.archivedAt && !can(actor, "documents.verify")) throw new ActionFailure("That document was not found.");
   if (!(await allowRequest("download", actor.id))) throw new ActionFailure("Too many downloads. Wait a few minutes and try again.");
   return found;

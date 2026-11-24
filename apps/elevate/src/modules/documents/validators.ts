@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { isoDate } from "@/modules/people/validators";
+import { audienceMemberSchema, audienceRule, MAX_AUDIENCE_GROUPS } from "./audience-rules";
 import { MAX_FILE_BYTES } from "./files";
 
 const uuid = z.uuid();
@@ -16,13 +17,15 @@ export const requestUploadSchema = z.object({
   /** One of the person's own folders (optional). */
   folderId: z.preprocess(blankToUndefined, uuid.optional()),
   expiresOn: z.preprocess(blankToUndefined, isoDate.optional()),
-  audience: z.enum(["all_staff", "hr_only"]).default("all_staff"),
+  audience: z.enum(["all_staff", "hr_only", "restricted"]).default("all_staff"),
+  /** With "restricted": the teams, clients, roles and named people it is for (any mix; matching any one is enough). */
+  audienceMembers: z.array(audienceMemberSchema).max(MAX_AUDIENCE_GROUPS, "Choose 100 groups at most").default([]),
   fileName: z.string().trim().min(1).max(255),
   mimeType: z.string().trim().max(120),
   sizeBytes: z.number().int().min(1, "That file is empty").max(MAX_FILE_BYTES, "Files can be 10 MB at most"),
   /** The person confirms the file holds no client or patient information (CLAUDE.md, HIPAA rule). */
   acknowledged: z.literal(true, { error: "Confirm the file has no client or patient information" }),
-});
+}).superRefine(audienceRule);
 
 export const documentIdSchema = z.object({ documentId: uuid });
 
@@ -39,8 +42,9 @@ export const changeDocumentTypeSchema = z.object({
   clientId: z.preprocess(blankToUndefined, uuid.optional()),
   expiresOn: z.preprocess(blankToUndefined, isoDate.optional()),
   /** Company files only: who may read it. */
-  audience: z.enum(["all_staff", "hr_only"]).optional(),
-});
+  audience: z.enum(["all_staff", "hr_only", "restricted"]).optional(),
+  audienceMembers: z.array(audienceMemberSchema).max(MAX_AUDIENCE_GROUPS, "Choose 100 groups at most").default([]),
+}).superRefine(audienceRule);
 
 export const renameDocumentSchema = z.object({ documentId: uuid, name: z.string().trim().min(1, "Enter a file name").max(255, "Use 255 characters or fewer") });
 

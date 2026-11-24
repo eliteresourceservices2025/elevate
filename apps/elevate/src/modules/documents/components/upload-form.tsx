@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { useFormDialogWork } from "@/components/form-dialog";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cancelUpload, finalizeUpload, requestUpload } from "../actions";
+import type { AudienceMember } from "../audience-rules";
+import { AudiencePicker } from "./audience-picker";
 import { ALLOWED_MIME_TYPES, ALLOWED_TYPES_TEXT, MAX_FILE_BYTES, formatBytes } from "../files";
 import type { TypeOption } from "../queries";
 import { CATEGORY_LABELS, typeStyle, type DocumentCategory } from "../type-style";
@@ -46,10 +48,11 @@ export function UploadForm({ target, employeeId, types, clients, folders = [], t
   const [expiresOn, setExpiresOn] = useState("");
   const [clientId, setClientId] = useState("");
   const [folderId, setFolderId] = useState("");
-  const [audience, setAudience] = useState<"all_staff" | "hr_only">("all_staff");
+  const [audience, setAudience] = useState<"all_staff" | "hr_only" | "restricted">("all_staff");
+  const [audienceMembers, setAudienceMembers] = useState<AudienceMember[]>([]);
   const [acknowledged, setAcknowledged] = useState(false);
   const [hasFile, setHasFile] = useState(false);
-  const dialog = useFormDialogWork({ dirty: Boolean(typeId || title || expiresOn || clientId || folderId || acknowledged || hasFile || audience !== "all_staff"), busy: pending });
+  const dialog = useFormDialogWork({ dirty: Boolean(typeId || title || expiresOn || clientId || folderId || acknowledged || hasFile || audience !== "all_staff" || audienceMembers.length > 0), busy: pending });
 
   const type = types.find((t) => t.id === typeId);
 
@@ -72,6 +75,7 @@ export function UploadForm({ target, employeeId, types, clients, folders = [], t
         folderId: folderId || undefined,
         expiresOn: expiresOn || undefined,
         audience,
+        audienceMembers: audience === "restricted" ? audienceMembers : [],
         fileName: file.name,
         mimeType: file.type,
         sizeBytes: file.size,
@@ -104,6 +108,7 @@ export function UploadForm({ target, employeeId, types, clients, folders = [], t
       setClientId("");
       setFolderId("");
       setAudience("all_staff");
+      setAudienceMembers([]);
       setAcknowledged(false);
       setHasFile(false);
       if (fileInput.current) fileInput.current.value = "";
@@ -170,9 +175,11 @@ export function UploadForm({ target, employeeId, types, clients, folders = [], t
           <SelectField id="up-audience" label="Who can read it" value={audience} onChange={(e) => setAudience(e.target.value as typeof audience)}>
             <option value="all_staff">All staff</option>
             <option value="hr_only">HR only</option>
+            <option value="restricted">Selected groups</option>
           </SelectField>
         ) : null}
       </div>
+      {target === "company" && audience === "restricted" ? <AudiencePicker value={audienceMembers} onChange={setAudienceMembers} /> : null}
 
       <div className="space-y-1.5">
         <label htmlFor="up-file" className="text-sm font-medium">

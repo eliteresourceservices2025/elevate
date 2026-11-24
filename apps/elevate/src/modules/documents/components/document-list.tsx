@@ -106,7 +106,9 @@ export function DocumentList({
                 <div className="flex flex-wrap gap-1">
                   {r.archived ? <Badge variant="outline">Archived</Badge> : null}
                   {showAudience ? (
-                    <Badge variant="outline">{r.audience === "hr_only" ? "HR only" : "All staff"}</Badge>
+                    <Badge variant="outline" title={r.audienceGroups.length > 0 ? r.audienceGroups.map((g) => g.label).join(", ") : undefined}>
+                      {r.audience === "hr_only" ? "HR only" : r.audience === "restricted" ? `Selected groups (${r.audienceGroups.length})` : "All staff"}
+                    </Badge>
                   ) : r.verified ? (
                     <Badge variant="secondary">Verified</Badge>
                   ) : (

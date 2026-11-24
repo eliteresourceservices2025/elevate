@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, or, sql } from "drizzle-orm";
 import { authorize, can } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -8,6 +8,7 @@ import { clients, employees } from "@/modules/people/schema";
 import { pageInfo, type PageInfo } from "@/lib/pagination";
 import { expiryStatus, type ExpiryStatus } from "./expiry";
 import { documentFolders, documentTypes, documents } from "./schema";
+import { loadAudiences, matchesAudienceSql, viewerKeys, type AudienceGroup } from "./audience";
 import { clientChoices } from "./service";
 
 export type DocumentRow = {
@@ -23,7 +24,9 @@ export type DocumentRow = {
   expiry: ExpiryStatus;
   verified: boolean;
   archived: boolean;
-  audience: "all_staff" | "hr_only";
+  audience: "all_staff" | "hr_only" | "restricted";
+  /** For a restricted company file, who it is for (shown to HR only; empty for everyone else). */
+  audienceGroups: AudienceGroup[];
   /** The person's folder it sits in; null = no folder (and always null for company documents). */
   folderId: string | null;
   createdAt: Date;
@@ -46,7 +49,8 @@ function toRow(r: {
     expiry: expiryStatus(r.expiresOn, today),
     verified: r.verifiedAt !== null,
     archived: r.archivedAt !== null,
-    audience: r.audience === "hr_only" ? "hr_only" : "all_staff",
+    audience: r.audience === "hr_only" ? "hr_only" : r.audience === "restricted" ? "restricted" : "all_staff",
+    audienceGroups: [],
     folderId: r.folderId,
     createdAt: r.createdAt,
   };
@@ -119,12 +123,13 @@ export async function listCompanyDocuments(): Promise<DocumentRow[]> {
         isNull(documents.employeeId),
         eq(documents.status, "active"),
         isHr ? undefined : isNull(documents.archivedAt),
-        isHr ? undefined : eq(documents.audience, "all_staff"),
+        isHr ? undefined : or(eq(documents.audience, "all_staff"), and(eq(documents.audience, "restricted"), matchesAudienceSql(sql`${documents.id}`, await viewerKeys(db, user)))),
       ),
     )
     .orderBy(asc(documentTypes.name), desc(documents.createdAt));
   const today = todayInZone();
-  return rows.map((r) => toRow(r, today));
+  const groups = isHr ? await loadAudiences(db, rows.filter((r) => r.audience === "restricted").map((r) => r.id)) : new Map<string, AudienceGroup[]>();
+  return rows.map((r) => ({ ...toRow(r, today), audienceGroups: groups.get(r.id) ?? [] }));
 }
 
 export type TypeOption = { id: string; slug: string; name: string; requiresExpiry: boolean; requiresClient: boolean };

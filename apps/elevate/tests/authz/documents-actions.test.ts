@@ -40,6 +40,7 @@ const actionCases: { name: string; call: () => Promise<{ ok: boolean; error?: st
   { name: "bulkUpdateDocuments (archive)", call: () => actions.bulkUpdateDocuments({ action: "archive", documentIds: [ID] }), allowed: HR },
   { name: "bulkUpdateDocuments (restore)", call: () => actions.bulkUpdateDocuments({ action: "restore", documentIds: [ID] }), allowed: HR },
   { name: "bulkUpdateDocuments (delete)", call: () => actions.bulkUpdateDocuments({ action: "delete", documentIds: [ID], reason: "Duplicate upload" }), allowed: HR },
+  { name: "listAudienceOptions", call: () => actions.listAudienceOptions(), allowed: HR },
   { name: "createDocumentType", call: () => actions.createDocumentType(typeInput), allowed: HR },
   { name: "updateDocumentType", call: () => actions.updateDocumentType({ ...typeInput, typeId: OTHER }), allowed: HR },
   { name: "archiveDocumentType", call: () => actions.archiveDocumentType({ typeId: OTHER }), allowed: HR },
