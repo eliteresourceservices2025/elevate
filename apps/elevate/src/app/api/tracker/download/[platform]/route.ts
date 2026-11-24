@@ -2,7 +2,7 @@ import { authorize } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { allowRequest } from "@/lib/rate-limit";
 import { writeAudit } from "@/modules/audit/write";
-import { isPlatform } from "@/modules/activity/releases-logic";
+import { isPlatform, newestWithInstaller } from "@/modules/activity/releases-logic";
 import { getPublishedReleases } from "@/modules/activity/releases-service";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 
@@ -17,7 +17,8 @@ export async function GET(_request: Request, context: { params: Promise<{ platfo
   if (!isPlatform(platform)) return Response.json({ error: "not_found" }, { status: 404 });
   if (!(await allowRequest("download", user.id))) return Response.json({ error: "too_many_requests" }, { status: 429 });
 
-  const release = (await getPublishedReleases()).find((r) => r.status === "published");
+  // The newest release that has this computer type's installer (a release for one type only must not hide the other's download).
+  const release = newestWithInstaller(await getPublishedReleases(), platform);
   const build = release?.builds.find((b) => b.platform === platform && b.kind === "installer");
   if (!release || !build) return Response.json({ error: "not_found" }, { status: 404 });
 

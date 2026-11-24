@@ -22,7 +22,8 @@ const release = (builds = [build("windows-x86_64"), build("darwin-aarch64")]): P
   notes: { added: ["x"], improved: [], fixed: [] },
   builds,
 });
-const render = (os: "windows" | "mac" | "other", current: PublishedRelease | null) => renderToStaticMarkup(createElement(DownloadHero, { os, current, zone: "America/Phoenix" }));
+const render = (os: "windows" | "mac" | "other", current: PublishedRelease | PublishedRelease[] | null) =>
+  renderToStaticMarkup(createElement(DownloadHero, { os, releases: current === null ? [] : Array.isArray(current) ? current : [current], zone: "America/Phoenix" }));
 
 describe("DownloadHero", () => {
   it("offers one Windows download to a Windows visitor, with version, date and size", () => {
@@ -53,6 +54,15 @@ describe("DownloadHero", () => {
     expect(html).toContain("ab".repeat(32));
     expect(html).not.toContain("secret-path");
     expect(html).not.toContain("releases/1.2.0");
+  });
+  it("keeps the Windows download from the older release when the newest release is for Mac only", () => {
+    const macOnly = { ...release([build("darwin-aarch64")]), id: "r2", version: "1.3.0" };
+    const html = render("windows", [macOnly, release()]);
+    expect(html).toContain('href="/api/tracker/download/windows-x86_64"');
+    expect(html).toContain("Version 1.2.0");
+    expect(html).not.toContain("Not available yet");
+    const mac = render("mac", [macOnly, release()]);
+    expect(mac).toContain("Version 1.3.0");
   });
   it("says the app is not ready when there is no release", () => {
     expect(render("windows", null)).toContain("not ready to download yet");
