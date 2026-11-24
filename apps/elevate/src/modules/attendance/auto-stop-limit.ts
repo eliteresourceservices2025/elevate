@@ -7,6 +7,7 @@ import { segmentMs, type Replay } from "./clock";
 import { clockSourceOf } from "./clock-source";
 import { stopLimit, type StopLimit } from "./day-limits";
 import { approvedWindows } from "./extra-hours-service";
+import { approvedMakeupWindows } from "./makeup-service";
 import { hasScheduleAround, shiftsOn } from "./schedule";
 import { loadSchedules } from "./schedule-service";
 import { prefsFor, rulesFor } from "./service";
@@ -50,7 +51,10 @@ export async function computeStopLimit(executor: Executor, employeeId: string, n
 
   const clientId = opts.clientId !== undefined ? opts.clientId : currentClientOf(replay);
   const [person] = (await executor.execute(sql`select daily_cap_minutes as cap from core.employees where id = ${employeeId}`)) as unknown as { cap: number | null }[];
-  const windows = (await approvedWindows(executor, employeeId, nowMs - 12 * HOUR, nowMs + 24 * HOUR)).filter((w) => clientId === null || w.clientId === clientId);
+  const extraWindows = (await approvedWindows(executor, employeeId, nowMs - 12 * HOUR, nowMs + 24 * HOUR)).filter((w) => clientId === null || w.clientId === clientId);
+  // Approved make-up hours let the person work their window like approved extra hours (they are not tied to a client).
+  const makeupWindows = await approvedMakeupWindows(executor, employeeId, nowMs - 12 * HOUR, nowMs + 24 * HOUR);
+  const windows = [...extraWindows, ...makeupWindows];
 
   return stopLimit({
     nowMs,

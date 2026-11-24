@@ -109,6 +109,8 @@ const EXPECTED: Record<string, string> = {
   "extra_hours.request": "O O O O O O",
   "extra_hours.file_for_others": "A A T - - -",
   "extra_hours.decide": "A A T - - -",
+  "makeup.request": "O O O O O O",
+  "makeup.decide": "A A T - - -",
   "hours.approve": "A A T - - -",
   "hours.export": "A A - - - -",
   "recruiting.view": "A A T A - -", // a lead's team scope = on that opening's hiring team

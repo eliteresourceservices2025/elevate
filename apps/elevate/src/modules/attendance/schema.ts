@@ -295,6 +295,8 @@ export const attendanceDays = time
       extraMinutes: integer("extra_minutes").notNull().default(0),
       /** The part of the extra time covered by approved extra hours requests; the rest is unapproved. */
       approvedExtraMinutes: integer("approved_extra_minutes").notNull().default(0),
+      /** Worked minutes inside an approved make-up window: straight time, never extra hours (they are taken out of the extra minutes above). */
+      makeupMinutes: integer("makeup_minutes").notNull().default(0),
       firstIn: timestamp("first_in", { withTimezone: true }),
       lastOut: timestamp("last_out", { withTimezone: true }),
       /** Flags: open_session, outside_range, corrected, idle_unanswered, on_leave. Late, overtime and absence arrive with schedules. */
@@ -395,6 +397,44 @@ export const extraHoursRequests = time
       check("extra_hours_status_chk", sql`${t.status} in ('pending_lead','pending_confirm','approved','declined','cancelled')`),
       check("extra_hours_window_chk", sql`${t.windowEnd} > ${t.windowStart} and ${t.minutes} between 15 and 1440`),
       check("extra_hours_text_chk", sql`coalesce(length(trim(${t.reason})), 0) > 0 and coalesce(length(trim(${t.contactName})), 0) > 0`),
+    ],
+  )
+  .enableRLS();
+
+/**
+ * Make-up hours (strict time, 2026-11-24): someone who was absent or unavailable asks, BEFORE working it, to make up the missed time in
+ * another window so they are not short. A lead approves. Time worked inside an approved window is straight time (never extra hours) and is
+ * credited to the missed day it names. At most one live (waiting or approved) window can cover any moment of one person's time.
+ */
+export const makeupRequests = time
+  .table(
+    "makeup_requests",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      employeeId: uuid("employee_id")
+        .notNull()
+        .references(() => employees.id),
+      /** The missed day being made up (the person's own zone), and how many minutes of it were short when the request was made. */
+      absenceDate: date("absence_date", { mode: "string" }).notNull(),
+      missedMinutes: integer("missed_minutes").notNull(),
+      windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+      windowEnd: timestamp("window_end", { withTimezone: true }).notNull(),
+      minutes: integer("minutes").notNull(),
+      reason: text("reason").notNull(),
+      status: text("status").notNull().default("pending"),
+      decidedBy: uuid("decided_by"),
+      decidedAt: timestamp("decided_at", { withTimezone: true }),
+      decisionNote: text("decision_note"),
+      /** Minutes actually worked inside the window (kept to the missed time), written when the person's days are rebuilt. */
+      madeUpMinutes: integer("made_up_minutes").notNull().default(0),
+      createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [
+      index("makeup_requests_employee_idx").on(t.employeeId, t.windowStart),
+      index("makeup_requests_status_idx").on(t.status, t.createdAt),
+      check("makeup_status_chk", sql`${t.status} in ('pending','approved','declined','cancelled')`),
+      check("makeup_window_chk", sql`${t.windowEnd} > ${t.windowStart} and ${t.minutes} between 15 and 960 and ${t.missedMinutes} between 15 and 960`),
+      check("makeup_reason_chk", sql`coalesce(length(trim(${t.reason})), 0) > 0`),
     ],
   )
   .enableRLS();

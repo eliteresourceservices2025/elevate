@@ -1212,6 +1212,13 @@
       "when": 1795507211639,
       "tag": "0172_clumsy_ares",
       "breakpoints": true
+    },
+    {
+      "idx": 173,
+      "version": "7",
+      "when": 1795512068760,
+      "tag": "0173_striped_power_pack",
+      "breakpoints": true
     }
   ]
 }

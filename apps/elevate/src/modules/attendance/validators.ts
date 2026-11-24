@@ -168,6 +168,20 @@ export const decideExtraSchema = z.object({
   windowEnd: z.preprocess(blankToUndefined, instant.optional()),
 });
 export const cancelExtraSchema = z.object({ requestId: uuid });
+
+/** A person asks to make up missed time in another window (before working it). */
+export const makeupRequestSchema = z.object({
+  absenceDate: ymd,
+  windowStart: instant,
+  windowEnd: instant,
+  reason: text(5, 300, "Explain why in a few words"),
+});
+export const decideMakeupSchema = z.object({
+  requestId: uuid,
+  decision: z.enum(["approve", "decline"]),
+  note: z.preprocess(blankToUndefined, z.string().trim().max(300).optional()),
+});
+export const cancelMakeupSchema = z.object({ requestId: uuid });
 /** A screenshot upload for an extra hours request; employeeId when a lead or HR uploads for someone else. */
 export const extraUploadSchema = evidenceUploadSchema.extend({ employeeId: z.preprocess(blankToUndefined, uuid.optional()) });
 

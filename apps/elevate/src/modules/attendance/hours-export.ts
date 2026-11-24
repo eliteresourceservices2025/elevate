@@ -70,7 +70,7 @@ export async function buildHoursExport(input: { periodStart: string; periodEnd: 
   const stamp = `${periodStart}_to_${periodEnd}`;
 
   if (input.kind === "daily") {
-    const header = ["Person", "Work email", "Team", "Client(s)", "Date", "Shift", "Scheduled hours", "First in", "Last out", "Breaks (hours)", "Worked hours", "Regular hours", "Extra hours (approved)", "Extra hours (not approved)", "Late (minutes)", "Left early (minutes)", "Flags", "Approval", "Approved by", "Approved on", "Hours by client"];
+    const header = ["Person", "Work email", "Team", "Client(s)", "Date", "Shift", "Scheduled hours", "First in", "Last out", "Breaks (hours)", "Worked hours", "Regular hours", "Extra hours (approved)", "Extra hours (not approved)", "Make-up hours (not extra)", "Late (minutes)", "Left early (minutes)", "Flags", "Approval", "Approved by", "Approved on", "Hours by client"];
     const rows = included.map(({ d, state, approval }) => {
       const p = people.get(d.employeeId)!;
       const zone = resolveTimeZone(zones.get(d.employeeId));
@@ -90,6 +90,7 @@ export async function buildHoursExport(input: { periodStart: string; periodEnd: 
         toHours(regular(d.extraMinutes, d.workedMinutes)),
         toHours(d.approvedExtraMinutes),
         toHours(Math.max(0, d.extraMinutes - d.approvedExtraMinutes)),
+        toHours(d.makeupMinutes),
         d.lateMinutes,
         d.earlyLeaveMinutes,
         d.flags.join("; "),
@@ -104,7 +105,7 @@ export async function buildHoursExport(input: { periodStart: string; periodEnd: 
   }
 
   // Summary: one row per person with totals for the period.
-  const header = ["Person", "Work email", "Team", "Client(s)", "Days included", "Days not approved", "Scheduled hours", "Worked hours", "Regular hours", "Extra hours (approved)", "Extra hours (not approved)", "Absent days", "Late days", "Approved leave days"];
+  const header = ["Person", "Work email", "Team", "Client(s)", "Days included", "Days not approved", "Scheduled hours", "Worked hours", "Regular hours", "Extra hours (approved)", "Extra hours (not approved)", "Make-up hours (not extra)", "Absent days", "Late days", "Approved leave days"];
   const byPerson = new Map<string, typeof included>();
   for (const x of included) byPerson.set(x.d.employeeId, [...(byPerson.get(x.d.employeeId) ?? []), x]);
   // People with approved leave but no hours still appear, so payroll sees their days off.
@@ -145,6 +146,7 @@ export async function buildHoursExport(input: { periodStart: string; periodEnd: 
       toHours(sum((x) => regular(x.d.extraMinutes, x.d.workedMinutes))),
       toHours(sum((x) => x.d.approvedExtraMinutes)),
       toHours(sum((x) => Math.max(0, x.d.extraMinutes - x.d.approvedExtraMinutes))),
+      toHours(sum((x) => x.d.makeupMinutes)),
       list.filter((x) => x.d.flags.includes("absent")).length,
       list.filter((x) => x.d.lateMinutes > 0).length,
       leaveDays,

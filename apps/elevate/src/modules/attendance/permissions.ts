@@ -35,6 +35,9 @@ export const attendancePermissions = definePermissions({
   "extra_hours.request": { roles: { super_admin: "own", hr_admin: "own", team_lead: "own", recruiter: "own", executive: "own", employee: "own" } },
   "extra_hours.file_for_others": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team" } },
   "extra_hours.decide": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team" } },
+  // Make-up hours: anyone asks for their own; a lead (team) or HR (anyone) decides, never on their own request.
+  "makeup.request": { roles: { super_admin: "own", hr_admin: "own", team_lead: "own", recruiter: "own", executive: "own", employee: "own" } },
+  "makeup.decide": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team" } },
   // Hours: a lead (their team) or HR approves each person's week; HR exports approved hours per pay period.
   "hours.approve": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team" } },
   // Mark a day as "test only" (kept, but left out of review, export and the unapproved counts). Same reach as approving.
