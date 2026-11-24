@@ -29,6 +29,7 @@ import {
   Award,
   Clock,
   Download,
+  History,
   Hourglass,
   GraduationCap,
   ListChecks,
@@ -58,7 +59,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: "Core HR",
     items: [
-      { href: "/people", label: "People", icon: Users, description: "Profiles, employment details and client assignments." },
+      { href: "/people", label: "People", icon: Users, description: "Profiles, employment details and client assignments.", access: { action: "people.browse_directory", scopes: ["all"] } },
       { href: "/people/me", label: "My profile", icon: UserRound, description: "Your own details, documents and requests." },
       { href: "/my-data", label: "My data", icon: ShieldCheck, description: "What ELEVATE holds about you, downloads and privacy requests." },
       { href: "/my-pay", label: PAYSLIP_LABELS.pageTitle, icon: Wallet, description: "Your contractor payment statements, once the pay run they belong to is paid.", access: { action: "payroll.view_own", scopes: ["own"] } },
@@ -73,6 +74,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/time-off", label: "Time off", icon: CalendarDays, description: "Prize days off and holiday calendars." },
       { href: "/attendance", label: "Attendance", icon: Clock, description: "Time clock, lates, absences and hours export." },
       { href: "/extra-hours", label: "Extra hours", icon: Hourglass, description: "Ask for extra hours, confirm the client's requests and decide them." },
+      { href: "/make-up-hours", label: "Make-up hours", icon: History, description: "Make up missed hours in another window, with your lead's approval." },
       { href: "/team-attendance", label: "Team attendance", icon: UsersRound, description: "Who is clocked in, flags and end-of-day reports.", access: { action: "attendance.view", scopes: ["all", "team"] } },
       { href: "/activity", label: "Activity", icon: Activity, description: "Who is working right now and what the ELEVATE Tracker App recorded.", access: { action: "activity.view", scopes: ["all", "team"] } },
       { href: "/tracker/download", label: "ELEVATE Tracker App", icon: Download, description: "Download the app, add your computer and see what changed in each version." },

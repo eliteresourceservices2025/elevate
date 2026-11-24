@@ -17,6 +17,18 @@ const jobs = await import("@/modules/timeoff/request-jobs");
 const { addDays } = await import("@/modules/timeoff/service");
 const { todayInZone } = await import("@/modules/org/service");
 const { isWorkingDay } = await import("@/modules/timeoff/workdays");
+const { setDocumentStorage } = await import("@/modules/documents/storage");
+const { FakeStorage, PNG_BYTES } = await import("./fake-storage");
+
+// Every time off request carries a screenshot of the client's approval: this uploads one for the person the request is for.
+const fake = new FakeStorage();
+setDocumentStorage(fake);
+async function proof(forEmployeeId?: string): Promise<string[]> {
+  const ticket = await actions.requestLeaveEvidenceUpload({ mime: "image/png", size: PNG_BYTES.length, employeeId: forEmployeeId });
+  if (!ticket.ok) throw new Error(ticket.error);
+  fake.put("employee-docs", ticket.data.path, PNG_BYTES);
+  return [ticket.data.id];
+}
 
 type TestUser = { id: string; email: string; roles: RoleSlug[] };
 const NO_ACCESS = "You do not have access to do that.";
@@ -91,7 +103,7 @@ async function award(employeeId: string, days: number, slugId = prize) {
 async function request(actor: TestUser, extra: Record<string, unknown> = {}) {
   as(actor);
   const [day] = extra.startDate ? [extra.startDate as string] : await workdays(1);
-  return actions.requestLeave({ leaveTypeId: prize, startDate: day, endDate: (extra.endDate as string) ?? day, ...extra });
+  return actions.requestLeave({ leaveTypeId: prize, startDate: day, endDate: (extra.endDate as string) ?? day, evidenceIds: await proof(extra.employeeId as string | undefined), ...extra });
 }
 const idOf = (r: { ok: boolean; data?: { id: string }; error?: string }) => {
   if (!r.ok) throw new Error(`expected ok, got: ${r.error}`);
@@ -193,7 +205,7 @@ describe("the two-step approval", () => {
     const carol = await person("Carol");
     as(hr);
     const [day] = await workdays(1);
-    const filed = idOf(await actions.requestLeave({ leaveTypeId: await typeId("unpaid_day"), startDate: day, endDate: day, employeeId: carol.employeeId }));
+    const filed = idOf(await actions.requestLeave({ leaveTypeId: await typeId("unpaid_day"), startDate: day, endDate: day, employeeId: carol.employeeId, evidenceIds: await proof(carol.employeeId) }));
     expect(await decide(hr, filed, "approve")).toEqual({ ok: false, error: "Someone else must decide on your own request." }); // the filer cannot approve it
     expect((await decide(hr2, filed, "approve")).ok).toBe(true);
   });
@@ -240,9 +252,14 @@ describe("making a request", () => {
     const fay = await person("Fay");
     await award(fay.employeeId, 1);
     const [day] = await workdays(1);
-    const ask = (over: Record<string, unknown>) => {
+    // One screenshot is reused until a request is accepted (a refused request leaves it unused).
+    let spare: string[] | null = null;
+    const ask = async (over: Record<string, unknown>) => {
       as(fay.user);
-      return actions.requestLeave({ leaveTypeId: prize, startDate: day, endDate: day, ...over });
+      spare ??= await proof();
+      const r = await actions.requestLeave({ leaveTypeId: prize, startDate: day, endDate: day, evidenceIds: spare, ...over });
+      if (r.ok) spare = null;
+      return r;
     };
 
     expect(await ask({ startDate: addDays(today, -3), endDate: addDays(today, -3) })).toEqual({ ok: false, error: "Requests cannot start in the past. Ask HR to file it for you." });
@@ -311,7 +328,7 @@ describe("making a request", () => {
     const only = await preview(h.date, h.date);
     expect(only.days).toBe(0);
     as(gil.user);
-    expect(await actions.requestLeave({ leaveTypeId: prize, startDate: h.date, endDate: h.date })).toEqual({ ok: false, error: "There are no working days in that range." });
+    expect(await actions.requestLeave({ leaveTypeId: prize, startDate: h.date, endDate: h.date, evidenceIds: await proof() })).toEqual({ ok: false, error: "There are no working days in that range." });
   });
 
   it("refuses overlapping requests, even two made at the same moment, but frees the days after a cancellation", async () => {
@@ -336,7 +353,7 @@ describe("making a request", () => {
     const ivy = await person("Ivy", ["employee"], { managerId: lead.employeeId });
     const past = await pastWorkday(4);
     as(hr);
-    const id = idOf(await actions.requestLeave({ leaveTypeId: await typeId("unpaid_day"), startDate: past, endDate: past, employeeId: ivy.employeeId }));
+    const id = idOf(await actions.requestLeave({ leaveTypeId: await typeId("unpaid_day"), startDate: past, endDate: past, employeeId: ivy.employeeId, evidenceIds: await proof(ivy.employeeId) }));
     expect(await statusOf(id)).toBe("pending_lead");
     expect(await notes(ivy.user.id, "timeoff.filed_for_you")).toHaveLength(1);
     const [row] = await rows<{ filed_by: string }>(sql`select filed_by from time.leave_requests where id = ${id}`);
@@ -387,7 +404,7 @@ describe("cancelling", () => {
     // File approved leave for a past date through HR, then try to cancel it
     as(hr);
     const past = await pastWorkday(3);
-    const id = idOf(await actions.requestLeave({ leaveTypeId: prize, startDate: past, endDate: past, employeeId: kim.employeeId }));
+    const id = idOf(await actions.requestLeave({ leaveTypeId: prize, startDate: past, endDate: past, employeeId: kim.employeeId, evidenceIds: await proof(kim.employeeId) }));
     await decide(lead.user, id, "approve");
     await decide(hr2, id, "approve");
     expect(await balanceOf(kim.employeeId)).toBe(0);

@@ -7,6 +7,8 @@ import { SelectField, TextField } from "@/components/form-fields";
 import { FormDialog, useFormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { changeDocumentType } from "../actions";
+import type { AudienceMember } from "../audience-rules";
+import { AudiencePicker } from "./audience-picker";
 import type { DocumentRow, TypeOption } from "../queries";
 import { CATEGORY_LABELS, typeStyle, type DocumentCategory } from "../type-style";
 
@@ -38,7 +40,8 @@ function CategorizeForm({ row, options }: { row: DocumentRow; options: Categoriz
   const [title, setTitle] = useState(row.title);
   const [expiresOn, setExpiresOn] = useState(row.expiresOn ?? "");
   const [clientId, setClientId] = useState("");
-  const [audience, setAudience] = useState<"all_staff" | "hr_only">(row.audience === "all_staff" ? "all_staff" : "hr_only");
+  const [audience, setAudience] = useState<"all_staff" | "hr_only" | "restricted">(row.audience);
+  const [audienceMembers, setAudienceMembers] = useState<AudienceMember[]>(row.audienceGroups.map((g) => ({ kind: g.kind, id: g.id })));
   const [pending, setPending] = useState(false);
   const type = options.types.find((t) => t.id === typeId);
   const choices = groupTypes(options.types);
@@ -50,7 +53,7 @@ function CategorizeForm({ row, options }: { row: DocumentRow; options: Categoriz
       onSubmit={async (e) => {
         e.preventDefault();
         setPending(true);
-        const result = await changeDocumentType({ documentId: row.id, typeId, title, expiresOn: expiresOn || undefined, clientId: clientId || undefined, audience: options.withAudience ? audience : undefined });
+        const result = await changeDocumentType({ documentId: row.id, typeId, title, expiresOn: expiresOn || undefined, clientId: clientId || undefined, audience: options.withAudience ? audience : undefined, audienceMembers: options.withAudience && audience === "restricted" ? audienceMembers : [] });
         setPending(false);
         if (!result.ok) return void toast.error(result.error);
         toast.success("Type saved.");
@@ -86,8 +89,10 @@ function CategorizeForm({ row, options }: { row: DocumentRow; options: Categoriz
         <SelectField id={`ct-audience-${row.id}`} label="Who can read it" value={audience} onChange={(e) => setAudience(e.target.value as typeof audience)}>
           <option value="all_staff">All staff</option>
           <option value="hr_only">HR only</option>
+          <option value="restricted">Selected groups</option>
         </SelectField>
       ) : null}
+      {options.withAudience && audience === "restricted" ? <AudiencePicker value={audienceMembers} onChange={setAudienceMembers} /> : null}
       <Button type="submit" disabled={pending || !typeId || title.trim().length < 2}>
         Save
       </Button>

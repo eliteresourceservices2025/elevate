@@ -119,7 +119,7 @@ export function EmploymentSection({ profile, orgOptions, today }: { profile: Pro
         <Section title="Reporting">
           <ReportingForm
             employeeId={e.id}
-            current={{ teamId: e.teamId, managerId: e.managerId, attendanceLeadId: e.attendanceLeadId }}
+            current={{ teamId: e.teamId, managerId: e.managerId, attendanceLeadId: e.attendanceLeadId, dailyCapMinutes: e.dailyCapMinutes }}
             teams={orgOptions.teams}
             managers={orgOptions.managers}
             today={today}

@@ -42,6 +42,7 @@ export const JOBS: Record<string, JobInfo> = {
   "attendance-rebuild": { label: "Nightly attendance rebuild", everyMinutes: DAILY },
   "missed-clockouts": { label: "Missed clock-out notices", everyMinutes: 60 },
   "overbreak-alerts": { label: "Overbreak alerts", everyMinutes: 10 },
+  "auto-stop": { label: "Clock stops when hours run out", everyMinutes: 30 },
   "selfie-purge": { label: "Selfie cleanup", everyMinutes: DAILY },
   "tracker-rollup": { label: "ELEVATE Tracker daily totals", everyMinutes: DAILY },
   "tracker-shot-purge": { label: "ELEVATE Tracker screenshot cleanup", everyMinutes: DAILY },

@@ -54,7 +54,7 @@ export type DirectoryRow = {
  */
 export async function listDirectory(rawQuery: unknown) {
   const user = await requireUser();
-  await authorize(user, "people.view_directory");
+  await authorize(user, "people.browse_directory");
 
   const q = directoryQuerySchema.parse(rawQuery ?? {});
   const seesClients = scopeFor(user, "people.view_client_assignments") === "all";
@@ -346,6 +346,7 @@ export async function getProfile(employeeId: string) {
       startDate: e.startDate,
       endDate: e.endDate,
       attendanceLeadId: leadRow?.id ?? null,
+      dailyCapMinutes: e.dailyCapMinutes ?? null,
       attendanceLeadName: leadRow ? `${leadRow.preferred?.trim() || leadRow.first} ${leadRow.last}` : null,
       linked: e.userId !== null,
       archived: e.archivedAt !== null,

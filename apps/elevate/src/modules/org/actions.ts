@@ -21,6 +21,7 @@ import {
   createTeamSchema,
   reassignReportsSchema,
   setAttendanceLeadSchema,
+  setDailyCapSchema,
   setReportingSchema,
   updateDepartmentSchema,
   updatePositionSchema,
@@ -297,6 +298,29 @@ export async function setAttendanceLead(input: unknown): Promise<ActionResult> {
       revalidatePath(`/people/${p.data.employeeId}`);
     }
     return r;
+  });
+}
+
+/**
+ * Sets or clears how many hours a day a person may work when they have no schedule (the clock stops itself there). HR only. The audit row
+ * says which field changed, not the value.
+ */
+export async function setDailyCap(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "org.manage_reporting");
+    const p = setDailyCapSchema.safeParse(input);
+    if (!p.success) return fail(first(p.error));
+    return db.transaction(async (tx) => {
+      const [person] = await tx.select({ id: employees.id, cap: employees.dailyCapMinutes }).from(employees).where(and(eq(employees.id, p.data.employeeId), isNull(employees.archivedAt)));
+      if (!person) return fail("That person was not found.");
+      if ((person.cap ?? null) === p.data.minutes) return fail("No changes to save.");
+      await tx.update(employees).set({ dailyCapMinutes: p.data.minutes, updatedAt: new Date() }).where(eq(employees.id, person.id));
+      await writeAudit({ actor, action: "employee.daily_cap", targetType: "employee", targetId: person.id, before: { field: "daily_cap_minutes", set: person.cap !== null }, after: { field: "daily_cap_minutes", set: p.data.minutes !== null } }, tx);
+      revalidatePath("/schedules");
+      revalidatePath(`/people/${person.id}`);
+      return done();
+    });
   });
 }
 

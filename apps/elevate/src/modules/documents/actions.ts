@@ -14,6 +14,7 @@ import { todayInZone } from "@/modules/org/service";
 import { employees } from "@/modules/people/schema";
 import { ALLOWED_TYPES_TEXT, MAX_FILE_BYTES, extensionOf, kindFromMime, mimeOf, sanitizeFileName, sniffFileKind } from "./files";
 import { documentFolders, documentReminders, documentTypes, documents, systemDocuments } from "./schema";
+import { saveAudience } from "./audience";
 import { authorizeDocumentView, clientChoices } from "./service";
 import { BUCKETS, getDocumentStorage, type Bucket } from "./storage";
 import {
@@ -120,7 +121,8 @@ export async function requestUpload(input: unknown): Promise<ActionResult<Upload
     const bucket = v.target === "employee" ? BUCKETS.employee : BUCKETS.company;
     const path = `${employee ? employee.id : "company"}/${id}.${extensionOf(kind)}`;
 
-    await db.insert(documents).values({
+    await db.transaction(async (tx) => {
+    await tx.insert(documents).values({
       id,
       typeId: type.id,
       employeeId: employee?.id ?? null,
@@ -136,6 +138,9 @@ export async function requestUpload(input: unknown): Promise<ActionResult<Upload
       expiresOn: v.expiresOn ?? null,
       uploadedBy: actor.id,
     });
+    // A restricted company file records the groups it is for, in the same step (a missing group stops the whole request).
+    if (v.target === "company" && v.audience === "restricted") await saveAudience(tx, id, v.audienceMembers);
+    });
 
     let token: string;
     try {
@@ -145,7 +150,7 @@ export async function requestUpload(input: unknown): Promise<ActionResult<Upload
       throw error;
     }
 
-    await writeAudit({ actor, action: "document.upload_requested", targetType: employee ? "employee" : "company", targetId: employee?.id ?? "company", metadata: { documentId: id, type: type.slug } });
+    await writeAudit({ actor, action: "document.upload_requested", targetType: employee ? "employee" : "company", targetId: employee?.id ?? "company", metadata: { documentId: id, type: type.slug, ...(v.target === "company" ? { audience: v.audience, groups: v.audience === "restricted" ? v.audienceMembers.length : 0 } : {}) } });
     return { ok: true, data: { documentId: id, bucket, path, token, contentType: mimeOf(kind) } };
   });
 }
@@ -572,7 +577,9 @@ export async function changeDocumentType(input: unknown): Promise<ActionResult> 
 
     await db.transaction(async (tx) => {
       await tx.update(documents).set({ typeId: type.id, title: v.title, clientId, expiresOn: v.expiresOn ?? null, ...(!doc.employeeId && v.audience ? { audience: v.audience } : {}), updatedAt: new Date() }).where(eq(documents.id, doc.id));
-      await writeAudit({ actor, action: "document.change_type", targetType: doc.employeeId ? "employee" : "company", targetId: doc.employeeId ?? "company", metadata: { documentId: doc.id, fromTypeId: doc.typeId, toTypeId: type.id } }, tx);
+      // The groups follow the audience: replaced for "Selected groups", cleared for the other choices.
+      if (!doc.employeeId && v.audience) await saveAudience(tx, doc.id, v.audience === "restricted" ? v.audienceMembers : []);
+      await writeAudit({ actor, action: "document.change_type", targetType: doc.employeeId ? "employee" : "company", targetId: doc.employeeId ?? "company", metadata: { documentId: doc.id, fromTypeId: doc.typeId, toTypeId: type.id, ...(!doc.employeeId && v.audience ? { audience: v.audience, fromAudience: doc.audience, groups: v.audience === "restricted" ? v.audienceMembers.length : 0 } : {}) } }, tx);
     });
     refresh(doc.employeeId);
     return { ok: true, data: undefined };
@@ -658,5 +665,23 @@ export async function archiveDocumentType(input: unknown): Promise<ActionResult>
     });
     revalidatePath("/documents");
     return result;
+  });
+}
+
+// --- Who a company file is for (HR) ----------------------------------------------------------
+
+export type AudienceOptions = { teams: { id: string; label: string }[]; clients: { id: string; label: string }[]; people: { id: string; label: string; detail?: string }[] };
+
+/** The teams, clients and people HR can choose from when a company file is for selected groups. HR and Super Admin only. */
+export async function listAudienceOptions(): Promise<ActionResult<AudienceOptions>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "documents.manage_company");
+    const teams = (await db.execute(sql`select id, name as label from core.teams where archived_at is null order by name limit 500`)) as unknown as { id: string; label: string }[];
+    const clients = (await db.execute(sql`select id, name as label from core.clients where archived_at is null order by name limit 500`)) as unknown as { id: string; label: string }[];
+    const people = (await db.execute(sql`
+      select id, coalesce(preferred_name, legal_first_name) || ' ' || legal_last_name as label, employee_number as detail
+      from core.employees where archived_at is null and status <> 'separated' order by legal_last_name, legal_first_name limit 1000`)) as unknown as { id: string; label: string; detail: string }[];
+    return { ok: true, data: { teams, clients, people } };
   });
 }

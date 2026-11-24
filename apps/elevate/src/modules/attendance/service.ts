@@ -1,6 +1,6 @@
 import "server-only";
 import { createHash, randomUUID } from "node:crypto";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { allowRequest, clientIp } from "@/lib/rate-limit";
 import { ActionFailure } from "@/lib/run-action";
@@ -16,6 +16,8 @@ import { isSelfTestEmail } from "@/modules/jibble/mirror-rules";
 import { clientProjects, employees } from "@/modules/people/schema";
 import { projectOpenTo, projectRequired } from "./project-access";
 import { MINUTE, breakLabel, ipAllowed, overbreakOf, replayClock, roundCoordinate, transition, validCoordinates, type ClockEventLite, type ClockState, type ClockType } from "./clock";
+import { computeStopLimit, requestAutoStop } from "./auto-stop-limit";
+import { breakLeftToday } from "./break-left";
 import { clockSourceOf } from "./clock-source";
 import { assignedClients } from "./extra-hours-service";
 import { clockEvents, clockPrefs, clockRules, clockSelfies, correctionEvidence, overbreakNotices } from "./schema";
@@ -53,13 +55,13 @@ export async function loadEventsBetween(executor: Executor, employeeId: string, 
   return rows.map((r) => ({ id: r.id, type: r.type, at: Number(r.at), createdAtMs: Number(r.created_ms), plannedBreakMinutes: r.planned, clientId: r.client_id, projectId: r.project_id }));
 }
 
-export type EffectiveRules = { allowedCidrs: string[]; selfieRequired: boolean; idleMinutes: number | null; graceMinutes: number; eodExpected: boolean; jibbleMirror: boolean; lateGraceMinutes: number; maxExtraMinutesPerDay: number; maxDayMinutes: number };
-export const DEFAULT_RULES: EffectiveRules = { allowedCidrs: [], selfieRequired: false, idleMinutes: 30, graceMinutes: 60, eodExpected: false, jibbleMirror: false, lateGraceMinutes: 10, maxExtraMinutesPerDay: 240, maxDayMinutes: 720 };
+export type EffectiveRules = { allowedCidrs: string[]; selfieRequired: boolean; idleMinutes: number | null; graceMinutes: number; eodExpected: boolean; jibbleMirror: boolean; lateGraceMinutes: number; maxExtraMinutesPerDay: number; maxDayMinutes: number; defaultDailyCapMinutes: number; defaultBreakMinutes: number; autoStopWarnMinutes: number };
+export const DEFAULT_RULES: EffectiveRules = { allowedCidrs: [], selfieRequired: false, idleMinutes: 30, graceMinutes: 60, eodExpected: false, jibbleMirror: false, lateGraceMinutes: 10, maxExtraMinutesPerDay: 240, maxDayMinutes: 720, defaultDailyCapMinutes: 480, defaultBreakMinutes: 60, autoStopWarnMinutes: 10 };
 
 /** The rules of the person's team (or the defaults when the team has none). */
 export async function rulesFor(executor: Executor, employeeId: string): Promise<EffectiveRules> {
   const [row] = await executor
-    .select({ allowedCidrs: clockRules.allowedCidrs, selfieRequired: clockRules.selfieRequired, idleMinutes: clockRules.idleMinutes, graceMinutes: clockRules.graceMinutes, eodExpected: clockRules.eodExpected, jibbleMirror: clockRules.jibbleMirror, lateGraceMinutes: clockRules.lateGraceMinutes, maxExtraMinutesPerDay: clockRules.maxExtraMinutesPerDay, maxDayMinutes: clockRules.maxDayMinutes })
+    .select({ allowedCidrs: clockRules.allowedCidrs, selfieRequired: clockRules.selfieRequired, idleMinutes: clockRules.idleMinutes, graceMinutes: clockRules.graceMinutes, eodExpected: clockRules.eodExpected, jibbleMirror: clockRules.jibbleMirror, lateGraceMinutes: clockRules.lateGraceMinutes, maxExtraMinutesPerDay: clockRules.maxExtraMinutesPerDay, maxDayMinutes: clockRules.maxDayMinutes, defaultDailyCapMinutes: clockRules.defaultDailyCapMinutes, defaultBreakMinutes: clockRules.defaultBreakMinutes, autoStopWarnMinutes: clockRules.autoStopWarnMinutes })
     .from(employees)
     .innerJoin(clockRules, eq(clockRules.teamId, employees.teamId))
     .where(eq(employees.id, employeeId))
@@ -141,18 +143,29 @@ export type ClockResult = {
  * Records one clock event for the signed-in person. The time is the database clock and the IP comes from the request;
  * nothing the browser sends can change either. Everything is checked inside the person's lock.
  */
-export async function performClock(actor: { id: string; email: string }, type: ClockType, input: ClockInput): Promise<ClockResult> {
+export async function performClock(actor: { id: string; email: string }, type: ClockType, input: ClockInput, system?: { nowMs: number }): Promise<ClockResult> {
   const person = await personForUser(db, actor.id);
   if ((await clockSourceOf(db, person.id)) === "jibble") throw new ActionFailure("You clock in Jibble. ELEVATE reads your hours from there, so the ELEVATE clock is not used.");
-  if (!(await allowRequest("clock", person.id))) throw new ActionFailure("Too many clock actions. Wait a minute and try again.");
-  const rawIp = await clientIp();
+  // `system` is the clock stopping by itself (auto-stop): the events carry source 'auto_stop' and the moment the limit was reached.
+  if (!system && !(await allowRequest("clock", person.id))) throw new ActionFailure("Too many clock actions. Wait a minute and try again.");
+  const rawIp = system ? "unknown" : await clientIp();
   const ip = rawIp === "unknown" ? null : rawIp.slice(0, 64);
 
   let mirrored = 0;
   let mirroredEmployeeId: string | undefined;
   const result = await db.transaction(async (tx) => {
     await lockEmployeeClock(tx, person.id);
-    const replay = replayClock(await loadRecentEvents(tx, person.id));
+    const recent = await loadRecentEvents(tx, person.id);
+    const replay = replayClock(recent);
+    // Auto-stop decides inside the person's lock: the limit and the moment it was reached are worked out from the events as they are now, so a
+    // clock-out and a new clock-in that happened since the check cannot be stepped on. Not due (or nothing to stop) means nothing is written.
+    let stampMs = 0;
+    if (system) {
+      const due = await computeStopLimit(tx, person.id, system.nowMs, { replay });
+      if (!due || due.limitMs > system.nowMs) throw new ActionFailure("Their hours are not used up yet.");
+      const lastEventAt = recent.length > 0 ? Math.max(...recent.map((e) => e.at)) : 0;
+      stampMs = Math.min(system.nowMs, Math.max(lastEventAt, system.nowMs - due.overrunMs));
+    }
     const prefs = await prefsFor(tx, person.id);
     const rules = await rulesFor(tx, person.id);
     const monitoring = await monitoringPolicyPublished(tx);
@@ -163,8 +176,16 @@ export async function performClock(actor: { id: string; email: string }, type: C
       throw new ActionFailure(REFUSALS[`${replay.state}:${type}`] ?? "That is not possible right now.");
     }
 
-    if (replay.state !== "out" && (await pendingClockOut(tx, person.id))) {
+    if (!system && replay.state !== "out" && (await pendingClockOut(tx, person.id))) {
       throw new ActionFailure("Your clock-out request is waiting for approval. Cancel it first if you are still working.");
+    }
+
+    // Breaks are a limited daily allowance taken in 15, 30 or 60 minute pieces; no open-ended breaks (strict time rules, 2026-11-24).
+    if (type === "break_start") {
+      if (input.breakMinutes === undefined) throw new ActionFailure("Choose 15, 30 or 60 minutes for your break.");
+      const left = await breakLeftToday(tx, { employeeId: person.id, zone: prefs.zone, replay, defaultBreakMinutes: rules.defaultBreakMinutes, nowMs: Date.now() });
+      if (left <= 0) throw new ActionFailure("You have no break time left today.");
+      if (input.breakMinutes > left) throw new ActionFailure(`You only have ${left} minutes of break left today.`);
     }
 
     if (type === "clock_in") {
@@ -203,6 +224,19 @@ export async function performClock(actor: { id: string; email: string }, type: C
       if (clientId !== null && projectId === null && (await projectRequired(tx, clientId, person.id))) throw new ActionFailure("Choose a project for this client.");
     }
 
+    // Strict time: starting work, or switching to a client, needs hours left (the schedule, the client's allotted hours, the daily cap, or
+    // approved extra or make-up hours). Otherwise the clock would stop the moment it started.
+    if (type === "clock_in" || type === "switch_client") {
+      const limit = await computeStopLimit(tx, person.id, Date.now(), { replay, clientId });
+      if (limit && limit.limitMs <= Date.now()) {
+        throw new ActionFailure(
+          type === "switch_client"
+            ? "You have no hours left for that client today. Ask your lead about extra hours if you need to keep working."
+            : "You have no hours left for today. If you need to work, ask your lead for extra hours or make-up hours first.",
+        );
+      }
+    }
+
     const location =
       type === "clock_in" && prefs.shareLocation && monitoring && input.latitude !== undefined && input.longitude !== undefined && validCoordinates(input.latitude, input.longitude)
         ? { lat: String(roundCoordinate(input.latitude)), lng: String(roundCoordinate(input.longitude)) }
@@ -213,14 +247,14 @@ export async function performClock(actor: { id: string; email: string }, type: C
     let last: { id: string; occurredAt: Date } | undefined;
     const inserted: { id: string; type: ClockType }[] = [];
     let breakEndedAt: number | null = null;
-    for (const t of types) {
+    for (const [position, t] of types.entries()) {
       [last] = await tx
         .insert(clockEvents)
         .values({
           employeeId: person.id,
           type: t,
-          occurredAt: sql`clock_timestamp()` as unknown as Date, // the real moment, so the two events of a clock-out stay in order
-          source: "web",
+          occurredAt: system ? new Date(stampMs + position) : (sql`clock_timestamp()` as unknown as Date), // the real moment, so the two events of a clock-out stay in order
+          source: system ? "auto_stop" : "web",
           ip,
           outsideAllowedRange,
           plannedBreakMinutes: t === "break_start" ? (input.breakMinutes ?? null) : null,
@@ -245,7 +279,7 @@ export async function performClock(actor: { id: string; email: string }, type: C
     if (type === "clock_in" && input.selfiePath && rules.selfieRequired && monitoring && last) {
       await tx.insert(clockSelfies).values({ eventId: last.id, employeeId: person.id, storagePath: input.selfiePath });
     }
-    await writeAudit({ actor, action: `clock.${type}`, targetType: "employee", targetId: person.id, metadata: { outsideAllowedRange, withLocation: Boolean(location), withSelfie: Boolean(input.selfiePath && rules.selfieRequired), withProject: Boolean(projectId), via: input.via ?? "web" } }, tx);
+    await writeAudit({ actor, action: `clock.${type}`, targetType: "employee", targetId: person.id, metadata: { outsideAllowedRange, withLocation: Boolean(location), withSelfie: Boolean(input.selfiePath && rules.selfieRequired), withProject: Boolean(projectId), via: system ? "auto_stop" : (input.via ?? "web") } }, tx);
     if (type === "clock_in") await touchPresence(tx, person.id);
     // Jibble screenshots: queued in this same transaction when the team uses Jibble and monitoring is published (never blocks the clock).
     // A person listed in JIBBLE_SELF_TEST_EMAILS is testing the link on their own account: allowed without the policy and team switch.
@@ -261,6 +295,8 @@ export async function performClock(actor: { id: string; email: string }, type: C
     };
   });
   if (mirrored > 0) await kickMirror(mirroredEmployeeId);
+  // The limit can change when work starts or resumes or the client changes: ask for a stop at the new limit (replaces any older request).
+  if (!system && (type === "clock_in" || type === "break_end" || type === "switch_client")) await requestAutoStop(person.id);
   return result;
 }
 
@@ -327,7 +363,7 @@ export async function verifyEvidence(tx: Executor, employeeId: string, ids: stri
   const unique = [...new Set(ids)];
   const verified: string[] = [];
   for (const id of unique) {
-    const [row] = await tx.select().from(correctionEvidence).where(and(eq(correctionEvidence.id, id), eq(correctionEvidence.employeeId, employeeId), isNull(correctionEvidence.correctionId), isNull(correctionEvidence.extraRequestId), isNull(correctionEvidence.issueId), isNull(correctionEvidence.purgedAt))).limit(1);
+    const [row] = await tx.select().from(correctionEvidence).where(and(eq(correctionEvidence.id, id), eq(correctionEvidence.employeeId, employeeId), isNull(correctionEvidence.correctionId), isNull(correctionEvidence.extraRequestId), isNull(correctionEvidence.issueId), isNull(correctionEvidence.leaveRequestId), isNull(correctionEvidence.purgedAt))).limit(1);
     if (!row || (uploadedBy && row.uploadedBy && row.uploadedBy !== uploadedBy)) throw new ActionFailure("One of the screenshots is not valid. Add it again.");
     const bytes = await getDocumentStorage().read(BUCKETS.employee, row.storagePath);
     const type = bytes ? imageType(bytes) : null;
@@ -340,6 +376,25 @@ export async function verifyEvidence(tx: Executor, employeeId: string, ids: stri
     verified.push(row.id);
   }
   return verified;
+}
+
+/**
+ * A one-time upload ticket for one screenshot of a person (a time off request's proof). The row waits unattached until the request is sent; an
+ * upload never attached is cleaned up after a day. At most 6 unused ones at a time. Callers authorize and rate-limit first.
+ */
+export async function issueEvidenceTicket(employeeId: string, uploadedBy: string, mime: "image/jpeg" | "image/png"): Promise<{ id: string; path: string; token: string }> {
+  const [{ n }] = (await db.execute(sql`select count(*)::int as n from time.correction_evidence where employee_id = ${employeeId} and uploaded_by = ${uploadedBy} and correction_id is null and extra_request_id is null and issue_id is null and leave_request_id is null and purged_at is null`)) as unknown as { n: number }[];
+  if (n >= 6) throw new ActionFailure("You have unused screenshots waiting. Send your request first, or try again tomorrow.");
+  const path = evidencePath(employeeId, mime);
+  const { token } = await getDocumentStorage().createSignedUpload(BUCKETS.employee, path);
+  const [row] = await db.insert(correctionEvidence).values({ employeeId, storagePath: path, mime, uploadedBy }).returning({ id: correctionEvidence.id });
+  return { id: row.id, path, token };
+}
+
+/** Attaches screenshots that were just verified (verifyEvidence) to a time off request. Call inside the transaction that creates the request. */
+export async function attachEvidenceToLeave(tx: Executor, evidenceIds: string[], leaveRequestId: string): Promise<void> {
+  if (evidenceIds.length === 0) return;
+  await tx.update(correctionEvidence).set({ leaveRequestId }).where(inArray(correctionEvidence.id, evidenceIds));
 }
 
 // ---- Changing recorded time (add events, remove wrong ones) ---------------------------------------------------------------------

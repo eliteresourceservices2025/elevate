@@ -63,7 +63,7 @@ export function dayState(current: DayNumbers, approval: Approval | undefined): D
   return same ? "approved" : "changed";
 }
 
-export type AttendanceRow = DayNumbers & { clientSplit: ClientSplit[];  employeeId: string; date: string; sessions: number; flags: string[]; lateMinutes: number; earlyLeaveMinutes: number; firstIn: Date | null; lastOut: Date | null };
+export type AttendanceRow = DayNumbers & { /** Worked minutes inside an approved make-up window: straight time, already taken out of the extra minutes. */ makeupMinutes: number; clientSplit: ClientSplit[];  employeeId: string; date: string; sessions: number; flags: string[]; lateMinutes: number; earlyLeaveMinutes: number; firstIn: Date | null; lastOut: Date | null };
 
 /**
  * The rebuilt attendance days of some people in a range. Days marked "test only" are left out (hours review, the export, the
@@ -76,10 +76,10 @@ export async function attendanceRows(executor: Executor, employeeIds: string[] |
     ? sql``
     : sql`and not coalesce((select m.test_only from time.hours_marks m where m.employee_id = d.employee_id and m.date = d.date order by m.set_at desc, m.id desc limit 1), false)`;
   const rows = (await executor.execute(sql`
-    select d.employee_id, d.date::text as date, d.sessions, d.scheduled_minutes, d.worked_minutes, d.break_minutes, d.extra_minutes, d.approved_extra_minutes, d.late_minutes, d.early_leave_minutes, d.flags, d.first_in, d.last_out,
+    select d.employee_id, d.date::text as date, d.sessions, d.scheduled_minutes, d.worked_minutes, d.break_minutes, d.extra_minutes, d.approved_extra_minutes, d.makeup_minutes, d.late_minutes, d.early_leave_minutes, d.flags, d.first_in, d.last_out,
       coalesce((select jsonb_agg(jsonb_build_object('clientId', c.client_id, 'workedMinutes', c.worked_minutes, 'breakMinutes', c.break_minutes) order by c.client_id) from time.attendance_day_clients c where c.employee_id = d.employee_id and c.date = d.date), '[]'::jsonb) as client_split
     from time.attendance_days d where d.date between ${from}::date and ${to}::date ${filter} ${testFilter} order by d.date`)) as unknown as {
-    employee_id: string; date: string; sessions: number; scheduled_minutes: number | null; worked_minutes: number; break_minutes: number; extra_minutes: number; approved_extra_minutes: number; late_minutes: number; early_leave_minutes: number; flags: string[]; first_in: Date | null; last_out: Date | null; client_split: ClientSplit[];
+    employee_id: string; date: string; sessions: number; scheduled_minutes: number | null; worked_minutes: number; break_minutes: number; extra_minutes: number; approved_extra_minutes: number; makeup_minutes: number; late_minutes: number; early_leave_minutes: number; flags: string[]; first_in: Date | null; last_out: Date | null; client_split: ClientSplit[];
   }[];
   return rows.map((r) => ({
     employeeId: r.employee_id,
@@ -90,6 +90,7 @@ export async function attendanceRows(executor: Executor, employeeIds: string[] |
     breakMinutes: r.break_minutes,
     extraMinutes: r.extra_minutes,
     approvedExtraMinutes: r.approved_extra_minutes,
+    makeupMinutes: r.makeup_minutes,
     lateMinutes: r.late_minutes,
     earlyLeaveMinutes: r.early_leave_minutes,
     flags: r.flags,

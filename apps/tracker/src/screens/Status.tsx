@@ -10,7 +10,6 @@ const BREAKS: { label: string; minutes: number | undefined }[] = [
   { label: "15 min", minutes: 15 },
   { label: "30 min", minutes: 30 },
   { label: "1 hour", minutes: 60 },
-  { label: "No limit", minutes: undefined },
 ];
 /** With more choices than this, a search box appears above the list. */
 const SEARCH_FROM = 6;

@@ -123,6 +123,7 @@ Clock events, breaks, corrections, time claims, end-of-day notes.
 - `time.clock_events` is append-only; server clock and request IP only; corrections are new rows with approval.
 - `attendance_days` is rebuilt from events, never hand-edited; the clock is online-only on purpose.
 - Location and selfie are monitoring: only under a published monitoring policy; screenshots in claims are proof, never hours.
+- **Strict time rules (owner decision 2026-11-24):** breaks are a daily allowance taken in 15/30/60 minute pieces (no open-ended breaks); the clock stops by itself, stamped when the limit was reached (`source = 'auto_stop'`, through `performClock`), when the shift, the client's allotted hours or the person's daily cap (`core.employees.daily_cap_minutes`, company default 8 h) run out, unless extra or make-up hours are approved; clock-in with no hours left is refused; people on the Jibble clock are never stopped. Auto-stop is an event-driven Inngest run plus a 30-minute sweep and the host backstop, never a faster poller. Details: `docs/modules/time-clock.md`.
 
 ### The Jibble link — `docs/modules/jibble.md`
 Jibble mirror, repair job, safety lock, pause switch.
@@ -132,10 +133,17 @@ Jibble mirror, repair job, safety lock, pause switch.
 - ELEVATE sends to Jibble only when `ELEVATE_ENV=production`; tests use a fake client and never call the real API.
 - Jibble being down must never block or slow the ELEVATE clock.
 
+### People, org chart, time-off proof and restricted documents (owner decisions 2026-11-24)
+
+- The Employee role (contractor/VA) has no People list or name search (`people.browse_directory`) and sees only the line above them and themselves on the org chart (`org.view_full_chart`); see `docs/modules/app-shell-and-dashboard.md`.
+- Every time off request carries a screenshot of the client's approval (kept like other time evidence, deleted 90 days after the decision); see `docs/modules/time-off.md`.
+- A company document can be for selected groups (teams, clients, roles, named people; any one match reads it; HR always can); see `docs/modules/people-admin.md`.
+
 ### Schedules and extra hours — `docs/modules/schedules-and-extra-hours.md`
 Shift schedules, nightly flags, extra-hours requests.
 
 - A shift belongs to the day it starts in the person's own zone; people with no schedule get no flags.
+- A person can have one schedule per client at once (client and allotted hours per day on each; hours never overlap); make-up hours (`/make-up-hours`, asked before working, a lead approves, never your own) are straight time, never extra hours (owner decision 2026-11-24).
 - On schedules and extra-hours requests copy says "extra hours", never "overtime" (payroll screens say "overtime (OT)", by the executives' choice); ELEVATE labels hours; the hours export computes nothing, and only the payroll module computes pay (never tax).
 
 ### Hours review, export and system health — `docs/modules/hours-review-and-health.md`

@@ -17,6 +17,7 @@ import { approvedWindows, assignedClients } from "./extra-hours-service";
 import { historicalHolidayDatesFor } from "@/modules/timeoff/service";
 import { approvalKey, attendanceRows, dayState, latestApprovals } from "./hours-service";
 import { mondayOf } from "./pay-periods";
+import { approvedMakeupWindows } from "./makeup-service";
 import { EVIDENCE_KEEP_DAYS, SELFIE_KEEP_DAYS, loadEventsBetween, notifyOverbreak, onFullDayLeave, prefsFor, rulesFor } from "./service";
 
 // Background work (no signed-in person). src/inngest wraps these in scheduled functions.
@@ -136,6 +137,7 @@ async function rebuildRange(people: { employee_id: string }[], from: string, to:
     const holidays = await historicalHolidayDatesFor(db, employeeId, earliest, today);
     const approved = await approvedWindows(db, employeeId, eventFromMs, eventToMs + DAY_MS);
     const granted = grantedByDate(approved, prefs.zone);
+    const makeupWindows = await approvedMakeupWindows(db, employeeId, eventFromMs, eventToMs + DAY_MS);
 
     for (const d of days) {
       const end = d.lastOut ?? (normalDaysBack === undefined ? eventToMs : now.getTime());
@@ -163,18 +165,25 @@ async function rebuildRange(people: { employee_id: string }[], from: string, to:
         ? ((await db.execute(sql`select 1 as ok from time.jibble_link_log where employee_id = ${employeeId} and source = 'event' and status in ('skipped', 'failed') and last_error is distinct from 'not sent: not the production environment'
             and created_at between to_timestamp(${d.firstIn / 1000}) and to_timestamp(${(end + 3_600_000) / 1000}) limit 1`)) as unknown as { ok: number }[])
         : [];
+      // The clock stopped by itself that day (the hours ran out): a clock-out written by auto-stop.
+      const [autoStopped] = (await db.execute(sql`select 1 as ok from time.clock_events where employee_id = ${employeeId} and source = 'auto_stop' and occurred_at between to_timestamp(${d.firstIn / 1000}) and to_timestamp(${(end + 3_600_000) / 1000}) limit 1`)) as unknown as { ok: number }[];
       const [jibbleFlag] = (await db.execute(sql`select 1 as ok from time.jibble_daily where employee_id = ${employeeId} and date = ${d.date}::date and flagged`)) as unknown as { ok: number }[];
 
       // Against the person's schedule: late, left early, extra hours (a rest day or holiday counts in full).
       const shift = shiftOn(schedules, prefs.zone, d.date);
       const hasSchedule = hasScheduleAround(schedules, d.date);
       const holiday = holidays.has(d.date);
+      // Make-up hours: time worked inside an approved make-up window is straight time, not extra. Only time beyond the scheduled hours can be make-up
+      // (it never eats into the regular shift).
+      const beyondSchedule = hasSchedule ? Math.max(0, d.workedMinutes - (shift?.scheduledMinutes ?? 0)) : d.workedMinutes;
+      const makeupMinutes = makeupWindows.length > 0 ? Math.min(minutesInWindows(d.sessionList, makeupWindows), beyondSchedule) : 0;
+      const workedForExtra = d.workedMinutes - makeupMinutes;
       const late = shift && !holiday ? lateMinutes(d.firstIn, shift, rules.lateGraceMinutes) : 0;
       const early = shift && !holiday && d.lastOut !== null && !d.open ? earlyLeaveMinutes(d.lastOut, shift, rules.lateGraceMinutes) : 0;
       // A person with no schedule has no regular hours to measure against, so only time worked INSIDE an approved extra-hours window
       // is extra (and it is approved by definition). Everything else is plain worked time, with nothing flagged.
       const inWindows = hasSchedule ? 0 : minutesInWindows(d.sessionList, approved);
-      const extra = hasSchedule ? extraMinutes({ workedMinutes: d.workedMinutes, breakMinutes: d.breakMinutes, shift, hasSchedule, holiday }) : inWindows >= EXTRA_THRESHOLD_MINUTES ? inWindows : 0;
+      const extra = hasSchedule ? extraMinutes({ workedMinutes: workedForExtra, breakMinutes: d.breakMinutes, shift, hasSchedule, holiday }) : inWindows >= EXTRA_THRESHOLD_MINUTES ? inWindows : 0;
       // What approved extra hours requests cover, and what is left over (unapproved).
       const split = hasSchedule ? approvedExtra(extra, granted.get(d.date) ?? 0) : { approved: extra, unapproved: 0 };
 
@@ -185,12 +194,14 @@ async function rebuildRange(people: { employee_id: string }[], from: string, to:
         early > 0 ? "left_early" : null,
         extra > 0 ? "extra_hours" : null,
         split.unapproved > 0 ? "unapproved_extra" : null,
-        hasSchedule && !shift && !holiday && d.workedMinutes >= EXTRA_THRESHOLD_MINUTES ? "rest_day_work" : null,
-        holiday && d.workedMinutes >= EXTRA_THRESHOLD_MINUTES ? "holiday_work" : null,
+        hasSchedule && !shift && !holiday && workedForExtra >= EXTRA_THRESHOLD_MINUTES ? "rest_day_work" : null,
+        holiday && workedForExtra >= EXTRA_THRESHOLD_MINUTES ? "holiday_work" : null,
+        makeupMinutes > 0 ? "makeup_hours" : null,
         flagRows[0]?.outside ? "outside_range" : null,
         flagRows[0]?.corrected ? "corrected" : null,
         idle.n > 0 ? "idle_unanswered" : null,
         d.overbreakMinutes > 0 ? "overbreak" : null,
+        autoStopped ? "auto_stopped" : null,
         missingEod ? "no_eod" : null,
         jibbleFlag && !fromJibble ? "jibble_mismatch" : null,
         noShots && !fromJibble ? "no_screenshots" : null,
@@ -209,6 +220,7 @@ async function rebuildRange(people: { employee_id: string }[], from: string, to:
         earlyLeaveMinutes: early,
         extraMinutes: extra,
         approvedExtraMinutes: split.approved,
+        makeupMinutes,
         firstIn: new Date(d.firstIn),
         lastOut: d.lastOut ? new Date(d.lastOut) : null,
         flags,
@@ -218,6 +230,11 @@ async function rebuildRange(people: { employee_id: string }[], from: string, to:
         await tx.insert(attendanceDays).values({ employeeId, date: d.date, ...values }).onConflictDoUpdate({ target: [attendanceDays.employeeId, attendanceDays.date], set: values });
         // The day's time by client (rebuilt with the day; only days with time that belongs to a client have rows).
         await tx.delete(attendanceDayClients).where(and(eq(attendanceDayClients.employeeId, employeeId), eq(attendanceDayClients.date, d.date)));
+        // Each make-up request that started this day is credited with the minutes worked inside its window (never more than was missed).
+        for (const w of makeupWindows) {
+          if (formatInZone(w.startMs, prefs.zone, "yyyy-MM-dd") !== d.date) continue;
+          await tx.execute(sql`update time.makeup_requests set made_up_minutes = ${Math.min(w.missedMinutes, minutesInWindows(d.sessionList, [w]))} where id = ${w.id}`);
+        }
         if (d.clients.length > 0) {
           await tx.insert(attendanceDayClients).values(d.clients.map((c) => ({ employeeId, date: d.date, clientId: c.clientId, workedMinutes: c.workedMinutes, breakMinutes: c.breakMinutes })));
         }
@@ -369,7 +386,7 @@ export async function runQuietSessionAlerts(now = new Date()): Promise<{ noticed
 export async function purgeEvidence(now = new Date()): Promise<{ purged: number }> {
   const orphanCutoff = new Date(now.getTime() - DAY_MS);
   const keepCutoff = new Date(now.getTime() - EVIDENCE_KEEP_DAYS * DAY_MS);
-  const orphans = await db.select({ id: correctionEvidence.id, path: correctionEvidence.storagePath }).from(correctionEvidence).where(sql`${correctionEvidence.correctionId} is null and ${correctionEvidence.extraRequestId} is null and ${correctionEvidence.issueId} is null and ${correctionEvidence.createdAt} < ${orphanCutoff.toISOString()}::timestamptz`).limit(500);
+  const orphans = await db.select({ id: correctionEvidence.id, path: correctionEvidence.storagePath }).from(correctionEvidence).where(sql`${correctionEvidence.correctionId} is null and ${correctionEvidence.extraRequestId} is null and ${correctionEvidence.issueId} is null and ${correctionEvidence.leaveRequestId} is null and ${correctionEvidence.purgedAt} is null and ${correctionEvidence.createdAt} < ${orphanCutoff.toISOString()}::timestamptz`).limit(500);
   if (orphans.length > 0) {
     await getDocumentStorage().remove(BUCKETS.employee, orphans.map((o) => o.path));
     for (const o of orphans) await db.delete(correctionEvidence).where(eq(correctionEvidence.id, o.id));
@@ -379,7 +396,11 @@ export async function purgeEvidence(now = new Date()): Promise<{ purged: number 
     where ev.purged_at is null and c.status <> 'pending' and c.decided_at < ${keepCutoff.toISOString()}::timestamptz
     union
     select ev.id, ev.storage_path as path from time.correction_evidence ev join time.tech_issue_reports r on r.id = ev.issue_id
-    where ev.purged_at is null and r.status = 'handled' and r.handled_at < ${keepCutoff.toISOString()}::timestamptz limit 500`)) as unknown as { id: string; path: string }[];
+    where ev.purged_at is null and r.status = 'handled' and r.handled_at < ${keepCutoff.toISOString()}::timestamptz
+    union
+    select ev.id, ev.storage_path as path from time.correction_evidence ev join time.leave_requests lr on lr.id = ev.leave_request_id
+    where ev.purged_at is null and lr.status in ('approved', 'declined', 'cancelled') and lr.updated_at < ${keepCutoff.toISOString()}::timestamptz
+      and lr.end_date < (${keepCutoff.toISOString()}::timestamptz)::date limit 500`)) as unknown as { id: string; path: string }[];
   if (old.length > 0) {
     await getDocumentStorage().remove(BUCKETS.employee, old.map((o) => o.path));
     for (const o of old) await db.update(correctionEvidence).set({ purgedAt: now }).where(eq(correctionEvidence.id, o.id));

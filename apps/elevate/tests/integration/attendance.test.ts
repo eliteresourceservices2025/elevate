@@ -112,8 +112,8 @@ describe("clocking in and out", () => {
     expect(e.seconds_ago).toBeLessThan(30);
 
     expect(await actions.clockIn({})).toEqual({ ok: false, error: "You are already clocked in." });
-    expect((await actions.startBreak()).ok).toBe(true);
-    expect(await actions.startBreak()).toEqual({ ok: false, error: "You are already on a break." });
+    expect((await actions.startBreak({ breakMinutes: 15 })).ok).toBe(true);
+    expect(await actions.startBreak({ breakMinutes: 15 })).toEqual({ ok: false, error: "You are already on a break." });
     expect(await actions.clockIn({})).toEqual({ ok: false, error: "You are already clocked in, on a break." });
     expect((await queries.getClockStatus())?.state).toBe("break");
 
@@ -581,9 +581,7 @@ describe("timed breaks and overbreaks", () => {
     expect(await planned()).toBe(30);
     expect((await queries.getClockStatus())?.breakPlannedMinutes).toBe(30);
     expect((await actions.endBreak()).ok).toBe(true);
-    expect((await actions.startBreak({})).ok).toBe(true); // no limit
-    expect(await planned()).toBeNull();
-    expect((await queries.getClockStatus())?.breakPlannedMinutes).toBeNull();
+    expect(await actions.startBreak({})).toEqual({ ok: false, error: "Choose 15, 30 or 60 minutes for your break." }); // no open-ended breaks any more
     // Only a break start can carry a length
     await expect(db.execute(sql`insert into time.clock_events (employee_id, type, planned_break_minutes) values (${worker.employeeId}, 'clock_in', 15)`)).rejects.toThrow();
   });
@@ -624,7 +622,8 @@ describe("timed breaks and overbreaks", () => {
     await event(worker.employeeId, "break_start", iso(15 * MIN + 30_000), { planned: 15 });
     as(worker.user);
     expect((await actions.endBreak()).ok).toBe(true);
-    expect((await actions.startBreak({})).ok).toBe(true);
+    // An old open-ended break (from before open-ended breaks were removed) is still never counted as over.
+    await event(worker.employeeId, "break_start", iso(1000));
     await db.execute(sql`insert into time.clock_events (employee_id, type, occurred_at, planned_break_minutes) values (${worker.employeeId}, 'break_end', now(), null)`);
     expect(await overNotes(lead.user.id)).toHaveLength(0);
     expect((await queries.getMyTime())!.days.find((d) => d.sessions > 0)!.overbreakMinutes).toBe(0);

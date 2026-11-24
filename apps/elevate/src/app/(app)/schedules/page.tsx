@@ -20,6 +20,7 @@ function Line({ s, label }: { s: ScheduleLine; label?: string }) {
     <div className="rounded-lg border bg-background p-3 text-sm">
       <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1">
         {label ? <span className="font-semibold">{label}</span> : null}
+        {s.clientName ? <span className="font-semibold">{s.clientName}</span> : null}
         <span className="font-medium">{s.days}</span>
         <span className="text-muted-foreground">
           From {formatDateOnly(s.from)}
@@ -39,6 +40,7 @@ function Line({ s, label }: { s: ScheduleLine; label?: string }) {
         <div>
           <dt className="text-xs text-muted-foreground">Unpaid break</dt>
           <dd>{s.breakMinutes} min</dd>
+          {s.allottedMinutes ? <dd className="text-xs text-muted-foreground">Hours for this client: {s.allottedMinutes / 60} a day</dd> : null}
         </div>
       </dl>
     </div>
@@ -72,7 +74,12 @@ export default async function SchedulesPage({ searchParams }: PageProps<"/schedu
         {!mine ? (
           <p className="text-sm text-muted-foreground">You do not have a people record yet, so there is no schedule to show. Ask HR.</p>
         ) : mine.current ? (
-          <Line s={mine.current} label="Current" />
+          <>
+            <Line s={mine.current} label="Current" />
+            {mine.others.map((s) => (
+              <Line key={s.from + s.client + (s.clientName ?? "")} s={s} label="Also current" />
+            ))}
+          </>
         ) : (
           <p className="text-sm text-muted-foreground">You have no schedule yet, so late, early and extra hours are not tracked. HR sets schedules.</p>
         )}
@@ -89,7 +96,7 @@ export default async function SchedulesPage({ searchParams }: PageProps<"/schedu
         ) : null}
       </section>
 
-      {all ? <SchedulesPanel rows={all.rows} withoutSchedule={all.withoutSchedule} today={todayInZone()} /> : null}
+      {all ? <SchedulesPanel rows={all.rows} withoutSchedule={all.withoutSchedule} today={todayInZone()} clients={all.clients} /> : null}
 
       {team ? (
         <section aria-label="Team schedules" className="space-y-2">
@@ -113,7 +120,14 @@ export default async function SchedulesPage({ searchParams }: PageProps<"/schedu
                       <TableCell>
                         {r.current ? (
                           <span>
+                            {r.current.clientName ? `${r.current.clientName}: ` : ""}
                             {r.current.days}, {r.current.client}
+                            {r.others.map((o) => (
+                              <span key={o.effectiveFrom + o.client + (o.clientName ?? "")} className="block text-xs text-muted-foreground">
+                                Also {o.clientName ? `${o.clientName}: ` : ""}
+                                {o.days}, {o.client}
+                              </span>
+                            ))}
                           </span>
                         ) : (
                           <Badge variant="outline">No schedule</Badge>

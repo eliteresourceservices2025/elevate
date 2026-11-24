@@ -295,3 +295,8 @@ Fill in before go-live: developer, Jibble support, the host (Vercel), Supabase s
 2. Make the release video if it is a feature release (see `tools/recap-video/`; the narration says "ELITE Resource Services", never "ERS").
 3. After deploying, post an announcement (HR > Announcements > New) with the video attached, then paste that announcement's id into the entry's `announcementId` so What's new links to it.
 4. Tag the commit `v<version>` in git (ask the owner before pushing).
+
+## The clock stopping by itself (auto-stop)
+
+- If people say their clock stopped: open the day's flags (`Clock stopped automatically`). The stop time is when their hours ran out (schedule end, the client's allotted hours, or their daily cap), not when the job ran. To let someone keep working, approve extra hours or make-up hours for that window first; HR can also set a person's "Hours per day" on the Employment tab.
+- If clocks run past their limit: check the job `auto-stop` on the System health page and the host backstop (`/api/cron/backstop` returns `autoStop: { checked, stopped }`). The sweep is safe to run twice.

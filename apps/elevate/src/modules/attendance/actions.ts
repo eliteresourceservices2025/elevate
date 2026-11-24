@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { fromZonedTime } from "date-fns-tz";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { ForbiddenError, authorize, scopeFor } from "@/lib/authz";
+import { ForbiddenError, authorize, can, scopeFor } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { allowRequest } from "@/lib/rate-limit";
@@ -257,12 +257,16 @@ export async function openEvidence(input: unknown): Promise<ActionResult<{ url: 
     if (!parsed.success) return fail(BAD);
     if (!(await allowRequest("download", actor.id))) return fail("Too many downloads. Wait a few minutes and try again.");
     const [ev] = await db.select().from(correctionEvidence).where(eq(correctionEvidence.id, parsed.data.evidenceId)).limit(1);
-    if (!ev || (!ev.correctionId && !ev.extraRequestId && !ev.issueId) || ev.purgedAt) return fail("That screenshot is no longer available.");
+    if (!ev || (!ev.correctionId && !ev.extraRequestId && !ev.issueId && !ev.leaveRequestId) || ev.purgedAt) return fail("That screenshot is no longer available.");
     const [person] = await db.select({ userId: employees.userId }).from(employees).where(eq(employees.id, ev.employeeId));
-    if (person?.userId === actor.id) await authorize(actor, "attendance.request_correction", { ownerUserId: actor.id });
+    if (ev.leaveRequestId) {
+      // A time off request's proof: the person, their lead (the time-off chain) and HR.
+      if (person?.userId === actor.id) await authorize(actor, "timeoff.request", { ownerUserId: actor.id });
+      else if (!can(actor, "timeoff.approve", { ownerUserId: person?.userId ?? undefined, managerChainUserIds: await timeChainUserIds(db, ev.employeeId) })) await authorize(actor, "timeoff.approve_final");
+    } else if (person?.userId === actor.id) await authorize(actor, "attendance.request_correction", { ownerUserId: actor.id });
     else await authorize(actor, "attendance.approve_correction", { ownerUserId: person?.userId ?? undefined, managerChainUserIds: await timeChainUserIds(db, ev.employeeId) });
     const url = await getDocumentStorage().createSignedDownload(BUCKETS.employee, ev.storagePath, 60, `evidence.${ev.mime === "image/png" ? "png" : "jpg"}`);
-    await writeAudit({ actor, action: "clock.evidence_view", targetType: "employee", targetId: ev.employeeId, metadata: { evidenceId: ev.id, correctionId: ev.correctionId, extraRequestId: ev.extraRequestId, issueId: ev.issueId } });
+    await writeAudit({ actor, action: "clock.evidence_view", targetType: "employee", targetId: ev.employeeId, metadata: { evidenceId: ev.id, correctionId: ev.correctionId, extraRequestId: ev.extraRequestId, issueId: ev.issueId, leaveRequestId: ev.leaveRequestId } });
     return { ok: true, data: { url } };
   });
 }

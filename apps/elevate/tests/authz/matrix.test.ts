@@ -9,6 +9,9 @@ import { ROLE_SLUGS, type RoleSlug, type Scope } from "@/lib/roles";
 // Deferred (grant nothing yet): recruiter "hand-off only" for onboarding.
 const EXPECTED: Record<string, string> = {
   "people.view_directory": "A A A A A A",
+  // The People list and name search: everyone above the contractor/VA role. A VA keeps their own profile and sees only their own line on the org chart.
+  "people.browse_directory": "A A A A A -",
+  "org.view_full_chart": "A A A A A -",
   "people.view_profile": "A A T - - O",
   "people.view_sensitive": "A A - - - O",
   "people.edit_profile": "A A - - - -",
@@ -109,6 +112,8 @@ const EXPECTED: Record<string, string> = {
   "extra_hours.request": "O O O O O O",
   "extra_hours.file_for_others": "A A T - - -",
   "extra_hours.decide": "A A T - - -",
+  "makeup.request": "O O O O O O",
+  "makeup.decide": "A A T - - -",
   "hours.approve": "A A T - - -",
   "hours.export": "A A - - - -",
   "recruiting.view": "A A T A - -", // a lead's team scope = on that opening's hiring team

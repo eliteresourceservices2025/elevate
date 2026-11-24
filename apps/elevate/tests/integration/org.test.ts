@@ -272,24 +272,25 @@ describe("org chart and directory", () => {
 
     const asStaff = await canOpen(staffUser);
     expect(asStaff.get(staffEmp)).toBe(true);
-    expect([asStaff.get(top), asStaff.get(leadEmp), asStaff.get(report)]).toEqual([false, false, false]);
+    // A contractor/VA sees only the line above them and themselves: the lead (a sibling) and the lead's report are not in their chart at all.
+    expect([asStaff.get(top), asStaff.get(leadEmp), asStaff.get(report)]).toEqual([false, undefined, undefined]);
 
     const asHr = await canOpen(hr);
     expect([asHr.get(top), asHr.get(leadEmp), asHr.get(report), asHr.get(staffEmp)]).toEqual([true, true, true, true]);
 
     expect(asHr.has(gone)).toBe(false); // people who left are not on the chart
-    as(staff);
+    as(hr);
     const nodes = await orgQueries.getOrgChart();
     expect(Object.keys(nodes[0]).sort()).toEqual(["canOpen", "id", "managerId", "name", "position", "status", "team"]); // directory fields only
   });
 
-  it("the directory shows team and manager to everyone and filters by team", async () => {
+  it("the directory shows team and manager to everyone above the VA role and filters by team", async () => {
     const { teamId } = await makeTeam("dir");
     const boss = await makeEmployee("DirBoss");
     const person = await makeEmployee("DirPerson", { managerId: boss, teamId });
     await makeEmployee("DirOther");
 
-    as(staff);
+    as(hr);
     const view = await peopleQueries.listDirectory({ team: teamId });
     expect(view.rows.map((r) => r.id)).toEqual([person]);
     expect(view.rows[0].team).toMatch(/^Team dir/);

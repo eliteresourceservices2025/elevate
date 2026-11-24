@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { bigint, check, type AnyPgColumn, date, index, integer, pgSchema, primaryKey, text, timestamp, uniqueIndex, uuid, boolean } from "drizzle-orm/pg-core";
+import { teams } from "@/modules/org/schema";
 import { clients, employees } from "@/modules/people/schema";
 
 // Document vault (A3). Files live in private Supabase Storage buckets; only metadata is here.
@@ -33,6 +34,39 @@ export const documentTypes = docs
       uniqueIndex("document_types_slug_idx").on(t.slug),
       uniqueIndex("document_types_name_idx").on(sql`lower(${t.name})`),
       check("document_types_scope_chk", sql`${t.scope} in ('employee','company')`),
+    ],
+  )
+  .enableRLS();
+
+/**
+ * Who a restricted company document is for (audience = 'restricted'): any mix of teams, clients (people with a current assignment), roles and
+ * named people. A person who matches ANY row can read the document; HR and Super Admin always can. Rows are replaced when HR changes the audience.
+ */
+export const documentAudienceMembers = docs
+  .table(
+    "document_audience_members",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      documentId: uuid("document_id")
+        .notNull()
+        .references(() => documents.id, { onDelete: "cascade" }),
+      kind: text("kind").notNull(),
+      teamId: uuid("team_id").references(() => teams.id),
+      clientId: uuid("client_id").references(() => clients.id),
+      roleSlug: text("role_slug"),
+      employeeId: uuid("employee_id").references(() => employees.id),
+      createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [
+      index("document_audience_document_idx").on(t.documentId),
+      check("document_audience_kind_chk", sql`${t.kind} in ('team','client','role','person')`),
+      check(
+        "document_audience_one_ref_chk",
+        sql`(${t.kind} = 'team' and ${t.teamId} is not null and ${t.clientId} is null and ${t.roleSlug} is null and ${t.employeeId} is null)
+          or (${t.kind} = 'client' and ${t.clientId} is not null and ${t.teamId} is null and ${t.roleSlug} is null and ${t.employeeId} is null)
+          or (${t.kind} = 'role' and ${t.roleSlug} is not null and ${t.teamId} is null and ${t.clientId} is null and ${t.employeeId} is null)
+          or (${t.kind} = 'person' and ${t.employeeId} is not null and ${t.teamId} is null and ${t.clientId} is null and ${t.roleSlug} is null)`,
+      ),
     ],
   )
   .enableRLS();
@@ -104,7 +138,7 @@ export const documents = docs
       index("documents_expiry_idx").on(t.expiresOn).where(sql`${t.status} = 'active' and ${t.archivedAt} is null`),
       index("documents_pending_idx").on(t.createdAt).where(sql`${t.status} = 'pending'`),
       check("documents_status_chk", sql`${t.status} in ('pending','active')`),
-      check("documents_audience_chk", sql`${t.audience} in ('all_staff','hr_only')`),
+      check("documents_audience_chk", sql`${t.audience} in ('all_staff','hr_only','restricted')`),
       check("documents_size_chk", sql`${t.sizeBytes} is null or (${t.sizeBytes} > 0 and ${t.sizeBytes} <= 10485760)`),
     ],
   )

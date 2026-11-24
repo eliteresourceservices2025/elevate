@@ -18,6 +18,8 @@ export const requestLeaveSchema = z
     note,
     /** HR filing for someone else. Omit for your own request. */
     employeeId: z.preprocess(blankToUndefined, uuid.optional()),
+    /** A screenshot of the client's approval, uploaded first (one to three). Every request carries one. */
+    evidenceIds: z.array(uuid).max(3, "Attach three screenshots at most.").default([]),
   })
   .refine(inOrder, ORDER)
   .refine(notTooLong, LENGTH);

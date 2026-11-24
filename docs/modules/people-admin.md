@@ -63,3 +63,9 @@ A person whose work email or name was edited here could end up in the directory 
 
 - `core.birthday_preferences` (migration 0165): one row per person once they switch their birthday off or on; no row means shown. Only the person changes it (`setMyBirthdayHidden`, `people.set_birthday_visibility`, own scope for every role). The toggle is on My profile > Personal. Copy: month and day only, never the year.
 - **Privacy notice:** add one line saying colleagues see your birthday (month and day) on the dashboard unless you hide it; it joins the pending notice update (do not publish a notice just for this).
+
+## Company documents for selected groups (owner decision 2026-11-24)
+
+- A company document (`employee_id` null) can be for "Selected groups": `documents.audience = 'restricted'` plus rows in `docs.document_audience_members` (kind team, client, role or person; any mix, matching any one is enough). Teams match the person's team, clients a CURRENT assignment, roles the sign-in roles, people the people record. HR and Super Admin (`documents.manage_company`) always read and see who it is for (`audienceGroups` is for them only).
+- It is enforced in `listCompanyDocuments` (a SQL match) and in `authorizeDocumentView`, which the download link and the in-page preview both use. A restricted file is never an announcement attachment (those need `all_staff`). Choosing "All staff" or "HR only" later clears the groups; "Selected groups" needs at least one.
+- `listAudienceOptions` gives HR the teams, clients and people to pick from. Audit rows keep ids and counts only. The pending-upload cleanup deletes a pending restricted file with its groups (cascade).

@@ -19,3 +19,9 @@
 - **Invites:** approval and cancellation queue an email of kind `invite` with an .ics attachment (`ics.ts`, all-day, title "Day off", no leave type). Email attachments are stored in `ops.email_queue.attachment` and sent through the email provider (Brevo or Resend).
 - **Calendar** (`getTeamCalendar`): HR sees everyone with leave types and pending requests; a Team Lead their downline; an Executive only counts per day; everyone else their teammates by name (approved only, leave type hidden except their own).
 - E2E tip: in the dev server a page can load before React hydrates, and text typed into a controlled field before then is lost. Use `waitForHydration(page, selector)` from `tests/e2e/helpers.ts` before filling forms.
+
+## Proof for every request (owner decision 2026-11-24)
+
+- Every time off request carries 1 to 3 screenshots of the client's approval (JPG or PNG, 5 MB each, judged by the file's bytes). `requestLeave` refuses without one ("Attach a screenshot of your client's approval.") after the person and date checks; HR filing for someone needs one too, uploaded for that person (`requestLeaveEvidenceUpload` takes `employeeId` and needs `timeoff.file_for_others`).
+- The files reuse `time.correction_evidence` (new column `leave_request_id`; at most one parent per row), private bucket `employee-docs`, never a storage link: the person, their time-off chain (`timeoff.approve`) and HR open one through `openEvidence` (60-second link, audited as `clock.evidence_view`). A request with unused uploads is capped at 6 waiting per person.
+- `purgeEvidence` deletes the files 90 days after the request was decided (approved, declined or cancelled); the rows stay, marked purged. A waiting request keeps its files. The upload screen warns never to include client or patient information.

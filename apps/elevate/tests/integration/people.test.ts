@@ -50,11 +50,13 @@ const person = (suffix: string, extra: Record<string, unknown> = {}) => ({
 let hr: TestUser;
 let hr2: TestUser;
 let staff: TestUser;
+let recruiter: TestUser;
 
 beforeAll(async () => {
   hr = await makeUser("hr@example.com", ["employee", "hr_admin"]);
   hr2 = await makeUser("hr2@example.com", ["employee", "hr_admin"]);
   staff = await makeUser("staff@example.com", ["employee"]);
+  recruiter = await makeUser("recruiter@example.com", ["employee", "recruiter"]);
 });
 
 async function createPerson(suffix: string, extra: Record<string, unknown> = {}) {
@@ -296,7 +298,7 @@ describe("append-only tables", () => {
 });
 
 describe("directory, clients and assignments", () => {
-  it("hides client names and archived people from staff, shows them to HR", async () => {
+  it("hides client names and archived people from staff above the VA role, shows them to HR, and gives a VA no list at all", async () => {
     const id = await createPerson("dir", { legalFirstName: "Directoria" });
     as(hr);
     expect((await actions.createClient({ name: "Test Clinic (fake)", timeZone: "America/Phoenix" })).ok).toBe(true);
@@ -309,6 +311,8 @@ describe("directory, clients and assignments", () => {
     expect(hrView.rows[0].clientNames).toBe("Test Clinic (fake)");
 
     as(staff);
+    await expect(queries.listDirectory({ q: "Directoria" })).rejects.toThrow(); // a contractor/VA has no People list
+    as(recruiter);
     const staffView = await queries.listDirectory({ q: "Directoria", client: client.id });
     expect(staffView.rows).toHaveLength(1);
     expect(staffView.rows[0].clientNames).toBeNull();
@@ -317,7 +321,7 @@ describe("directory, clients and assignments", () => {
 
     as(hr);
     expect((await actions.archiveEmployee({ employeeId: id })).ok).toBe(true);
-    as(staff);
+    as(recruiter);
     expect((await queries.listDirectory({ q: "Directoria", archived: "1" })).rows).toHaveLength(0);
     as(hr);
     expect((await queries.listDirectory({ q: "Directoria" })).rows).toHaveLength(0);

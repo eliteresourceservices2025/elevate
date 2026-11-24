@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { boolean, check, date, index, integer, jsonb, numeric, smallint, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { teams } from "@/modules/org/schema";
 import { clientProjects, clients, employees } from "@/modules/people/schema";
-import { time } from "@/modules/timeoff/schema";
+import { leaveRequests, time } from "@/modules/timeoff/schema";
 
 // The ELEVATE time clock (B2). ELEVATE is the only source of hours. Clock events are append-only; a correction is
 // a new, approved row, never an edit. Timestamps come from the database clock, the IP from the request.
@@ -50,8 +50,8 @@ export const clockEvents = time
       check("clock_events_type_chk", sql`${t.type} in ('clock_in','break_start','break_end','clock_out','switch_client')`),
       check("clock_events_client_chk", sql`(${t.clientId} is null or ${t.type} in ('clock_in','switch_client')) and (${t.type} <> 'switch_client' or ${t.clientId} is not null)`),
       check("clock_events_project_chk", sql`${t.projectId} is null or (${t.clientId} is not null and ${t.type} in ('clock_in','switch_client'))`),
-      check("clock_events_source_chk", sql`${t.source} in ('web','admin_correction','jibble')`),
-      check("clock_events_correction_chk", sql`(${t.source} in ('web','jibble')) or (${t.correctionId} is not null and coalesce(length(trim(${t.correctionReason})), 0) > 0)`),
+      check("clock_events_source_chk", sql`${t.source} in ('web','admin_correction','jibble','auto_stop')`),
+      check("clock_events_correction_chk", sql`(${t.source} in ('web','jibble','auto_stop')) or (${t.correctionId} is not null and coalesce(length(trim(${t.correctionReason})), 0) > 0)`),
       check("clock_events_planned_chk", sql`${t.plannedBreakMinutes} is null or (${t.type} = 'break_start' and ${t.plannedBreakMinutes} in (15, 30, 60))`),
       check("clock_events_location_chk", sql`(${t.approxLat} is null) = (${t.approxLng} is null)`),
     ],
@@ -126,6 +126,10 @@ export const clockRules = time
     /** Most extra hours one person may be approved for in a day, and the total hours in a day past which a request shows a warning. */
     maxExtraMinutesPerDay: integer("max_extra_minutes_per_day").notNull().default(240),
     maxDayMinutes: integer("max_day_minutes").notNull().default(720),
+    /** Strict time (2026-11-24): the daily limit for people with no schedule and no personal cap, the break allowance for people with no schedule, and the minutes of warning before the clock stops by itself. */
+    defaultDailyCapMinutes: integer("default_daily_cap_minutes").notNull().default(480),
+    defaultBreakMinutes: integer("default_break_minutes").notNull().default(60),
+    autoStopWarnMinutes: integer("auto_stop_warn_minutes").notNull().default(10),
     updatedBy: uuid("updated_by"),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   })
@@ -248,6 +252,10 @@ export const schedules = time
       /** ISO weekdays worked: 1 = Monday ... 7 = Sunday. The others are rest days. */
       weekdays: smallint("weekdays").array().notNull(),
       breakMinutes: smallint("break_minutes").notNull().default(0),
+      /** The client this schedule is for (null = the person's one general schedule). A person can have one schedule per client at the same time, as long as the hours do not overlap. */
+      clientId: uuid("client_id").references(() => clients.id),
+      /** Minutes of work per scheduled day allotted to that client; the clock stops at this much for the client (null = no separate limit). */
+      allottedMinutesPerDay: smallint("allotted_minutes_per_day"),
       zone: text("zone").notNull(),
       createdBy: uuid("created_by"),
       createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -258,6 +266,7 @@ export const schedules = time
       check("schedules_times_chk", sql`${t.startTime} ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$' and ${t.endTime} ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'`),
       check("schedules_weekdays_chk", sql`cardinality(${t.weekdays}) between 1 and 7 and ${t.weekdays} <@ array[1,2,3,4,5,6,7]::smallint[]`),
       check("schedules_break_chk", sql`${t.breakMinutes} between 0 and 240`),
+      check("schedules_allotted_chk", sql`${t.allottedMinutesPerDay} is null or ${t.allottedMinutesPerDay} between 1 and 960`),
     ],
   )
   .enableRLS();
@@ -286,6 +295,8 @@ export const attendanceDays = time
       extraMinutes: integer("extra_minutes").notNull().default(0),
       /** The part of the extra time covered by approved extra hours requests; the rest is unapproved. */
       approvedExtraMinutes: integer("approved_extra_minutes").notNull().default(0),
+      /** Worked minutes inside an approved make-up window: straight time, never extra hours (they are taken out of the extra minutes above). */
+      makeupMinutes: integer("makeup_minutes").notNull().default(0),
       firstIn: timestamp("first_in", { withTimezone: true }),
       lastOut: timestamp("last_out", { withTimezone: true }),
       /** Flags: open_session, outside_range, corrected, idle_unanswered, on_leave. Late, overtime and absence arrive with schedules. */
@@ -390,6 +401,44 @@ export const extraHoursRequests = time
   )
   .enableRLS();
 
+/**
+ * Make-up hours (strict time, 2026-11-24): someone who was absent or unavailable asks, BEFORE working it, to make up the missed time in
+ * another window so they are not short. A lead approves. Time worked inside an approved window is straight time (never extra hours) and is
+ * credited to the missed day it names. At most one live (waiting or approved) window can cover any moment of one person's time.
+ */
+export const makeupRequests = time
+  .table(
+    "makeup_requests",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      employeeId: uuid("employee_id")
+        .notNull()
+        .references(() => employees.id),
+      /** The missed day being made up (the person's own zone), and how many minutes of it were short when the request was made. */
+      absenceDate: date("absence_date", { mode: "string" }).notNull(),
+      missedMinutes: integer("missed_minutes").notNull(),
+      windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+      windowEnd: timestamp("window_end", { withTimezone: true }).notNull(),
+      minutes: integer("minutes").notNull(),
+      reason: text("reason").notNull(),
+      status: text("status").notNull().default("pending"),
+      decidedBy: uuid("decided_by"),
+      decidedAt: timestamp("decided_at", { withTimezone: true }),
+      decisionNote: text("decision_note"),
+      /** Minutes actually worked inside the window (kept to the missed time), written when the person's days are rebuilt. */
+      madeUpMinutes: integer("made_up_minutes").notNull().default(0),
+      createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [
+      index("makeup_requests_employee_idx").on(t.employeeId, t.windowStart),
+      index("makeup_requests_status_idx").on(t.status, t.createdAt),
+      check("makeup_status_chk", sql`${t.status} in ('pending','approved','declined','cancelled')`),
+      check("makeup_window_chk", sql`${t.windowEnd} > ${t.windowStart} and ${t.minutes} between 15 and 960 and ${t.missedMinutes} between 15 and 960`),
+      check("makeup_reason_chk", sql`coalesce(length(trim(${t.reason})), 0) > 0`),
+    ],
+  )
+  .enableRLS();
+
 /** Screenshots a person attaches to a time claim. The file is deleted 90 days after the decision; the row stays. */
 export const correctionEvidence = time
   .table(
@@ -405,6 +454,8 @@ export const correctionEvidence = time
       extraRequestId: uuid("extra_request_id").references(() => extraHoursRequests.id),
       /** Or to a technical issue report (a screenshot is required with one). */
       issueId: uuid("issue_id").references(() => techIssueReports.id),
+      /** Or to a time off request: the client's approval for the days (owner decision 2026-11-24, every request carries one). */
+      leaveRequestId: uuid("leave_request_id").references(() => leaveRequests.id),
       /** The sign-in account that uploaded it (a lead or HR uploads for someone else); null for older rows. */
       uploadedBy: uuid("uploaded_by"),
       storagePath: text("storage_path").notNull(),
@@ -414,7 +465,7 @@ export const correctionEvidence = time
       createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
       purgedAt: timestamp("purged_at", { withTimezone: true }),
     },
-    (t) => [uniqueIndex("correction_evidence_path_idx").on(t.storagePath), index("correction_evidence_claim_idx").on(t.correctionId), check("correction_evidence_mime_chk", sql`${t.mime} in ('image/jpeg','image/png')`), check("correction_evidence_one_parent_chk", sql`num_nonnulls(${t.correctionId}, ${t.extraRequestId}, ${t.issueId}) <= 1`), index("correction_evidence_extra_idx").on(t.extraRequestId), index("correction_evidence_issue_idx").on(t.issueId)],
+    (t) => [uniqueIndex("correction_evidence_path_idx").on(t.storagePath), index("correction_evidence_claim_idx").on(t.correctionId), check("correction_evidence_mime_chk", sql`${t.mime} in ('image/jpeg','image/png')`), check("correction_evidence_one_parent_chk", sql`num_nonnulls(${t.correctionId}, ${t.extraRequestId}, ${t.issueId}, ${t.leaveRequestId}) <= 1`), index("correction_evidence_extra_idx").on(t.extraRequestId), index("correction_evidence_issue_idx").on(t.issueId), index("correction_evidence_leave_idx").on(t.leaveRequestId)],
   )
   .enableRLS();
 
