@@ -33,11 +33,12 @@ export async function expectedMinutesByDay(executor: Executor, employeeId: strin
   const leave = (await executor.execute(sql`
     select start_date::text as s, end_date::text as e from time.leave_requests
     where employee_id = ${employeeId} and status = 'approved' and not half_day and start_date <= ${to}::date and end_date >= ${from}::date`)) as unknown as { s: string; e: string }[];
+  const overrides = new Map(((await executor.execute(sql`select date::text as date, minutes from time.daily_hours where employee_id = ${employeeId} and date between ${from}::date and ${to}::date`)) as unknown as { date: string; minutes: number }[]).map((o) => [o.date, Number(o.minutes)]));
   const out = new Map<string, number | null>();
   for (let date = from; date <= to; date = addDays(date, 1)) {
     const off = holidays.has(date) || leave.some((l) => l.s <= date && date <= l.e);
     const shift = shiftOn(schedules, zone, date);
-    out.set(date, off ? null : expectedMinutesOn({ scheduledMinutes: shift?.scheduledMinutes ?? null, hasSchedule: hasScheduleAround(schedules, date), isoWeekday: isoWeekday(date), capMinutes: cap }));
+    out.set(date, off ? null : expectedMinutesOn({ scheduledMinutes: shift?.scheduledMinutes ?? null, hasSchedule: hasScheduleAround(schedules, date), isoWeekday: isoWeekday(date), capMinutes: overrides.get(date) ?? cap }));
   }
   return out;
 }

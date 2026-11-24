@@ -466,6 +466,8 @@ export type ScheduleListRow = {
   /** Recent schedules HR may correct in place (started in the last 7 days or later), with the newest one's shift to prefill. */
   /** HR's daily cap in minutes for this person (used when they have no schedule); null = the company default. */
   dailyCapMinutes: number | null;
+  /** Hours HR set for specific days in the next two weeks (people with no fixed schedule). */
+  dayHours: { date: string; minutes: number }[];
   correctable: { count: number; startTime: string; endTime: string; weekdays: number[]; breakMinutes: number; zone: string; clientId: string | null } | null;
 };
 export type CurrentScheduleLine = { days: string; client: string; manila: string; effectiveFrom: string; breakMinutes: number; clientName: string | null; allottedMinutes: number | null };
@@ -497,6 +499,8 @@ export async function listSchedules(): Promise<{ rows: ScheduleListRow[]; withou
   const byPerson = await loadSchedulesFor(db, people.map((p) => p.id));
   const names = await scheduleClientNames(byPerson.values());
   const today = todayInZone();
+  const dayHoursBy = new Map<string, { date: string; minutes: number }[]>();
+  for (const d of (await db.execute(sql`select employee_id, date::text as date, minutes from time.daily_hours where date between ${today}::date and (${today}::date + 14) order by date`)) as unknown as { employee_id: string; date: string; minutes: number }[]) dayHoursBy.set(d.employee_id, [...(dayHoursBy.get(d.employee_id) ?? []), { date: d.date, minutes: Number(d.minutes) }]);
   const rows = people.map((p) => {
     const list = byPerson.get(p.id) ?? [];
     const nowAll = schedulesFor(list, today);
@@ -510,6 +514,7 @@ export async function listSchedules(): Promise<{ rows: ScheduleListRow[]; withou
       current: now ? currentLine(now, today, names) : null,
       others: nowAll.slice(1).map((s) => currentLine(s, today, names)),
       dailyCapMinutes: p.cap === null ? null : Number(p.cap),
+      dayHours: dayHoursBy.get(p.id) ?? [],
       correctable: (() => {
         const lastAny = list.filter((s) => s.effectiveFrom >= addDays(today, -7)).pop();
         const recent = list.filter((s) => s.effectiveFrom >= addDays(today, -7) && (s.clientId ?? null) === (lastAny?.clientId ?? null));
@@ -596,6 +601,7 @@ export async function listTeamSchedules(): Promise<{ rows: ScheduleListRow[] }> 
         current: now ? currentLine(now, today, names) : null,
         others: nowAll.slice(1).map((s) => currentLine(s, today, names)),
         dailyCapMinutes: null,
+        dayHours: [],
         correctable: null,
         upcoming: later ? { effectiveFrom: later.effectiveFrom, days: describeSchedule(later, later.effectiveFrom).days, client: describeSchedule(later, later.effectiveFrom).client } : null,
       };

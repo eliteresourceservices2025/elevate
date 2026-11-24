@@ -111,6 +111,13 @@ export const assignScheduleSchema = z.object({
 });
 export const endScheduleSchema = z.object({ employeeId: uuid, endDate: ymd });
 /** HR ends the current schedule of many people on the same date (for example imported schedules that should not have been set). */
+/** HR sets the hours of specific days (a date and minutes; null clears that day) for one or many people with no fixed schedule. */
+export const setDayHoursSchema = z
+  .object({
+    employeeIds: z.array(uuid).min(1, "Choose at least one person").max(200, "Choose 200 people at most"),
+    days: z.array(z.object({ date: ymd, minutes: z.union([z.number().int("Whole minutes").min(1, "At least 1 minute").max(960, "16 hours at most"), z.null()]) })).min(1, "Add at least one day").max(31, "31 days at most"),
+  })
+  .refine((v) => new Set(v.days.map((d) => d.date)).size === v.days.length, { message: "Each day can only be listed once", path: ["days"] });
 export const endSchedulesSchema = z.object({
   employeeIds: z.array(uuid).min(1, "Choose at least one person").max(200, "Choose 200 people at most"),
   endDate: ymd,

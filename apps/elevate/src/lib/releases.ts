@@ -21,6 +21,7 @@ export const RELEASES: Release[] = [
     title: "Reports you can read and answer",
     highlights: [
       "Make-up hours now work for everyone, including HR, leads, executives and recruiters. If you have no schedule, a weekday counts as your daily hours.",
+      "Contractors with no fixed schedule can now have their hours set per day, with different hours for specific days. The clock and the extra hours prompt follow them.",
       "Technical issues, time corrections and Contact support have a new inbox: a list on the left with search and filters, and the report you choose opens on the right.",
       "Screenshots now open right inside ELEVATE, with a full-size viewer, instead of downloading.",
       "You can now message each other on a report or request. Whoever handles it can ask a question without deciding yet, and you get a notice when they write.",

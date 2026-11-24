@@ -6,7 +6,7 @@ import { authorize } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { isCheckViolation, isUniqueViolation } from "@/lib/db-errors";
-import { fail, runAction, type ActionResult } from "@/lib/run-action";
+import { ActionFailure, fail, runAction, type ActionResult } from "@/lib/run-action";
 import { writeAudit } from "@/modules/audit/write";
 import { employees } from "@/modules/people/schema";
 import { recordHistory } from "@/modules/people/service";
@@ -22,6 +22,7 @@ import {
   reassignReportsSchema,
   setAttendanceLeadSchema,
   setDailyCapSchema,
+  setDailyCapsSchema,
   setReportingSchema,
   updateDepartmentSchema,
   updatePositionSchema,
@@ -320,6 +321,34 @@ export async function setDailyCap(input: unknown): Promise<ActionResult> {
       revalidatePath("/schedules");
       revalidatePath(`/people/${person.id}`);
       return done();
+    });
+  });
+}
+
+/**
+ * Sets or clears the daily hours of several people at once (contractors with no fixed schedule): the clock warns and stops after that many hours a
+ * day and the extra hours prompt follows it. All or nothing: one person who is not found stops the whole change; someone already at that value
+ * is skipped. HR only. One audit row per person says which field changed, not the value.
+ */
+export async function setDailyCaps(input: unknown): Promise<ActionResult<{ changed: number }>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "org.manage_reporting");
+    const p = setDailyCapsSchema.safeParse(input);
+    if (!p.success) return fail(first(p.error));
+    const ids = [...new Set(p.data.employeeIds)];
+    return db.transaction(async (tx) => {
+      let changed = 0;
+      for (const employeeId of ids) {
+        const [person] = await tx.select({ id: employees.id, cap: employees.dailyCapMinutes }).from(employees).where(and(eq(employees.id, employeeId), isNull(employees.archivedAt)));
+        if (!person) throw new ActionFailure("One of those people was not found.");
+        if ((person.cap ?? null) === p.data.minutes) continue;
+        await tx.update(employees).set({ dailyCapMinutes: p.data.minutes, updatedAt: new Date() }).where(eq(employees.id, person.id));
+        await writeAudit({ actor, action: "employee.daily_cap", targetType: "employee", targetId: person.id, before: { field: "daily_cap_minutes", set: person.cap !== null }, after: { field: "daily_cap_minutes", set: p.data.minutes !== null }, metadata: { bulk: ids.length } }, tx);
+        changed += 1;
+      }
+      revalidatePath("/schedules");
+      return { ok: true as const, data: { changed } };
     });
   });
 }

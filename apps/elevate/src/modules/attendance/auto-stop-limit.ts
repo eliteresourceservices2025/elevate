@@ -55,6 +55,9 @@ export async function computeStopLimit(executor: Executor, employeeId: string, n
   // Approved make-up hours let the person work their window like approved extra hours (they are not tied to a client).
   const makeupWindows = await approvedMakeupWindows(executor, employeeId, nowMs - 12 * HOUR, nowMs + 24 * HOUR);
   const windows = [...extraWindows, ...makeupWindows];
+  // Hours HR set for this specific day (a contractor whose hours change from day to day) come before their usual hours per day.
+  const [override] = (await executor.execute(sql`select minutes from time.daily_hours where employee_id = ${employeeId} and date = ${day}::date`)) as unknown as { minutes: number }[];
+  const dayHours = override ? Number(override.minutes) : null;
 
   return stopLimit({
     nowMs,
@@ -63,7 +66,7 @@ export async function computeStopLimit(executor: Executor, employeeId: string, n
     clientId,
     workedMsByClient,
     workedMsToday,
-    dailyCapMinutes: person?.cap ?? null,
+    dailyCapMinutes: dayHours ?? person?.cap ?? null,
     companyDefaultCapMinutes: rules.defaultDailyCapMinutes,
     approvedWindows: windows.map((w) => ({ startMs: w.startMs, endMs: w.endMs })),
   });

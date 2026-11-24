@@ -37,4 +37,6 @@ export const reassignReportsSchema = z.object({
 /** One person's attendance lead: a person, or null to clear it. */
 /** HR sets the most a person may work in a day (minutes) when they have no schedule; null clears it (the company default applies). */
 export const setDailyCapSchema = z.object({ employeeId: uuid, minutes: z.union([z.number().int("Whole minutes").min(1, "At least 1 minute").max(960, "16 hours at most"), z.null()]) });
+/** The same daily hours for several people at once. */
+export const setDailyCapsSchema = z.object({ employeeIds: z.array(uuid).min(1, "Choose at least one person").max(200, "Choose 200 people at most"), minutes: z.union([z.number().int("Whole minutes").min(1, "At least 1 minute").max(960, "16 hours at most"), z.null()]) });
 export const setAttendanceLeadSchema = z.object({ employeeId: uuid, leadEmployeeId: z.union([uuid, z.null()]) });
