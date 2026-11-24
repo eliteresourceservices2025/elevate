@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { formatDateOnly } from "@/lib/time";
 import { formatDays } from "../ledger";
 import { previewRequest, requestLeave, type RequestPreview } from "../request-actions";
+import { ProofPicker, uploadProofs } from "./proof-picker";
 
 type LeaveOption = { id: string; name: string; tracksBalance: boolean };
 
@@ -27,6 +28,7 @@ export function RequestForm({ types, today, people }: { types: LeaveOption[]; to
   const [endDate, setEndDate] = useState("");
   const [halfDay, setHalfDay] = useState(false);
   const [note, setNote] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
   const [preview, setPreview] = useState<RequestPreview | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
 
@@ -61,13 +63,17 @@ export function RequestForm({ types, today, people }: { types: LeaveOption[]; to
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (files.length === 0) return void toast.error("Attach a screenshot of your client's approval.");
     startTransition(async () => {
-      const result = await requestLeave({ leaveTypeId, startDate, endDate, halfDay: half, note, employeeId: forOther ? employeeId : undefined });
+      const proofs = await uploadProofs(files, forOther ? employeeId : undefined);
+      if (!proofs.ok) return void toast.error(proofs.error);
+      const result = await requestLeave({ leaveTypeId, startDate, endDate, halfDay: half, note, employeeId: forOther ? employeeId : undefined, evidenceIds: proofs.ids });
       if (!result.ok) return void toast.error(result.error);
       toast.success(forOther ? "Request filed." : "Request sent.");
       setStartDate("");
       setEndDate("");
       setNote("");
+      setFiles([]);
       setHalfDay(false);
       dialog?.close(true);
       router.refresh();
@@ -96,6 +102,7 @@ export function RequestForm({ types, today, people }: { types: LeaveOption[]; to
         Half day (only for a single day)
       </label>
       <TextField id="rq-note" label="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} />
+      <ProofPicker files={files} setFiles={setFiles} />
 
       <div aria-live="polite" className="space-y-1 text-sm">
         {canPreview && previewError ? <p className="text-destructive">{previewError}</p> : null}
@@ -121,7 +128,7 @@ export function RequestForm({ types, today, people }: { types: LeaveOption[]; to
         ) : null}
       </div>
 
-      <Button type="submit" disabled={pending || !leaveTypeId || !startDate || !endDate || (forOther && (!employeeId || invalidPerson))}>
+      <Button type="submit" disabled={pending || !leaveTypeId || !startDate || !endDate || files.length === 0 || (forOther && (!employeeId || invalidPerson))}>
         {forOther ? "File request" : "Send request"}
       </Button>
     </form>

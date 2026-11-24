@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { boolean, check, date, index, integer, jsonb, numeric, smallint, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { teams } from "@/modules/org/schema";
 import { clientProjects, clients, employees } from "@/modules/people/schema";
-import { time } from "@/modules/timeoff/schema";
+import { leaveRequests, time } from "@/modules/timeoff/schema";
 
 // The ELEVATE time clock (B2). ELEVATE is the only source of hours. Clock events are append-only; a correction is
 // a new, approved row, never an edit. Timestamps come from the database clock, the IP from the request.
@@ -454,6 +454,8 @@ export const correctionEvidence = time
       extraRequestId: uuid("extra_request_id").references(() => extraHoursRequests.id),
       /** Or to a technical issue report (a screenshot is required with one). */
       issueId: uuid("issue_id").references(() => techIssueReports.id),
+      /** Or to a time off request: the client's approval for the days (owner decision 2026-11-24, every request carries one). */
+      leaveRequestId: uuid("leave_request_id").references(() => leaveRequests.id),
       /** The sign-in account that uploaded it (a lead or HR uploads for someone else); null for older rows. */
       uploadedBy: uuid("uploaded_by"),
       storagePath: text("storage_path").notNull(),
@@ -463,7 +465,7 @@ export const correctionEvidence = time
       createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
       purgedAt: timestamp("purged_at", { withTimezone: true }),
     },
-    (t) => [uniqueIndex("correction_evidence_path_idx").on(t.storagePath), index("correction_evidence_claim_idx").on(t.correctionId), check("correction_evidence_mime_chk", sql`${t.mime} in ('image/jpeg','image/png')`), check("correction_evidence_one_parent_chk", sql`num_nonnulls(${t.correctionId}, ${t.extraRequestId}, ${t.issueId}) <= 1`), index("correction_evidence_extra_idx").on(t.extraRequestId), index("correction_evidence_issue_idx").on(t.issueId)],
+    (t) => [uniqueIndex("correction_evidence_path_idx").on(t.storagePath), index("correction_evidence_claim_idx").on(t.correctionId), check("correction_evidence_mime_chk", sql`${t.mime} in ('image/jpeg','image/png')`), check("correction_evidence_one_parent_chk", sql`num_nonnulls(${t.correctionId}, ${t.extraRequestId}, ${t.issueId}, ${t.leaveRequestId}) <= 1`), index("correction_evidence_extra_idx").on(t.extraRequestId), index("correction_evidence_issue_idx").on(t.issueId), index("correction_evidence_leave_idx").on(t.leaveRequestId)],
   )
   .enableRLS();
 

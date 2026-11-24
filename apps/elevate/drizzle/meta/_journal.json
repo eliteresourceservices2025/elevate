@@ -1219,6 +1219,13 @@
       "when": 1795512068760,
       "tag": "0173_striped_power_pack",
       "breakpoints": true
+    },
+    {
+      "idx": 174,
+      "version": "7",
+      "when": 1795516293380,
+      "tag": "0174_blushing_cannonball",
+      "breakpoints": true
     }
   ]
 }

@@ -32,6 +32,8 @@ export type RequestItem = {
   createdAt: string;
   cancelReason: string | null;
   steps: ApprovalStep[];
+  /** The screenshots of the client's approval (opened one at a time through a 60-second link; gone 90 days after the decision). */
+  evidence: { id: string; mime: string; purged: boolean }[];
   /** Whether the signed-in person can approve or decline it right now. */
   canDecide: boolean;
   /** Whether the signed-in person can cancel it. */
@@ -52,6 +54,14 @@ async function stepsFor(requestIds: string[], viewerId: string): Promise<Map<str
   return out;
 }
 
+async function evidenceFor(requestIds: string[]): Promise<Map<string, RequestItem["evidence"]>> {
+  const out = new Map<string, RequestItem["evidence"]>();
+  if (requestIds.length === 0) return out;
+  const found = (await db.execute(sql`select id, leave_request_id, mime, purged_at from time.correction_evidence where leave_request_id in (${list(requestIds)}) order by created_at`)) as unknown as { id: string; leave_request_id: string; mime: string; purged_at: Date | null }[];
+  for (const e of found) out.set(e.leave_request_id, [...(out.get(e.leave_request_id) ?? []), { id: e.id, mime: e.mime, purged: e.purged_at !== null }]);
+  return out;
+}
+
 const SELECT = sql`
   select r.id, r.employee_id, e.user_id, e.legal_first_name as first, e.legal_last_name as last, e.preferred_name as preferred,
          e.employee_number, t.name as type_name, r.start_date::text as start_date, r.end_date::text as end_date, r.half_day,
@@ -62,6 +72,7 @@ const SELECT = sql`
 
 async function toItems(rows: Row[], viewer: Awaited<ReturnType<typeof requireUser>>, decidable: (row: Row) => Promise<boolean>): Promise<RequestItem[]> {
   const steps = await stepsFor(rows.map((r) => String(r.id)), viewer.id);
+  const evidence = await evidenceFor(rows.map((r) => String(r.id)));
   const today = todayInZone();
   const isHr = scopeFor(viewer, "timeoff.cancel") === "all";
   const items: RequestItem[] = [];
@@ -84,6 +95,7 @@ async function toItems(rows: Row[], viewer: Awaited<ReturnType<typeof requireUse
       createdAt: new Date(r.created_at as string | Date).toISOString(),
       cancelReason: (r.cancel_reason as string | null) ?? null,
       steps: steps.get(String(r.id)) ?? [],
+      evidence: evidence.get(String(r.id)) ?? [],
       canDecide: (status === "pending_lead" || status === "pending_hr") && !own && r.filed_by !== viewer.id && (await decidable(r)),
       canCancel: live && (isHr || (own && (status !== "approved" || String(r.start_date) > today))),
     });

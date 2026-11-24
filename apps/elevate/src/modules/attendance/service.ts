@@ -1,6 +1,6 @@
 import "server-only";
 import { createHash, randomUUID } from "node:crypto";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { allowRequest, clientIp } from "@/lib/rate-limit";
 import { ActionFailure } from "@/lib/run-action";
@@ -363,7 +363,7 @@ export async function verifyEvidence(tx: Executor, employeeId: string, ids: stri
   const unique = [...new Set(ids)];
   const verified: string[] = [];
   for (const id of unique) {
-    const [row] = await tx.select().from(correctionEvidence).where(and(eq(correctionEvidence.id, id), eq(correctionEvidence.employeeId, employeeId), isNull(correctionEvidence.correctionId), isNull(correctionEvidence.extraRequestId), isNull(correctionEvidence.issueId), isNull(correctionEvidence.purgedAt))).limit(1);
+    const [row] = await tx.select().from(correctionEvidence).where(and(eq(correctionEvidence.id, id), eq(correctionEvidence.employeeId, employeeId), isNull(correctionEvidence.correctionId), isNull(correctionEvidence.extraRequestId), isNull(correctionEvidence.issueId), isNull(correctionEvidence.leaveRequestId), isNull(correctionEvidence.purgedAt))).limit(1);
     if (!row || (uploadedBy && row.uploadedBy && row.uploadedBy !== uploadedBy)) throw new ActionFailure("One of the screenshots is not valid. Add it again.");
     const bytes = await getDocumentStorage().read(BUCKETS.employee, row.storagePath);
     const type = bytes ? imageType(bytes) : null;
@@ -376,6 +376,25 @@ export async function verifyEvidence(tx: Executor, employeeId: string, ids: stri
     verified.push(row.id);
   }
   return verified;
+}
+
+/**
+ * A one-time upload ticket for one screenshot of a person (a time off request's proof). The row waits unattached until the request is sent; an
+ * upload never attached is cleaned up after a day. At most 6 unused ones at a time. Callers authorize and rate-limit first.
+ */
+export async function issueEvidenceTicket(employeeId: string, uploadedBy: string, mime: "image/jpeg" | "image/png"): Promise<{ id: string; path: string; token: string }> {
+  const [{ n }] = (await db.execute(sql`select count(*)::int as n from time.correction_evidence where employee_id = ${employeeId} and uploaded_by = ${uploadedBy} and correction_id is null and extra_request_id is null and issue_id is null and leave_request_id is null and purged_at is null`)) as unknown as { n: number }[];
+  if (n >= 6) throw new ActionFailure("You have unused screenshots waiting. Send your request first, or try again tomorrow.");
+  const path = evidencePath(employeeId, mime);
+  const { token } = await getDocumentStorage().createSignedUpload(BUCKETS.employee, path);
+  const [row] = await db.insert(correctionEvidence).values({ employeeId, storagePath: path, mime, uploadedBy }).returning({ id: correctionEvidence.id });
+  return { id: row.id, path, token };
+}
+
+/** Attaches screenshots that were just verified (verifyEvidence) to a time off request. Call inside the transaction that creates the request. */
+export async function attachEvidenceToLeave(tx: Executor, evidenceIds: string[], leaveRequestId: string): Promise<void> {
+  if (evidenceIds.length === 0) return;
+  await tx.update(correctionEvidence).set({ leaveRequestId }).where(inArray(correctionEvidence.id, evidenceIds));
 }
 
 // ---- Changing recorded time (add events, remove wrong ones) ---------------------------------------------------------------------

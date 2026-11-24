@@ -3,6 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { authorize, can } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -19,6 +20,9 @@ import { finalizeApproval, holidaysInRange, notifyWaiting, peerEmployeeIds, pend
 import { cancelRequestSchema, decideRequestSchema, previewRequestSchema, requestIdSchema, requestLeaveSchema } from "./request-validators";
 import { loadLedger, lockEmployeeLedger } from "./service";
 import { workingWeekdaysFor } from "@/modules/attendance/schedule-service";
+import { attachEvidenceToLeave, issueEvidenceTicket, verifyEvidence } from "@/modules/attendance/service";
+import { EVIDENCE_MAX_BYTES, evidenceUploadSchema } from "@/modules/attendance/validators";
+import { allowRequest } from "@/lib/rate-limit";
 import { requestDays, workingDaysBetween } from "./workdays";
 
 const BAD = "Check the request and try again.";
@@ -41,7 +45,33 @@ async function findPerson(where: ReturnType<typeof sql>): Promise<Person | null>
 }
 const nameOf = (p: Pick<Person, "first" | "last" | "preferred">) => reportName({ first: p.first, last: p.last, preferred: p.preferred });
 
-// --- Making a request --------------------------------------------------------------------------
+// --- Making a request ------------------------------------------------------------------------
+
+const uploadSchema = evidenceUploadSchema.extend({ employeeId: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : v), z.uuid().optional()) });
+
+/**
+ * A one-time link to upload one screenshot of the client's approval for a time off request: for yourself, or (HR) for someone you file for.
+ * The screenshot goes straight to private storage; nothing here reads it.
+ */
+export async function requestLeaveEvidenceUpload(input: unknown): Promise<ActionResult<{ id: string; path: string; token: string }>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    const parsed = uploadSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const mine = await findPerson(sql`${employees.userId} = ${actor.id}`);
+    let subject: Person | null;
+    if (parsed.data.employeeId && parsed.data.employeeId !== mine?.id) {
+      await authorize(actor, "timeoff.file_for_others");
+      subject = await findPerson(sql`${employees.id} = ${parsed.data.employeeId}`);
+    } else {
+      await authorize(actor, "timeoff.request", { ownerUserId: actor.id });
+      subject = mine;
+    }
+    if (!subject) return fail("That person was not found.");
+    if (!(await allowRequest("upload", actor.id))) return fail("Too many uploads. Wait a few minutes and try again.");
+    return { ok: true, data: await issueEvidenceTicket(subject.id, actor.id, parsed.data.mime) };
+  });
+}
 
 /**
  * A person asks for days off; HR may file one for someone (and for a past date). It starts with the person's
@@ -77,6 +107,9 @@ export async function requestLeave(input: unknown): Promise<ActionResult<{ id: s
       if (type.tracksBalance && workingDaysBetween(today, v.startDate) < 1) return fail("Ask at least one working day ahead.");
     }
 
+    // Every request carries a screenshot of the client's approval (checked here, after the person and the dates, so those problems are told first).
+    if (v.evidenceIds.length === 0) return fail("Attach a screenshot of your client's approval.");
+
     const hrIds = await hrUserIds();
     let id: string;
     try {
@@ -106,6 +139,8 @@ export async function requestLeave(input: unknown): Promise<ActionResult<{ id: s
         if (forOther && subject.userId) {
           await notify(tx, { userId: subject.userId, kind: "timeoff.filed_for_you", title: "HR filed a time off request for you", body: `${v.startDate}${v.endDate !== v.startDate ? ` to ${v.endDate}` : ""}`, link: "/time-off" });
         }
+        const attached = await verifyEvidence(tx, subject.id, v.evidenceIds, EVIDENCE_MAX_BYTES, actor.id);
+        await attachEvidenceToLeave(tx, attached, requestId);
         await writeAudit({ actor, action: "leave.request", targetType: "employee", targetId: subject.id, metadata: { requestId, days, startDate: v.startDate, endDate: v.endDate, leaveType: type.slug, filedForOther: forOther, firstStep: status } }, tx);
         return requestId;
       });

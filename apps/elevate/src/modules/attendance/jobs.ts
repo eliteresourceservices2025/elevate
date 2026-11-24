@@ -396,7 +396,10 @@ export async function purgeEvidence(now = new Date()): Promise<{ purged: number 
     where ev.purged_at is null and c.status <> 'pending' and c.decided_at < ${keepCutoff.toISOString()}::timestamptz
     union
     select ev.id, ev.storage_path as path from time.correction_evidence ev join time.tech_issue_reports r on r.id = ev.issue_id
-    where ev.purged_at is null and r.status = 'handled' and r.handled_at < ${keepCutoff.toISOString()}::timestamptz limit 500`)) as unknown as { id: string; path: string }[];
+    where ev.purged_at is null and r.status = 'handled' and r.handled_at < ${keepCutoff.toISOString()}::timestamptz
+    union
+    select ev.id, ev.storage_path as path from time.correction_evidence ev join time.leave_requests lr on lr.id = ev.leave_request_id
+    where ev.purged_at is null and lr.status in ('approved', 'declined', 'cancelled') and lr.updated_at < ${keepCutoff.toISOString()}::timestamptz limit 500`)) as unknown as { id: string; path: string }[];
   if (old.length > 0) {
     await getDocumentStorage().remove(BUCKETS.employee, old.map((o) => o.path));
     for (const o of old) await db.update(correctionEvidence).set({ purgedAt: now }).where(eq(correctionEvidence.id, o.id));

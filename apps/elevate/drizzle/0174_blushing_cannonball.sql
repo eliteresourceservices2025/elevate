@@ -1,0 +1,5 @@
+ALTER TABLE "time"."correction_evidence" DROP CONSTRAINT "correction_evidence_one_parent_chk";--> statement-breakpoint
+ALTER TABLE "time"."correction_evidence" ADD COLUMN "leave_request_id" uuid;--> statement-breakpoint
+ALTER TABLE "time"."correction_evidence" ADD CONSTRAINT "correction_evidence_leave_request_id_leave_requests_id_fk" FOREIGN KEY ("leave_request_id") REFERENCES "time"."leave_requests"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "correction_evidence_leave_idx" ON "time"."correction_evidence" USING btree ("leave_request_id");--> statement-breakpoint
+ALTER TABLE "time"."correction_evidence" ADD CONSTRAINT "correction_evidence_one_parent_chk" CHECK (num_nonnulls("time"."correction_evidence"."correction_id", "time"."correction_evidence"."extra_request_id", "time"."correction_evidence"."issue_id", "time"."correction_evidence"."leave_request_id") <= 1);
