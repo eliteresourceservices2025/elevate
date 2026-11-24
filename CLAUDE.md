@@ -133,6 +133,12 @@ Jibble mirror, repair job, safety lock, pause switch.
 - ELEVATE sends to Jibble only when `ELEVATE_ENV=production`; tests use a fake client and never call the real API.
 - Jibble being down must never block or slow the ELEVATE clock.
 
+### People, org chart, time-off proof and restricted documents (owner decisions 2026-11-24)
+
+- The Employee role (contractor/VA) has no People list or name search (`people.browse_directory`) and sees only the line above them and themselves on the org chart (`org.view_full_chart`); see `docs/modules/app-shell-and-dashboard.md`.
+- Every time off request carries a screenshot of the client's approval (kept like other time evidence, deleted 90 days after the decision); see `docs/modules/time-off.md`.
+- A company document can be for selected groups (teams, clients, roles, named people; any one match reads it; HR always can); see `docs/modules/people-admin.md`.
+
 ### Schedules and extra hours — `docs/modules/schedules-and-extra-hours.md`
 Shift schedules, nightly flags, extra-hours requests.
 

@@ -196,6 +196,31 @@ describe("choosing the audience", () => {
     expect((await set("restricted", [])).ok).toBe(false);
   });
 
+  it("can still be saved after one of its teams was archived (the team stays, and can be unticked)", async () => {
+    const gone = await newTeam();
+    const { id } = await uploadCompany(hr, "restricted", [{ kind: "team", id: gone }, { kind: "team", id: teamA }]);
+    await db.execute(sql`update core.teams set archived_at = now() where id = ${gone}`);
+    as(hr);
+    const policy = await typeId("company_policy");
+    const keep = await docs.changeDocumentType({ documentId: id!, typeId: policy, title: "Handbook v2", audience: "restricted", audienceMembers: [{ kind: "team", id: gone }, { kind: "team", id: teamA }] });
+    expect(keep.ok).toBe(true);
+    // A new archived team still cannot be added
+    const other = await newTeam();
+    await db.execute(sql`update core.teams set archived_at = now() where id = ${other}`);
+    expect((await docs.changeDocumentType({ documentId: id!, typeId: policy, title: "Handbook v2", audience: "restricted", audienceMembers: [{ kind: "team", id: teamA }, { kind: "team", id: other }] })).ok).toBe(false);
+  });
+
+  it("writes the audience to the audit log (the choice and how many groups, never names)", async () => {
+    const { id } = await uploadCompany(hr, "restricted", [{ kind: "team", id: teamA }, { kind: "role", id: "team_lead" }]);
+    as(hr);
+    const policy = await typeId("company_policy");
+    await docs.changeDocumentType({ documentId: id!, typeId: policy, title: "Handbook", audience: "all_staff", audienceMembers: [] });
+    const audit = await rows<{ metadata: Record<string, unknown> }>(sql`select metadata from ops.audit_log where action = 'document.change_type' and metadata->>'documentId' = ${id} order by occurred_at desc limit 1`);
+    expect(audit[0].metadata).toMatchObject({ audience: "all_staff", groups: 0 });
+    const up = await rows<{ metadata: Record<string, unknown> }>(sql`select metadata from ops.audit_log where action = 'document.upload_requested' and metadata->>'documentId' = ${id}`);
+    expect(up[0].metadata).toMatchObject({ audience: "restricted", groups: 2 });
+  });
+
   it("leaves all staff and HR only files as they were", async () => {
     const open = await uploadCompany(hr, "all_staff");
     const closed = await uploadCompany(hr, "hr_only");

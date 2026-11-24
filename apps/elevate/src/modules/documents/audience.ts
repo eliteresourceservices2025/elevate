@@ -12,11 +12,14 @@ type Executor = Pick<typeof db, "execute">;
 
 /** Replaces the groups a restricted document is for. Every group must exist; a missing one stops the whole change. */
 export async function saveAudience(tx: Executor, documentId: string, members: AudienceMember[]): Promise<void> {
+  // A group the file already has stays valid even if it was archived since (it must stay possible to untick it and save), so only NEW groups are checked.
+  const existing = (await tx.execute(sql`select kind, coalesce(team_id, client_id, employee_id)::text as ref, role_slug from docs.document_audience_members where document_id = ${documentId}`)) as unknown as { kind: AudienceKind; ref: string | null; role_slug: string | null }[];
+  const had = new Set(existing.map((e) => `${e.kind}:${e.role_slug ?? e.ref}`));
   await tx.execute(sql`delete from docs.document_audience_members where document_id = ${documentId}`);
   const unique = [...new Map(members.map((m) => [`${m.kind}:${m.id}`, m])).values()];
   for (const m of unique) {
     const ok =
-      m.kind === "role"
+      m.kind === "role" || had.has(`${m.kind}:${m.id}`)
         ? true
         : ((await tx.execute(
             m.kind === "team"

@@ -1,3 +1,4 @@
+import { orNotFound } from "@/lib/or-not-found";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Search, SlidersHorizontal, UserPlus } from "lucide-react";
@@ -24,7 +25,7 @@ export const metadata: Metadata = { title: "People" };
 export default async function PeoplePage({ searchParams }: PageProps<"/people">) {
   const user = await requireUser();
   const raw = Object.fromEntries(Object.entries(await searchParams).map(([k, v]) => [k, Array.isArray(v) ? v[0] : v]));
-  const { rows, total, page, pageSize, query, seesClients, seesArchived, canCreate } = await listDirectory(raw);
+  const { rows, total, page, pageSize, query, seesClients, seesArchived, canCreate } = await orNotFound(listDirectory(raw));
   const teamOptions = await listTeamFilterOptions();
   const clientOptions = seesClients && can(user, "people.manage_assignments") ? await listClientsForFilter() : [];
 

@@ -29,6 +29,8 @@ export function RequestForm({ types, today, people }: { types: LeaveOption[]; to
   const [halfDay, setHalfDay] = useState(false);
   const [note, setNote] = useState("");
   const [files, setFiles] = useState<File[]>([]);
+  // Screenshots already uploaded for these exact files: a retry after a refused request reuses them instead of uploading again (each upload counts toward a small cap).
+  const [uploaded, setUploaded] = useState<{ files: File[]; ids: string[] } | null>(null);
   const [preview, setPreview] = useState<RequestPreview | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
 
@@ -65,15 +67,22 @@ export function RequestForm({ types, today, people }: { types: LeaveOption[]; to
     e.preventDefault();
     if (files.length === 0) return void toast.error("Attach a screenshot of your client's approval.");
     startTransition(async () => {
-      const proofs = await uploadProofs(files, forOther ? employeeId : undefined);
-      if (!proofs.ok) return void toast.error(proofs.error);
-      const result = await requestLeave({ leaveTypeId, startDate, endDate, halfDay: half, note, employeeId: forOther ? employeeId : undefined, evidenceIds: proofs.ids });
+      const same = uploaded !== null && uploaded.files.length === files.length && uploaded.files.every((f, i) => f === files[i]);
+      let ids = same ? uploaded.ids : null;
+      if (!ids) {
+        const proofs = await uploadProofs(files, forOther ? employeeId : undefined);
+        if (!proofs.ok) return void toast.error(proofs.error);
+        ids = proofs.ids;
+        setUploaded({ files, ids });
+      }
+      const result = await requestLeave({ leaveTypeId, startDate, endDate, halfDay: half, note, employeeId: forOther ? employeeId : undefined, evidenceIds: ids });
       if (!result.ok) return void toast.error(result.error);
       toast.success(forOther ? "Request filed." : "Request sent.");
       setStartDate("");
       setEndDate("");
       setNote("");
       setFiles([]);
+      setUploaded(null);
       setHalfDay(false);
       dialog?.close(true);
       router.refresh();

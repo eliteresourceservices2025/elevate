@@ -150,7 +150,7 @@ export async function requestUpload(input: unknown): Promise<ActionResult<Upload
       throw error;
     }
 
-    await writeAudit({ actor, action: "document.upload_requested", targetType: employee ? "employee" : "company", targetId: employee?.id ?? "company", metadata: { documentId: id, type: type.slug } });
+    await writeAudit({ actor, action: "document.upload_requested", targetType: employee ? "employee" : "company", targetId: employee?.id ?? "company", metadata: { documentId: id, type: type.slug, ...(v.target === "company" ? { audience: v.audience, groups: v.audience === "restricted" ? v.audienceMembers.length : 0 } : {}) } });
     return { ok: true, data: { documentId: id, bucket, path, token, contentType: mimeOf(kind) } };
   });
 }
@@ -579,7 +579,7 @@ export async function changeDocumentType(input: unknown): Promise<ActionResult> 
       await tx.update(documents).set({ typeId: type.id, title: v.title, clientId, expiresOn: v.expiresOn ?? null, ...(!doc.employeeId && v.audience ? { audience: v.audience } : {}), updatedAt: new Date() }).where(eq(documents.id, doc.id));
       // The groups follow the audience: replaced for "Selected groups", cleared for the other choices.
       if (!doc.employeeId && v.audience) await saveAudience(tx, doc.id, v.audience === "restricted" ? v.audienceMembers : []);
-      await writeAudit({ actor, action: "document.change_type", targetType: doc.employeeId ? "employee" : "company", targetId: doc.employeeId ?? "company", metadata: { documentId: doc.id, fromTypeId: doc.typeId, toTypeId: type.id } }, tx);
+      await writeAudit({ actor, action: "document.change_type", targetType: doc.employeeId ? "employee" : "company", targetId: doc.employeeId ?? "company", metadata: { documentId: doc.id, fromTypeId: doc.typeId, toTypeId: type.id, ...(!doc.employeeId && v.audience ? { audience: v.audience, fromAudience: doc.audience, groups: v.audience === "restricted" ? v.audienceMembers.length : 0 } : {}) } }, tx);
     });
     refresh(doc.employeeId);
     return { ok: true, data: undefined };

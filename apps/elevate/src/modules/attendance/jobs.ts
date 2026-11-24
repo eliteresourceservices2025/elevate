@@ -386,7 +386,7 @@ export async function runQuietSessionAlerts(now = new Date()): Promise<{ noticed
 export async function purgeEvidence(now = new Date()): Promise<{ purged: number }> {
   const orphanCutoff = new Date(now.getTime() - DAY_MS);
   const keepCutoff = new Date(now.getTime() - EVIDENCE_KEEP_DAYS * DAY_MS);
-  const orphans = await db.select({ id: correctionEvidence.id, path: correctionEvidence.storagePath }).from(correctionEvidence).where(sql`${correctionEvidence.correctionId} is null and ${correctionEvidence.extraRequestId} is null and ${correctionEvidence.issueId} is null and ${correctionEvidence.createdAt} < ${orphanCutoff.toISOString()}::timestamptz`).limit(500);
+  const orphans = await db.select({ id: correctionEvidence.id, path: correctionEvidence.storagePath }).from(correctionEvidence).where(sql`${correctionEvidence.correctionId} is null and ${correctionEvidence.extraRequestId} is null and ${correctionEvidence.issueId} is null and ${correctionEvidence.leaveRequestId} is null and ${correctionEvidence.purgedAt} is null and ${correctionEvidence.createdAt} < ${orphanCutoff.toISOString()}::timestamptz`).limit(500);
   if (orphans.length > 0) {
     await getDocumentStorage().remove(BUCKETS.employee, orphans.map((o) => o.path));
     for (const o of orphans) await db.delete(correctionEvidence).where(eq(correctionEvidence.id, o.id));
@@ -399,7 +399,8 @@ export async function purgeEvidence(now = new Date()): Promise<{ purged: number 
     where ev.purged_at is null and r.status = 'handled' and r.handled_at < ${keepCutoff.toISOString()}::timestamptz
     union
     select ev.id, ev.storage_path as path from time.correction_evidence ev join time.leave_requests lr on lr.id = ev.leave_request_id
-    where ev.purged_at is null and lr.status in ('approved', 'declined', 'cancelled') and lr.updated_at < ${keepCutoff.toISOString()}::timestamptz limit 500`)) as unknown as { id: string; path: string }[];
+    where ev.purged_at is null and lr.status in ('approved', 'declined', 'cancelled') and lr.updated_at < ${keepCutoff.toISOString()}::timestamptz
+      and lr.end_date < (${keepCutoff.toISOString()}::timestamptz)::date limit 500`)) as unknown as { id: string; path: string }[];
   if (old.length > 0) {
     await getDocumentStorage().remove(BUCKETS.employee, old.map((o) => o.path));
     for (const o of old) await db.update(correctionEvidence).set({ purgedAt: now }).where(eq(correctionEvidence.id, o.id));

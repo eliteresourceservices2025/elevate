@@ -137,12 +137,36 @@ describe("keeping the screenshot", () => {
     const shot = await upload();
     const made = await ask(futureMonday(10), { evidenceIds: [shot.id] });
     const id = made.ok ? made.data.id : "";
-    await db.execute(sql`update time.leave_requests set status = 'approved', updated_at = now() - interval '30 days' where id = ${id}`);
+    // The leave itself was long ago (the files are kept until 90 days after the leave and the decision)
+    await db.execute(sql`update time.leave_requests set status = 'approved', start_date = current_date - 200, end_date = current_date - 200, updated_at = now() - interval '30 days' where id = ${id}`);
     await jobs.purgeEvidence();
     expect((await rows<{ purged_at: Date | null }>(sql`select purged_at from time.correction_evidence where id = ${shot.id}`))[0].purged_at).toBeNull();
     await db.execute(sql`update time.leave_requests set updated_at = now() - interval '91 days' where id = ${id}`);
     await jobs.purgeEvidence();
     expect((await rows<{ purged_at: Date | null }>(sql`select purged_at from time.correction_evidence where id = ${shot.id}`))[0].purged_at).not.toBeNull();
+  });
+
+  it("is kept for approved leave that has not been taken yet, however long ago it was decided", async () => {
+    as(va.user);
+    const shot = await upload();
+    const made = await ask(futureMonday(13), { evidenceIds: [shot.id] });
+    const id = made.ok ? made.data.id : "";
+    await db.execute(sql`update time.leave_requests set status = 'approved', updated_at = now() - interval '200 days' where id = ${id}`);
+    await jobs.purgeEvidence();
+    expect((await rows<{ purged_at: Date | null }>(sql`select purged_at from time.correction_evidence where id = ${shot.id}`))[0].purged_at).toBeNull();
+  });
+
+  it("is not thrown away as 'never attached' a day after it was uploaded, while its request waits", async () => {
+    as(va.user);
+    const shot = await upload();
+    const made = await ask(futureMonday(14), { evidenceIds: [shot.id] });
+    expect(made.ok).toBe(true);
+    await db.execute(sql`update time.correction_evidence set created_at = now() - interval '3 days' where id = ${shot.id}`);
+    await jobs.purgeEvidence();
+    const [row] = await rows<{ id: string; purged_at: Date | null }>(sql`select id, purged_at from time.correction_evidence where id = ${shot.id}`);
+    expect(row).toBeDefined();
+    expect(row.purged_at).toBeNull();
+    expect(fake.objects.size).toBeGreaterThan(0);
   });
 
   it("is never deleted while the request is still waiting", async () => {
