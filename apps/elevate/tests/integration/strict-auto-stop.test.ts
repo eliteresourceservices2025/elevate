@@ -100,6 +100,7 @@ describe("runAutoStop", () => {
     expect(ev.map((e) => e.type)).toEqual(["clock_in", "break_start", "break_end", "clock_out"]);
     expect(ev.slice(2).every((e) => e.source === "auto_stop")).toBe(true);
     expect(ev[2].at).toBeGreaterThanOrEqual(ev[1].at); // never before the break began
+    expect(ev[3].at).toBeGreaterThan(ev[2].at); // the end of the break replays before the clock-out, whatever their ids
   });
 
   it("does not stop a person who is on a break with hours still to work after it", async () => {
@@ -138,6 +139,16 @@ describe("clocking in with no hours left", () => {
     const w = await worker("hoursleft");
     current.user = w.user;
     expect((await actions.clockIn({})).ok).toBe(true);
+  });
+});
+
+describe("the stop is decided inside the person's lock", () => {
+  it("writes nothing when their hours are not used up", async () => {
+    const w = await worker("notdue");
+    await event(w.employeeId, "clock_in", at(-60));
+    const { performClock } = await import("@/modules/attendance/service");
+    await expect(performClock({ id: w.user.id, email: w.user.email }, "clock_out", {}, { nowMs: Date.now() })).rejects.toThrow(/not used up/);
+    expect(await eventsOf(w.employeeId)).toHaveLength(1);
   });
 });
 
@@ -187,6 +198,18 @@ describe("approved extra hours", () => {
     const stoppedMin = (ev.at(-1)!.at - ev[0].at) / MIN;
     expect(stoppedMin).toBeGreaterThan(349);
     expect(stoppedMin).toBeLessThan(351); // 400 - 50 minutes after the clock-in
+  });
+
+  it("keeps the time worked inside a window that began after the cap was reached and has ended since", async () => {
+    const w = await worker("extragap");
+    const client = await clientRow();
+    await event(w.employeeId, "clock_in", at(-300)); // the 4 hour cap was reached 60 minutes ago
+    await approveWindow(w, client, -45, -15);
+    expect(await runAutoStop(w.employeeId)).toEqual({ status: "stopped" });
+    const ev = await eventsOf(w.employeeId);
+    const stoppedMin = (ev.at(-1)!.at - ev[0].at) / MIN;
+    expect(stoppedMin).toBeGreaterThan(284);
+    expect(stoppedMin).toBeLessThan(286); // at the end of the window (15 minutes ago), not back at the cap
   });
 
   it("does not count a window approved for another client than the one being worked for", async () => {

@@ -103,18 +103,38 @@ export function shiftOn(schedules: readonly ScheduleLite[], personZone: string, 
   };
 }
 
-const minuteOfDay = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
+/**
+ * The shifts that matter for work happening at `refMs` in the person's own zone: the shifts that start on that day, plus a shift that began
+ * the day before and is still running (a night shift worked after midnight in the person's zone). `startMs` is where the day's limits start
+ * counting: the start of that running shift, else midnight of the day.
+ */
+export function shiftsForWork(schedules: readonly ScheduleLite[], personZone: string, refMs: number): { day: string; shifts: Shift[]; startMs: number } {
+  const day = formatInTimeZone(refMs, personZone, "yyyy-MM-dd");
+  const running = shiftsOn(schedules, personZone, addDays(day, -1)).filter((s) => s.startMs <= refMs && s.endMs > refMs);
+  const shifts = [...running, ...shiftsOn(schedules, personZone, day)].sort((a, b) => a.startMs - b.startMs);
+  const startMs = running.length > 0 ? Math.min(...running.map((s) => s.startMs)) : fromZonedTime(`${day}T00:00:00`, personZone).getTime();
+  return { day, shifts, startMs };
+}
 
-/** Whether two schedules of one person would put them in two places at once: same zone, a shared weekday, hours that cross (dates are checked by the database). */
+/** The real-time stretches a schedule covers over some days around a date (each in its own zone), for comparing schedules in different zones. */
+function stretchesAround(s: ScheduleLite, from: string): [number, number][] {
+  const out: [number, number][] = [];
+  for (let i = -1; i <= 8; i += 1) {
+    const d = addDays(from, i);
+    if (!s.weekdays.includes(isoWeekday(d))) continue;
+    const startMs = fromZonedTime(`${d}T${s.startTime}:00`, s.zone).getTime();
+    let endMs = fromZonedTime(`${d}T${s.endTime}:00`, s.zone).getTime();
+    if (endMs <= startMs) endMs = fromZonedTime(`${addDays(d, 1)}T${s.endTime}:00`, s.zone).getTime();
+    out.push([startMs, endMs]);
+  }
+  return out;
+}
+
+/** Whether two schedules of one person would put them in two places at once: any real-time stretch (compared in real instants, so different zones work) that crosses on some day. Dates are checked by the database. */
 export function hoursOverlap(a: ScheduleLite, b: ScheduleLite): boolean {
-  if (a.zone !== b.zone || !a.weekdays.some((d) => b.weekdays.includes(d))) return false;
-  const aStart = minuteOfDay(a.startTime);
-  const aEnd = minuteOfDay(a.endTime) + (a.endTime <= a.startTime ? 1440 : 0);
-  const bStart = minuteOfDay(b.startTime);
-  const bEnd = minuteOfDay(b.endTime) + (b.endTime <= b.startTime ? 1440 : 0);
-  // A shift that runs past midnight also meets the other one's hours on the next (or previous) day.
-  const crosses = aEnd > 1440 || bEnd > 1440;
-  return (crosses ? [-1440, 0, 1440] : [0]).some((o) => aStart < bEnd + o && bStart + o < aEnd);
+  const from = a.effectiveFrom > b.effectiveFrom ? a.effectiveFrom : b.effectiveFrom;
+  const bs = stretchesAround(b, from);
+  return stretchesAround(a, from).some(([aStart, aEnd]) => bs.some(([bStart, bEnd]) => aStart < bEnd && bStart < aEnd));
 }
 
 /** Whether the person has any schedule at all in force around this date (so a day with no shift is a rest day, not "unscheduled"). */

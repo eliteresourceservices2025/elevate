@@ -223,3 +223,67 @@ describe("stopLimit with a window that opens after the limit", () => {
     expect(r).toEqual({ limitMs: ms("13:00"), reason: "approved_extra_end", overrunMs: 0 });
   });
 });
+
+describe("stopLimit stamps the end of a window that was worked (final review)", () => {
+  const none = { hasSchedule: true, shifts: [] as Shift[], clientId: null as string | null, workedMsByClient: new Map<string | null, number>(), workedMsToday: 0, dailyCapMinutes: null, companyDefaultCapMinutes: 480 };
+
+  it("on a rest day, a window that has just ended is where the time stops, not the start of the session", () => {
+    const r = stopLimit({ ...none, nowMs: ms("13:00") + 30 * MIN, approvedWindows: [{ startMs: ms("09:00"), endMs: ms("13:00") }] });
+    expect(r).toMatchObject({ limitMs: ms("13:30"), overrunMs: 30 * MIN });
+  });
+
+  it("a window after the shift (with a gap before it) stops at the window's end", () => {
+    const r = stopLimit({ ...none, shifts: shiftsOn([clientA], PHX, DATE) as Shift[], clientId: "A", nowMs: ms("14:20"), approvedWindows: [{ startMs: ms("13:30"), endMs: ms("14:00") }] });
+    expect(r).toMatchObject({ limitMs: ms("14:20"), overrunMs: 20 * MIN });
+  });
+
+  it("with no schedule and the cap already used, a window worked afterwards stops at its end", () => {
+    const r = stopLimit({ ...none, hasSchedule: false, nowMs: ms("20:30"), workedMsToday: 10 * HOUR, dailyCapMinutes: 480, approvedWindows: [{ startMs: ms("18:00"), endMs: ms("20:00") }] });
+    expect(r).toMatchObject({ limitMs: ms("20:30"), overrunMs: 30 * MIN });
+  });
+
+  it("a window that ended before the limit was reached changes nothing", () => {
+    const r = stopLimit({ ...none, hasSchedule: false, nowMs: ms("12:00"), workedMsToday: 6 * HOUR, dailyCapMinutes: 240, approvedWindows: [{ startMs: ms("05:00"), endMs: ms("06:00") }] });
+    expect(r.overrunMs).toBe(120 * MIN);
+  });
+});
+
+describe("shiftsForWork: a shift that began the day before (final review)", () => {
+  const MANILA = "Asia/Manila";
+  const phoenix: ScheduleLite = { effectiveFrom: "2030-01-01", effectiveTo: null, startTime: "08:00", endTime: "17:00", weekdays: [1, 2, 3, 4, 5], breakMinutes: 0, zone: PHX };
+  const manilaMs = (date: string, time: string) => fromZonedTime(`${date}T${time}:00`, MANILA).getTime();
+
+  it("includes last night's shift when someone works after midnight in their own zone", async () => {
+    const { shiftsForWork } = await import("./schedule");
+    // Phoenix 08:00-17:00 Monday is Manila Monday 23:00 to Tuesday 08:00 (2030-03-04 is a Monday).
+    const w = shiftsForWork([phoenix], MANILA, manilaMs("2030-03-05", "04:00"));
+    expect(w.day).toBe("2030-03-05");
+    expect(w.shifts.map((s) => s.startMs)).toContain(manilaMs("2030-03-04", "23:00"));
+    expect(w.startMs).toBe(manilaMs("2030-03-04", "23:00"));
+  });
+
+  it("on Friday night, a Saturday arrival is still inside Friday's shift, not on a rest day", async () => {
+    const { shiftsForWork } = await import("./schedule");
+    const w = shiftsForWork([phoenix], MANILA, manilaMs("2030-03-09", "04:00")); // Saturday 04:00 Manila
+    expect(w.shifts).toHaveLength(1);
+    expect(w.shifts[0].startMs).toBe(manilaMs("2030-03-08", "23:00"));
+  });
+
+  it("is just the day's own shifts, starting at midnight, when no earlier shift is still running", async () => {
+    const { shiftsForWork } = await import("./schedule");
+    const w = shiftsForWork([phoenix], MANILA, manilaMs("2030-03-05", "12:00"));
+    expect(w.shifts.map((s) => s.startMs)).toEqual([manilaMs("2030-03-05", "23:00")]);
+    expect(w.startMs).toBe(manilaMs("2030-03-05", "00:00"));
+  });
+});
+
+describe("hoursOverlap across zones (final review)", () => {
+  it("sees two schedules in different zones that cover the same real hours", async () => {
+    const { hoursOverlap } = await import("./schedule");
+    const a: ScheduleLite = { ...clientA, startTime: "08:00", endTime: "12:00", zone: PHX };
+    // Manila 23:00 to 03:00 is Phoenix 08:00 to 12:00 the same real time.
+    const b: ScheduleLite = { ...clientB, startTime: "23:00", endTime: "03:00", zone: "Asia/Manila" };
+    expect(hoursOverlap(a, b)).toBe(true);
+    expect(hoursOverlap(a, { ...b, startTime: "04:00", endTime: "08:00" })).toBe(false);
+  });
+});

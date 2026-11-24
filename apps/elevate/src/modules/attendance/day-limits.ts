@@ -90,6 +90,13 @@ export function stopLimit(input: StopLimitInput): StopLimit {
     const open = windows.filter((w) => w.startMs <= nowMs && w.endMs > nowMs).sort((a, b) => b.endMs - a.endMs)[0];
     if (open) limit = { limitMs: open.endMs, reason: "approved_extra_end", overrunMs: 0 };
   }
+  // Still past the limit: if an approved window ended after the moment the limit was reached, that window was the person's permission, so time
+  // stops at its end (never back at the start of the session, which would erase time worked inside the window).
+  if (limit.limitMs <= nowMs) {
+    const base = Number.isFinite(limit.overrunMs) ? limit.limitMs - limit.overrunMs : -Infinity;
+    const past = windows.filter((w) => w.endMs <= nowMs && w.endMs > base).sort((a, b) => b.endMs - a.endMs)[0];
+    if (past) limit = { limitMs: nowMs, reason: "approved_extra_end", overrunMs: nowMs - past.endMs };
+  }
   return limit;
 }
 

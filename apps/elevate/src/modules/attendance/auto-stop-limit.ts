@@ -1,14 +1,12 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { fromZonedTime } from "date-fns-tz";
 import type { db } from "@/lib/db";
-import { formatInZone } from "@/lib/time";
 import { segmentMs, type Replay } from "./clock";
 import { clockSourceOf } from "./clock-source";
 import { stopLimit, type StopLimit } from "./day-limits";
 import { approvedWindows } from "./extra-hours-service";
 import { approvedMakeupWindows } from "./makeup-service";
-import { hasScheduleAround, shiftsOn } from "./schedule";
+import { hasScheduleAround, shiftsForWork } from "./schedule";
 import { loadSchedules } from "./schedule-service";
 import { prefsFor, rulesFor } from "./service";
 
@@ -35,10 +33,12 @@ export async function computeStopLimit(executor: Executor, employeeId: string, n
   const rules = await rulesFor(executor, employeeId);
   const open = replay.sessions[replay.sessions.length - 1];
   const working = Boolean(open && open.endAt === null && replay.state !== "out");
-  // The day is the one the session started in (a night shift keeps one set of limits across midnight), or today when not working.
-  const day = formatInZone(working ? open.startAt : nowMs, prefs.zone, "yyyy-MM-dd");
-  const dayStart = fromZonedTime(`${day}T00:00:00`, prefs.zone).getTime();
+  // The day is the one the session started in, or today when not working; a shift that began the day before and is still running counts (a night
+  // shift worked after midnight in the person's own zone), and the day's work is counted from where that shift began.
   const schedules = await loadSchedules(executor, employeeId);
+  const work = shiftsForWork(schedules, prefs.zone, working ? open.startAt : nowMs);
+  const { day } = work;
+  const dayStart = work.startMs;
 
   const workedMsByClient = new Map<string | null, number>();
   let workedMsToday = 0;
@@ -59,7 +59,7 @@ export async function computeStopLimit(executor: Executor, employeeId: string, n
   return stopLimit({
     nowMs,
     hasSchedule: hasScheduleAround(schedules, day),
-    shifts: shiftsOn(schedules, prefs.zone, day),
+    shifts: work.shifts,
     clientId,
     workedMsByClient,
     workedMsToday,

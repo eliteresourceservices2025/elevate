@@ -143,7 +143,7 @@ export type ClockResult = {
  * Records one clock event for the signed-in person. The time is the database clock and the IP comes from the request;
  * nothing the browser sends can change either. Everything is checked inside the person's lock.
  */
-export async function performClock(actor: { id: string; email: string }, type: ClockType, input: ClockInput, system?: { stampMs: number }): Promise<ClockResult> {
+export async function performClock(actor: { id: string; email: string }, type: ClockType, input: ClockInput, system?: { nowMs: number }): Promise<ClockResult> {
   const person = await personForUser(db, actor.id);
   if ((await clockSourceOf(db, person.id)) === "jibble") throw new ActionFailure("You clock in Jibble. ELEVATE reads your hours from there, so the ELEVATE clock is not used.");
   // `system` is the clock stopping by itself (auto-stop): the events carry source 'auto_stop' and the moment the limit was reached.
@@ -155,7 +155,17 @@ export async function performClock(actor: { id: string; email: string }, type: C
   let mirroredEmployeeId: string | undefined;
   const result = await db.transaction(async (tx) => {
     await lockEmployeeClock(tx, person.id);
-    const replay = replayClock(await loadRecentEvents(tx, person.id));
+    const recent = await loadRecentEvents(tx, person.id);
+    const replay = replayClock(recent);
+    // Auto-stop decides inside the person's lock: the limit and the moment it was reached are worked out from the events as they are now, so a
+    // clock-out and a new clock-in that happened since the check cannot be stepped on. Not due (or nothing to stop) means nothing is written.
+    let stampMs = 0;
+    if (system) {
+      const due = await computeStopLimit(tx, person.id, system.nowMs, { replay });
+      if (!due || due.limitMs > system.nowMs) throw new ActionFailure("Their hours are not used up yet.");
+      const lastEventAt = recent.length > 0 ? Math.max(...recent.map((e) => e.at)) : 0;
+      stampMs = Math.min(system.nowMs, Math.max(lastEventAt, system.nowMs - due.overrunMs));
+    }
     const prefs = await prefsFor(tx, person.id);
     const rules = await rulesFor(tx, person.id);
     const monitoring = await monitoringPolicyPublished(tx);
@@ -237,13 +247,13 @@ export async function performClock(actor: { id: string; email: string }, type: C
     let last: { id: string; occurredAt: Date } | undefined;
     const inserted: { id: string; type: ClockType }[] = [];
     let breakEndedAt: number | null = null;
-    for (const t of types) {
+    for (const [position, t] of types.entries()) {
       [last] = await tx
         .insert(clockEvents)
         .values({
           employeeId: person.id,
           type: t,
-          occurredAt: system ? new Date(system.stampMs) : (sql`clock_timestamp()` as unknown as Date), // the real moment, so the two events of a clock-out stay in order
+          occurredAt: system ? new Date(stampMs + position) : (sql`clock_timestamp()` as unknown as Date), // the real moment, so the two events of a clock-out stay in order
           source: system ? "auto_stop" : "web",
           ip,
           outsideAllowedRange,

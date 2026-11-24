@@ -33,15 +33,15 @@ export async function runAutoStop(employeeId: string, nowMs = Date.now()): Promi
   if (!who?.user_id || !who.email) return { status: "stale" }; // no sign-in account, so no clock to stop
   const userId = who.user_id;
 
-  // The time the limit was reached, but never before the person's last event (a break that began after it, a clock-in after it).
-  const lastEventAt = events.length > 0 ? Math.max(...events.map((e) => e.at)) : 0;
-  const stampMs = Math.min(nowMs, Math.max(lastEventAt, nowMs - limit.overrunMs));
-
+  // The stop is stamped inside the person's lock (the moment the limit was reached, never before their last event; the two events of a stop on a
+  // break are one millisecond apart so they replay in order).
   try {
-    await performClock({ id: userId, email: who.email }, "clock_out", {}, { stampMs });
+    await performClock({ id: userId, email: who.email }, "clock_out", {}, { nowMs });
   } catch (error) {
-    if (error instanceof ActionFailure) return { status: "stale" }; // someone clocked out first
-    throw error;
+    if (!(error instanceof ActionFailure)) throw error;
+    // Someone clocked out first, or the hours were not used up after all (the person's events changed since the check above).
+    const again = await computeStopLimit(db, employeeId, nowMs, { replay: replayClock(await loadRecentEvents(db, employeeId)) });
+    return again && again.limitMs > nowMs ? { status: "early", limitMs: again.limitMs } : { status: "stale" };
   }
 
   const name = reportName({ first: who.first, last: who.last, preferred: who.preferred });

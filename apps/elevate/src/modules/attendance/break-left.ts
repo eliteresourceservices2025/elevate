@@ -1,11 +1,9 @@
 import "server-only";
-import { fromZonedTime } from "date-fns-tz";
 import type { db } from "@/lib/db";
-import { formatInZone } from "@/lib/time";
 import type { Replay } from "./clock";
 import { breakAllowanceLeft, dailyBreakAllowance } from "./day-limits";
 import { loadSchedules } from "./schedule-service";
-import { shiftsOn } from "./schedule";
+import { shiftsForWork } from "./schedule";
 
 type Executor = Pick<typeof db, "execute" | "insert" | "select" | "update" | "delete">;
 
@@ -16,10 +14,9 @@ type Executor = Pick<typeof db, "execute" | "insert" | "select" | "update" | "de
 export async function breakLeftToday(executor: Executor, input: { employeeId: string; zone: string; replay: Replay; defaultBreakMinutes: number; nowMs: number }): Promise<number> {
   const open = input.replay.sessions[input.replay.sessions.length - 1];
   const refMs = open && open.endAt === null ? open.startAt : input.nowMs;
-  const day = formatInZone(new Date(refMs), input.zone, "yyyy-MM-dd");
-  const shifts = shiftsOn(await loadSchedules(executor, input.employeeId), input.zone, day);
-  const allowanceMinutes = dailyBreakAllowance({ shifts, defaultBreakMinutes: input.defaultBreakMinutes });
-  const dayStart = fromZonedTime(`${day}T00:00:00`, input.zone).getTime();
+  const work = shiftsForWork(await loadSchedules(executor, input.employeeId), input.zone, refMs);
+  const allowanceMinutes = dailyBreakAllowance({ shifts: work.shifts, defaultBreakMinutes: input.defaultBreakMinutes });
+  const dayStart = work.startMs;
   const breaks = input.replay.sessions.filter((s) => s.startAt >= dayStart).flatMap((s) => s.breaks);
   return breakAllowanceLeft({ allowanceMinutes, breaks, nowMs: input.nowMs });
 }
