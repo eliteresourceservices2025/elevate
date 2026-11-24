@@ -58,3 +58,25 @@ describe("absenceDateProblem", () => {
     expect(absenceDateProblem("2030-01-01", "2030-03-04")).toBe("Make-up hours can only cover the last 31 days.");
   });
 });
+
+describe("expectedMinutesOn", () => {
+  it("is the shift's minutes when the person has a shift that day", async () => {
+    const { expectedMinutesOn } = await import("./makeup");
+    expect(expectedMinutesOn({ scheduledMinutes: 420, hasSchedule: true, isoWeekday: 3, capMinutes: 480 })).toBe(420);
+  });
+
+  it("is the daily hours on a weekday when the person has no schedule at all", async () => {
+    const { expectedMinutesOn } = await import("./makeup");
+    for (const isoWeekday of [1, 2, 3, 4, 5]) expect(expectedMinutesOn({ scheduledMinutes: null, hasSchedule: false, isoWeekday, capMinutes: 300 })).toBe(300);
+  });
+
+  it("is nothing on a weekend without a schedule", async () => {
+    const { expectedMinutesOn } = await import("./makeup");
+    for (const isoWeekday of [6, 7]) expect(expectedMinutesOn({ scheduledMinutes: null, hasSchedule: false, isoWeekday, capMinutes: 480 })).toBeNull();
+  });
+
+  it("is nothing on a rest day of someone who does have a schedule", async () => {
+    const { expectedMinutesOn } = await import("./makeup");
+    expect(expectedMinutesOn({ scheduledMinutes: null, hasSchedule: true, isoWeekday: 2, capMinutes: 480 })).toBeNull();
+  });
+});

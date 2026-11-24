@@ -2,7 +2,8 @@
 
 import { eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { authorize } from "@/lib/authz";
+import { authorize, can } from "@/lib/authz";
+import type { RoleSlug } from "@/lib/roles";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { isExclusionViolation } from "@/lib/db-errors";
@@ -13,7 +14,7 @@ import { hrUserIds, notify } from "@/modules/notifications/service";
 import { reportName, timeChainUserIds } from "@/modules/org/service";
 import { employees } from "@/modules/people/schema";
 import { absenceDateProblem, checkMakeupWindow, shortfallMinutes } from "./makeup";
-import { shiftOn } from "./schedule";
+import { expectedMinutesByDay } from "./makeup-service";
 import { loadSchedules } from "./schedule-service";
 import { makeupRequests } from "./schema";
 import { personForUser, prefsFor } from "./service";
@@ -37,10 +38,12 @@ async function nameOf(tx: Pick<typeof db, "select">, employeeId: string): Promis
   return { name: e ? reportName({ first: e.first, last: e.last, preferred: e.preferred }) : "Someone", userId: e?.userId ?? null };
 }
 
-/** The person's lead, or HR when nobody is above them. */
+/** The first person above them who can decide make-up hours (a lead, HR or Super Admin), or HR when there is none (an executive or recruiter above them cannot decide). */
 async function reviewerIds(tx: Pick<typeof db, "execute" | "select">, employeeId: string, actorId: string): Promise<string[]> {
   const chain = await timeChainUserIds(tx as never, employeeId);
-  const ids = chain.length === 0 ? await hrUserIds() : chain.slice(0, 1);
+  const roleRows = chain.length === 0 ? [] : ((await tx.execute(sql`select user_id, role_slug from core.user_roles where user_id in (${sql.join(chain.map((id) => sql`${id}`), sql`, `)})`)) as unknown as { user_id: string; role_slug: RoleSlug }[]);
+  const deciders = chain.filter((id) => can({ id, roles: roleRows.filter((r) => r.user_id === id).map((r) => r.role_slug) }, "makeup.decide", { managerChainUserIds: chain }));
+  const ids = deciders.length > 0 ? deciders.slice(0, 1) : await hrUserIds();
   return ids.filter((id) => id !== actorId);
 }
 
@@ -61,10 +64,10 @@ export async function requestMakeup(input: unknown): Promise<ActionResult> {
     const dayProblem = absenceDateProblem(v.absenceDate, formatInZone(nowMs, prefs.zone, "yyyy-MM-dd"));
     if (dayProblem) return fail(dayProblem);
 
-    // What the schedule asked for that day, and what was worked.
+    // What the day expected of the person (their shift, or their daily hours with no schedule; nothing on a weekend without a schedule, a holiday or approved leave), and what was worked.
     const schedules = await loadSchedules(db, person.id);
-    const scheduled = shiftOn(schedules, prefs.zone, v.absenceDate)?.scheduledMinutes ?? null;
-    if (scheduled === null) return fail("You had no scheduled hours that day, so there is nothing to make up.");
+    const scheduled = (await expectedMinutesByDay(db, person.id, prefs.zone, v.absenceDate, v.absenceDate, schedules)).get(v.absenceDate) ?? null;
+    if (scheduled === null) return fail("You had no working hours that day, so there is nothing to make up.");
     const [day] = (await db.execute(sql`select worked_minutes from time.attendance_days where employee_id = ${person.id} and date = ${v.absenceDate}::date`)) as unknown as { worked_minutes: number }[];
     const missed = shortfallMinutes(scheduled, Number(day?.worked_minutes ?? 0));
     if (missed < 15) return fail("You were not short on hours that day.");

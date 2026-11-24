@@ -13,6 +13,7 @@ vi.mock("next/headers", () => ({ headers: async () => new Headers({ "x-forwarded
 const { db } = await import("@/lib/db");
 const { formatInZone } = await import("@/lib/time");
 const actions = await import("@/modules/attendance/makeup-actions");
+const queries = await import("@/modules/attendance/makeup-queries");
 
 type TestUser = { id: string; email: string; roles: RoleSlug[] };
 const NO_ACCESS = "You do not have access to do that.";
@@ -67,13 +68,10 @@ describe("asking to make up hours", () => {
     expect(await notices(leadUser.id, "makeup.requested")).not.toHaveLength(0);
   });
 
-  it("refuses today, the future, and a day with no schedule", async () => {
+  it("refuses today and the future", async () => {
     const w = await person("mkDays", { managerId: leadEmployeeId });
-    const noSchedule = await person("mkNoSched", { managerId: leadEmployeeId, schedule: false });
     as(w.user);
     expect(await request({ absence: formatInZone(Date.now(), PHX, "yyyy-MM-dd"), from: 120, to: 240 })).toEqual({ ok: false, error: "Choose a day that has already passed." });
-    as(noSchedule.user);
-    expect(await request({ from: 120, to: 240 })).toEqual({ ok: false, error: "You had no scheduled hours that day, so there is nothing to make up." });
   });
 
   it("refuses more than what is left to make up for that day, counting windows already asked for", async () => {
@@ -155,5 +153,70 @@ describe("cancelling", () => {
     expect((await actions.cancelMakeup({ requestId: id })).ok).toBe(true);
     expect(await statusOf(id)).toBe("cancelled");
     expect((await actions.cancelMakeup({ requestId: id })).ok).toBe(false);
+  });
+});
+
+/** The most recent given weekday (1 = Monday ... 7 = Sunday) at least two days ago. */
+function lastWeekday(iso: number): string {
+  let d = Date.now() - 2 * DAY;
+  while (Number(formatInZone(d, PHX, "i")) !== iso) d -= DAY;
+  return formatInZone(d, PHX, "yyyy-MM-dd");
+}
+
+describe("people with no schedule use their daily hours (HR, leads, executives, recruiters)", () => {
+  it("lists a weekday they were not clocked in, and takes a request for it", async () => {
+    const staff = await person("mkStaff", { schedule: false, roles: ["hr_admin", "employee"] });
+    const wed = lastWeekday(3);
+    as(staff.user);
+    const mine = await queries.getMyMakeup();
+    expect(mine!.days.find((d) => d.date === wed)).toMatchObject({ missedMinutes: 480, leftMinutes: 480 });
+    expect((await request({ absence: wed, from: 120, to: 360 })).ok).toBe(true);
+  });
+
+  it("uses the person's own hours per day when HR set them", async () => {
+    const staff = await person("mkCap", { schedule: false });
+    await db.execute(sql`update core.employees set daily_cap_minutes = 240 where id = ${staff.employeeId}`);
+    const wed = lastWeekday(3);
+    as(staff.user);
+    expect((await queries.getMyMakeup())!.days.find((d) => d.date === wed)).toMatchObject({ missedMinutes: 240 });
+    expect((await request({ absence: wed, from: 120, to: 480 })).ok).toBe(false); // 360 minutes is more than the 240 missed
+    expect((await request({ absence: wed, from: 120, to: 360 })).ok).toBe(true);
+  });
+
+  it("has nothing to make up on a weekend", async () => {
+    const staff = await person("mkWeekend", { schedule: false });
+    const sat = lastWeekday(6);
+    as(staff.user);
+    expect((await queries.getMyMakeup())!.days.some((d) => d.date === sat)).toBe(false);
+    expect(await request({ absence: sat, from: 120, to: 240 })).toEqual({ ok: false, error: "You had no working hours that day, so there is nothing to make up." });
+  });
+
+  it("does not count a day of approved leave as missed", async () => {
+    const staff = await person("mkLeave", { schedule: false });
+    const thu = lastWeekday(4);
+    const [type] = await rows<{ id: string }>(sql`select id from time.leave_types limit 1`);
+    await db.execute(sql`insert into time.leave_requests (employee_id, leave_type_id, start_date, end_date, half_day, days, status, filed_by, step_started_on)
+      values (${staff.employeeId}, ${type.id}, ${thu}::date, ${thu}::date, false, 1, 'approved', ${staff.user.id}, current_date)`);
+    as(staff.user);
+    expect((await queries.getMyMakeup())!.days.some((d) => d.date === thu)).toBe(false);
+    expect((await request({ absence: thu, from: 120, to: 240 })).ok).toBe(false);
+  });
+
+  it("is not listed for a day that was a holiday", async () => {
+    const staff = await person("mkHoliday", { schedule: false });
+    const tue = lastWeekday(2);
+    await db.execute(sql`insert into time.holidays (calendar, date, name, verified) values ('PH', ${tue}::date, ${uniq("Test holiday ")}, true)`);
+    as(staff.user);
+    expect((await queries.getMyMakeup())!.days.some((d) => d.date === tue)).toBe(false);
+  });
+
+  it("goes to HR when the person above them is an executive, who cannot decide", async () => {
+    const hrAdmin = await makeUser("mkHrNotify", ["hr_admin"]);
+    const exec = await person("mkExec", { schedule: false, roles: ["executive", "employee"] });
+    const recruiter = await person("mkRec", { schedule: false, managerId: exec.employeeId, roles: ["recruiter", "employee"] });
+    as(recruiter.user);
+    expect((await request({ absence: lastWeekday(3), from: 120, to: 240 })).ok).toBe(true);
+    expect(await notices(hrAdmin.id, "makeup.requested")).not.toHaveLength(0);
+    expect(await notices(exec.user.id, "makeup.requested")).toHaveLength(0);
   });
 });

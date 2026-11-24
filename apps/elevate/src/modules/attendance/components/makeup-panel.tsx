@@ -81,7 +81,7 @@ function RequestForm({ mine }: { mine: MyMakeup }) {
     >
       <h2 className="text-lg font-semibold">Ask to make up missed hours</h2>
       {mine.days.length === 0 ? (
-        <p className="text-sm text-muted-foreground">You have no missed hours from the last 31 days to make up. Only days with scheduled hours that were not fully worked show here.</p>
+        <p className="text-sm text-muted-foreground">You have no missed hours from the last 31 days to make up. Weekdays (or your scheduled days) where you worked less than expected show here. Holidays and approved leave do not.</p>
       ) : (
         <>
           <SelectField id="mk-day" label="The day you are making up for" value={absence} onChange={(e) => setAbsence(e.target.value)} required>

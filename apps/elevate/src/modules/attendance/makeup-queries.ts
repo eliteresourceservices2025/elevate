@@ -7,7 +7,8 @@ import { formatInZone } from "@/lib/time";
 import { timeChainUserIds, timeDownlineEmployeeIds, reportName } from "@/modules/org/service";
 import { employees } from "@/modules/people/schema";
 import { MAKEUP_DAYS_BACK, MAKEUP_MIN_MINUTES, shortfallMinutes } from "./makeup";
-import { addDays, shiftOn } from "./schedule";
+import { addDays } from "./schedule";
+import { expectedMinutesByDay } from "./makeup-service";
 import { loadSchedules } from "./schedule-service";
 import { prefsFor } from "./service";
 
@@ -95,9 +96,10 @@ export async function getMyMakeup(): Promise<MyMakeup | null> {
   const workedBy = new Map(worked.map((w) => [w.date, Number(w.worked_minutes)]));
   const live = (await db.execute(sql`select absence_date::text as date, coalesce(sum(minutes), 0)::int as asked from time.makeup_requests where employee_id = ${me.id} and status in ('pending', 'approved') and absence_date >= ${from}::date group by absence_date`)) as unknown as { date: string; asked: number }[];
   const askedBy = new Map(live.map((l) => [l.date, Number(l.asked)]));
+  const expected = await expectedMinutesByDay(db, me.id, prefs.zone, from, addDays(today, -1), schedules);
   const days: MakeableDay[] = [];
   for (let date = addDays(today, -1); date >= from; date = addDays(date, -1)) {
-    const missed = shortfallMinutes(shiftOn(schedules, prefs.zone, date)?.scheduledMinutes ?? null, workedBy.get(date) ?? 0);
+    const missed = shortfallMinutes(expected.get(date) ?? null, workedBy.get(date) ?? 0);
     const left = missed - (askedBy.get(date) ?? 0);
     if (missed >= MAKEUP_MIN_MINUTES && left >= MAKEUP_MIN_MINUTES) days.push({ date, missedMinutes: missed, leftMinutes: left });
   }
