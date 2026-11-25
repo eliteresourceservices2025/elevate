@@ -2,21 +2,22 @@
 
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { authorize } from "@/lib/authz";
+import { ForbiddenError, authorize, scopeFor } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { ActionFailure, fail, runAction, type ActionResult } from "@/lib/run-action";
 import { writeAudit } from "@/modules/audit/write";
 import { replayClock } from "@/modules/attendance/clock";
 import { clockSourceOf } from "@/modules/attendance/clock-source";
-import { clockSource } from "@/modules/attendance/schema";
-import { loadRecentEvents, lockEmployeeClock } from "@/modules/attendance/service";
+import { rebuildAfterChange } from "@/modules/attendance/edit-service";
+import { clockCorrections, clockEvents, clockSource } from "@/modules/attendance/schema";
+import { MAX_EDIT_AGE_MS, checkProposal, loadRecentEvents, lockEmployeeClock } from "@/modules/attendance/service";
 import { notify } from "@/modules/notifications/service";
 import { reportName } from "@/modules/org/service";
 import { employees } from "@/modules/people/schema";
 import { runJibbleImport } from "./import";
 import { jibbleClientMap, jibblePeople } from "./schema";
-import { bulkJibbleClockSchema, clientMapSchema, clockSourceSchema, importHoursSchema, removeClientMapSchema } from "./validators";
+import { bulkJibbleClockSchema, clientMapSchema, clockSourceSchema, closeSessionSchema, importHoursSchema, removeClientMapSchema } from "./validators";
 
 // HR: whose hours come from Jibble, importing them by hand, and which Jibble project or activity means which client.
 // Every export here is a public endpoint: it signs the person in and authorizes first.
@@ -45,7 +46,13 @@ async function applyClockSource(tx: Tx, actor: { id: string; email: string }, em
     const [match] = await tx.select({ id: jibblePeople.jibblePersonId }).from(jibblePeople).where(eq(jibblePeople.employeeId, employeeId));
     if (!match) throw new ActionFailure("Match them to their Jibble account first.");
   }
-  if (replayClock(await loadRecentEvents(tx, employeeId)).state !== "out") throw new ActionFailure("They are clocked in right now. Change this after they clock out, so no session is cut in two.");
+  if (replayClock(await loadRecentEvents(tx, employeeId)).state !== "out") {
+    throw new ActionFailure(
+      source === "elevate"
+        ? "ELEVATE still shows them clocked in from Jibble. Ask them to clock out in Jibble (closing the app does not stop the timer), or use Close session and switch to end it at the time they really stopped."
+        : "They are clocked in right now. Change this after they clock out, so no session is cut in two.",
+    );
+  }
   await tx.insert(clockSource).values({ employeeId, source, setBy: actor.id });
   await writeAudit({ actor, action: "clock_source.set", targetType: "employee", targetId: employeeId, before: { source: current }, after: { source }, ...(bulk ? { metadata: { bulk } } : {}) }, tx);
   if (person.userId) {
@@ -71,6 +78,71 @@ export async function setClockSource(input: unknown): Promise<ActionResult<{ sou
     await db.transaction((tx) => applyClockSource(tx, actor, employeeId, source, null));
     refresh();
     return { ok: true, data: { source } };
+  });
+}
+
+/**
+ * A person on the Jibble clock whom ELEVATE still shows as clocked in (Jibble left an entry open: the timer was never stopped, or the
+ * clock-out was forgotten) cannot be moved back to the ELEVATE clock, and cannot clock out in ELEVATE either. HR and Super Admin end the
+ * open session at the time the person really stopped, with a reason, and move them in one step. The close is a normal HR correction: new
+ * events (never an edit), audited, shown to the person, and held to the same rules as "change someone's time" (not in the future, not
+ * before their last event, a session of 16 hours at most, a year back at most). Nobody does this to themselves.
+ */
+export async function closeSessionAndUseElevateClock(input: unknown): Promise<ActionResult<{ closed: boolean }>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "jibble.manage");
+    if (scopeFor(actor, "attendance.edit_hours") !== "all") throw new ForbiddenError("attendance.edit_hours");
+    const parsed = closeSessionSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const { employeeId, reason } = parsed.data;
+    const closeMs = Date.parse(parsed.data.closeAt);
+    const closeIso = new Date(closeMs).toISOString();
+
+    let earliest = closeMs;
+    let closed = false;
+    await db.transaction(async (tx) => {
+      const [person] = await tx
+        .select({ userId: employees.userId })
+        .from(employees)
+        .where(and(eq(employees.id, employeeId), isNull(employees.archivedAt), sql`${employees.status} <> 'separated'`));
+      if (!person) throw new ActionFailure("That person was not found.");
+      if (person.userId === actor.id) throw new ActionFailure("Someone else must change your own time. Ask HR or your lead.");
+      await lockEmployeeClock(tx, employeeId);
+      if ((await clockSourceOf(tx, employeeId)) !== "jibble") throw new ActionFailure("They already use the ELEVATE clock.");
+
+      const recent = await loadRecentEvents(tx, employeeId);
+      const replay = replayClock(recent);
+      if (replay.state !== "out") {
+        const lastEventAt = Math.max(...recent.map((e) => e.at));
+        if (closeMs <= lastEventAt) throw new ActionFailure("Choose a time after their last clock event.");
+        // On a break, the break ends and the session ends at the same moment.
+        const added = (replay.state === "break" ? ["break_end", "clock_out"] : ["clock_out"]) as ("break_end" | "clock_out")[];
+        const proposal = added.map((type) => ({ type, at: closeIso }));
+        const problem = await checkProposal(employeeId, proposal, Date.now(), tx, { maxAgeMs: MAX_EDIT_AGE_MS });
+        if (problem) throw new ActionFailure(problem);
+
+        const [row] = await tx
+          .insert(clockCorrections)
+          .values({ employeeId, requestedBy: actor.id, reason, kind: "other", proposed: proposal, voidEventIds: [], status: "approved", decidedBy: actor.id, decidedAt: new Date(), decisionNote: "Session left open in Jibble, closed by HR to move to the ELEVATE clock" })
+          .returning({ id: clockCorrections.id });
+        // One at a time, so the end of a break is recorded before the clock-out even though both carry the same time.
+        for (const e of proposal) {
+          await tx.insert(clockEvents).values({ employeeId, type: e.type, occurredAt: new Date(e.at), source: "admin_correction", correctionId: row.id, correctionReason: reason, createdBy: actor.id, createdAt: sql`clock_timestamp()` as unknown as Date });
+        }
+        const open = replay.sessions[replay.sessions.length - 1];
+        earliest = Math.min(closeMs, open?.startAt ?? closeMs);
+        if (person.userId) await notify(tx, { userId: person.userId, kind: "attendance.time_changed", title: "Your recorded time was changed", body: reason, link: "/attendance" });
+        await writeAudit({ actor, action: "clock_source.close_session", targetType: "employee", targetId: employeeId, after: { added: proposal, sessionStartedAt: open ? new Date(open.startAt).toISOString() : null }, metadata: { correctionId: row.id, reason } }, tx);
+        closed = true;
+      }
+      // The session is closed now, so the ordinary rule (clocked out, append-only row, audit, notice) passes.
+      await applyClockSource(tx, actor, employeeId, "elevate", null);
+    });
+    if (closed) await rebuildAfterChange(employeeId, earliest);
+    refresh();
+    for (const p of ["/attendance", "/team-attendance", "/hours-review"]) revalidatePath(p);
+    return { ok: true, data: { closed } };
   });
 }
 

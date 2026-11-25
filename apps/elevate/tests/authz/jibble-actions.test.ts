@@ -15,6 +15,7 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 const actions = await import("@/modules/jibble/actions");
 const queries = await import("@/modules/jibble/queries");
+const sourceActions = await import("@/modules/jibble/clock-source-actions");
 
 const ID = "11111111-1111-4111-8111-111111111111";
 const NO_ACCESS = "You do not have access to do that.";
@@ -29,6 +30,10 @@ const cases: { name: string; call: () => Promise<{ ok: boolean; error?: string }
   { name: "syncJibblePeopleNow", call: () => actions.syncJibblePeopleNow() },
   { name: "setJibblePerson", call: () => actions.setJibblePerson({ employeeId: ID, jibblePersonId: ID }) },
   { name: "retryJibbleSend", call: () => actions.retryJibbleSend({ logId: ID }) },
+  { name: "setClockSource", call: () => sourceActions.setClockSource({ employeeId: ID, source: "elevate" }) },
+  { name: "setJibbleClockForMany", call: () => sourceActions.setJibbleClockForMany({ employeeIds: [ID] }) },
+  { name: "importJibbleHours", call: () => sourceActions.importJibbleHours({ employeeId: ID, days: 3 }) },
+  { name: "closeSessionAndUseElevateClock", call: () => sourceActions.closeSessionAndUseElevateClock({ employeeId: ID, closeAt: "2026-11-20T10:00:00.000Z", reason: "Left the timer running" }) },
 ];
 
 beforeEach(() => vi.spyOn(console, "error").mockImplementation(() => {}));
