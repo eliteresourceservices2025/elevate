@@ -10,9 +10,11 @@ import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { formatDateOnly } from "@/lib/time";
+import { FormDialog } from "@/components/form-dialog";
+import { formatDateOnly, formatInZone } from "@/lib/time";
 import { importJibbleHours, removeClientMap, saveClientMap, setClockSource, setJibbleClockForMany } from "../clock-source-actions";
 import type { ClockSourceOverview } from "../clock-source-queries";
+import { CloseSessionForm } from "./close-session-form";
 
 const KIND_TEXT = { project: "Project", activity: "Activity" } as const;
 
@@ -48,6 +50,11 @@ function PersonRow({ person }: { person: ClockSourceOverview["people"][number] }
       </TableCell>
       <TableCell label="Clock">
         <Badge variant={fromJibble ? "info" : "outline"}>{fromJibble ? "Jibble clock" : "ELEVATE clock"}</Badge>
+        {person.open ? (
+          <span className="mt-1 block text-xs text-muted-foreground">
+            Clocked in{person.open.onBreak ? " (on a break)" : ""} since {formatInZone(person.open.since, person.open.zone, "EEE MMM d, h:mm a")}
+          </span>
+        ) : null}
       </TableCell>
       <TableCell label="Action">
         <div className="flex flex-wrap items-center gap-2">
@@ -60,6 +67,11 @@ function PersonRow({ person }: { person: ClockSourceOverview["people"][number] }
           >
             {fromJibble ? "Use the ELEVATE clock" : "Use the Jibble clock"}
           </Button>
+          {fromJibble && person.open ? (
+            <FormDialog label="Close session and switch" title={`Close ${person.name}'s open session`} description="Ends the session Jibble left open, then moves them to the ELEVATE clock." variant="outline" triggerSize="sm">
+              <CloseSessionForm employeeId={person.employeeId} name={person.name} open={person.open} />
+            </FormDialog>
+          ) : null}
           {fromJibble ? (
             <span className="flex items-center gap-1">
               <label className="sr-only" htmlFor={`imp-${person.employeeId}`}>

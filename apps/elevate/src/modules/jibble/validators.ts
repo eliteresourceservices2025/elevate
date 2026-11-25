@@ -10,6 +10,12 @@ export const mismatchReviewSchema = z.object({ mismatchId: z.uuid(), note: z.str
 export const operationRecoverySchema = z.object({ employeeId: z.uuid() });
 export const pauseSchema = z.object({ paused: z.boolean() });
 export const clockSourceSchema = z.object({ employeeId: z.uuid(), source: z.enum(["elevate", "jibble"]) });
+/** HR closes a session that Jibble left open (the time the person really stopped, and why) and moves the person to the ELEVATE clock. */
+export const closeSessionSchema = z.object({
+  employeeId: z.uuid(),
+  closeAt: z.string().refine((v) => !Number.isNaN(Date.parse(v)), "Enter a real date and time"),
+  reason: z.string().trim().min(5, "Explain what happened in a few words").max(300, "Use 300 characters or fewer"),
+});
 export const importHoursSchema = z.object({ employeeId: z.uuid(), days: z.coerce.number().int().min(1, "Choose 1 to 14 days").max(14, "Choose 1 to 14 days") });
 export const clientMapSchema = z.object({ kind: z.enum(["project", "activity"]), jibbleId: z.string().trim().min(1, "Enter the Jibble id").max(120, "That is too long"), clientId: z.uuid() });
 export const removeClientMapSchema = z.object({ id: z.uuid() });

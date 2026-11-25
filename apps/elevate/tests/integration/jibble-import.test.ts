@@ -381,3 +381,99 @@ describe("moving contractors who use Jibble alone", () => {
     expect(due).toContain(two.employeeId);
   });
 });
+
+describe("a session Jibble left open, and moving back to the ELEVATE clock", () => {
+  const REASON = "Left the Jibble timer running";
+  const iso = (time: string, plusHours = 0) => new Date(Date.parse(at(time)) + plusHours * 3_600_000).toISOString();
+
+  /** A person on the Jibble clock whose Jibble entries end in an In with no Out (the timer was never stopped). */
+  async function openOnJibble(label: string, extra: JibbleTimeEntryRow["type"][] = []) {
+    const c = await client();
+    const p = await person(label, [c.id]);
+    await onJibble(p);
+    const list = [entry(p.jibbleId, "e1", "In", "09:00"), ...extra.map((type, i) => entry(p.jibbleId, `x${i}`, type, "12:00"))];
+    fake.entries.set(p.jibbleId, list);
+    await runJibbleImport({ days: 5, employeeId: p.employeeId });
+    return p;
+  }
+  const source = async (employeeId: string) => (await rows<{ source: string }>(sql`select source from time.clock_source where employee_id = ${employeeId} order by set_at desc, id desc limit 1`))[0]?.source;
+
+  it("is refused with a plain message, then HR closes it at the time they stopped and they move in one step", async () => {
+    const p = await openOnJibble("OpenA");
+    expect((await events(p.employeeId)).map((e) => e.type)).toEqual(["clock_in"]);
+
+    as(hr);
+    const refused = await sourceActions.setClockSource({ employeeId: p.employeeId, source: "elevate" });
+    expect(!refused.ok && refused.error).toContain("Close session and switch");
+    expect(await source(p.employeeId)).toBe("jibble");
+
+    expect(await sourceActions.closeSessionAndUseElevateClock({ employeeId: p.employeeId, closeAt: iso("17:00"), reason: REASON })).toEqual({ ok: true, data: { closed: true } });
+    const after = await events(p.employeeId);
+    expect(after.map((e) => [e.type, e.source])).toEqual([["clock_in", "jibble"], ["clock_out", "admin_correction"]]);
+    expect(await source(p.employeeId)).toBe("elevate");
+    expect((await dayRow(p.employeeId)).worked_minutes).toBe(480);
+    expect(await rows(sql`select 1 from ops.audit_log where action = 'clock_source.close_session' and target_id = ${p.employeeId}`)).toHaveLength(1);
+    expect(await rows(sql`select 1 from ops.audit_log where action = 'clock_source.set' and target_id = ${p.employeeId}`)).toHaveLength(2); // to Jibble, then back
+    expect(await rows(sql`select 1 from ops.notifications where user_id = ${p.user.id} and kind = 'attendance.time_changed'`)).toHaveLength(1);
+    expect(await rows(sql`select 1 from time.clock_corrections where employee_id = ${p.employeeId} and status = 'approved' and reason = ${REASON}`)).toHaveLength(1);
+
+    // They can clock in ELEVATE now, and the Jibble import no longer touches them
+    as(p.user);
+    expect((await clockActions.clockIn({})).ok).toBe(true);
+    expect(await runJibbleImport({ days: 5, employeeId: p.employeeId })).toMatchObject({ people: 0 });
+  });
+
+  it("ends a break first when they were on one, in that order", async () => {
+    const p = await openOnJibble("OpenBreak", ["StartBreak"]);
+    as(hr);
+    expect((await sourceActions.closeSessionAndUseElevateClock({ employeeId: p.employeeId, closeAt: iso("12:30"), reason: REASON })).ok).toBe(true);
+    expect((await events(p.employeeId)).map((e) => e.type)).toEqual(["clock_in", "break_start", "break_end", "clock_out"]);
+  });
+
+  it("refuses a time in the future, before the clock-in or more than 16 hours after it, and changes nothing", async () => {
+    const p = await openOnJibble("OpenBad");
+    as(hr);
+    const tries: { closeAt: string; error: RegExp }[] = [
+      { closeAt: new Date(Date.now() + 3_600_000).toISOString(), error: /future/i },
+      { closeAt: iso("08:00"), error: /after their last clock event/i },
+      { closeAt: iso("09:00", 17), error: /16 hours/i },
+    ];
+    for (const t of tries) {
+      const result = await sourceActions.closeSessionAndUseElevateClock({ employeeId: p.employeeId, closeAt: t.closeAt, reason: REASON });
+      expect(!result.ok && result.error).toMatch(t.error);
+    }
+    expect(await events(p.employeeId)).toHaveLength(1);
+    expect(await source(p.employeeId)).toBe("jibble");
+    expect(await sourceActions.closeSessionAndUseElevateClock({ employeeId: p.employeeId, closeAt: iso("17:00"), reason: "no" })).toMatchObject({ ok: false });
+  });
+
+  it("only switches when nothing is open, and does nothing for someone already on the ELEVATE clock", async () => {
+    const c = await client();
+    const done = await person("OpenDone", [c.id]);
+    await onJibble(done);
+    fake.entries.set(done.jibbleId, [entry(done.jibbleId, "d1", "In", "09:00"), entry(done.jibbleId, "d2", "Out", "17:00")]);
+    await runJibbleImport({ days: 5, employeeId: done.employeeId });
+    as(hr);
+    expect(await sourceActions.closeSessionAndUseElevateClock({ employeeId: done.employeeId, closeAt: iso("18:00"), reason: REASON })).toEqual({ ok: true, data: { closed: false } });
+    expect(await events(done.employeeId)).toHaveLength(2); // nothing added
+    expect(await source(done.employeeId)).toBe("elevate");
+    expect(await sourceActions.closeSessionAndUseElevateClock({ employeeId: done.employeeId, closeAt: iso("18:00"), reason: REASON })).toEqual({ ok: false, error: "They already use the ELEVATE clock." });
+  });
+
+  it("is for HR and Super Admin only, and nobody closes their own session", async () => {
+    const p = await openOnJibble("OpenRoles");
+    for (const role of ["team_lead", "employee", "executive", "recruiter"] as RoleSlug[]) {
+      as(await makeUser("NoClose", [role]));
+      expect(await sourceActions.closeSessionAndUseElevateClock({ employeeId: p.employeeId, closeAt: iso("17:00"), reason: REASON })).toEqual({ ok: false, error: NO_ACCESS });
+    }
+    expect(await events(p.employeeId)).toHaveLength(1);
+
+    // An HR person who is themself the one on the Jibble clock cannot close their own session
+    const own = await rows<{ id: string }>(sql`insert into core.employees (legal_first_name, legal_last_name, work_email, status, user_id) values ('Own', ${uniq("Own")}, ${hr.email}, 'active', ${hr.id}) returning id`);
+    await db.execute(sql`insert into time.jibble_people (employee_id, jibble_person_id, matched_by) values (${own[0].id}, ${randomUUID()}, 'manual')`);
+    await db.execute(sql`insert into time.clock_source (employee_id, source, set_by) values (${own[0].id}, 'jibble', ${hr.id})`);
+    await db.execute(sql`insert into time.clock_events (employee_id, type, occurred_at, source, jibble_entry_id) values (${own[0].id}, 'clock_in', ${iso("09:00")}, 'jibble', ${uniq("own-entry")})`);
+    as(hr);
+    expect(await sourceActions.closeSessionAndUseElevateClock({ employeeId: own[0].id, closeAt: iso("17:00"), reason: REASON })).toEqual({ ok: false, error: "Someone else must change your own time. Ask HR or your lead." });
+  });
+});
