@@ -51,5 +51,6 @@ export function absenceDateProblem(absenceDate: string, today: string): string |
 export function expectedMinutesOn(input: { scheduledMinutes: number | null; hasSchedule: boolean; isoWeekday: number; capMinutes: number }): number | null {
   if (input.scheduledMinutes !== null) return input.scheduledMinutes;
   if (input.hasSchedule) return null;
+  if (input.capMinutes === 0) return null; // a day HR marked off expects nothing
   return input.isoWeekday <= 5 ? input.capMinutes : null;
 }

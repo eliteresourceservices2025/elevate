@@ -122,13 +122,39 @@ export const replaceScheduleSchema = z.object({ scheduleId: uuid, effectiveFrom:
 export const updateScheduleSchema = z.object({ scheduleId: uuid, zone: scheduleZone, reason: z.string().trim().min(5, "Say why in a few words").max(300, "Use 300 characters or fewer"), ...shiftRow });
 /** HR removes one schedule: it stops after the last day, or is dropped when it had not started by then. */
 export const removeScheduleSchema = z.object({ scheduleId: uuid, lastDay: ymd });
-/** HR sets the hours of specific days (a date and minutes; null clears that day) for one or many people with no fixed schedule. */
+/**
+ * HR sets the hours of specific days for one or many people with no fixed schedule (minutes 0 = a day off, null = back to the usual hours), and
+ * optionally their usual hours per day (null = the company default). `preview` counts what would change without writing.
+ */
 export const setDayHoursSchema = z
   .object({
     employeeIds: z.array(uuid).min(1, "Choose at least one person").max(200, "Choose 200 people at most"),
-    days: z.array(z.object({ date: ymd, minutes: z.union([z.number().int("Whole minutes").min(1, "At least 1 minute").max(960, "16 hours at most"), z.null()]) })).min(1, "Add at least one day").max(31, "31 days at most"),
+    days: z.array(z.object({ date: ymd, minutes: z.union([z.number().int("Whole minutes").min(0, "Zero or more").max(960, "16 hours at most"), z.null()]) })).max(152, "152 days at most").default([]),
+    usualMinutes: z.union([z.number().int("Whole minutes").min(1, "At least 1 minute").max(960, "16 hours at most"), z.null()]).optional(),
+    preview: z.boolean().default(false),
   })
+  .refine((v) => v.days.length > 0 || v.usualMinutes !== undefined, { message: "Add at least one day", path: ["days"] })
   .refine((v) => new Set(v.days.map((d) => d.date)).size === v.days.length, { message: "Each day can only be listed once", path: ["days"] });
+
+const reasonField = z.string().trim().min(5, "Say why in a few words").max(300, "Use 300 characters or fewer");
+/** HR changes ONE day: for each client listed, its shifts that day (none = off). Clients not listed keep their usual shifts. */
+export const dayChangeSchema = z
+  .object({
+    employeeId: uuid,
+    date: ymd,
+    reason: reasonField,
+    clients: z
+      .array(
+        z.object({
+          clientId: z.preprocess(blankToUndefined, uuid.optional()),
+          shifts: z.array(z.object({ startTime: hhmm, endTime: hhmm, breakMinutes: shiftRow.breakMinutes, allottedMinutesPerDay: shiftRow.allottedMinutesPerDay })).max(4, "4 shifts at most"),
+        }),
+      )
+      .min(1, "Change at least one shift")
+      .max(14),
+  })
+  .refine((v) => new Set(v.clients.map((c) => c.clientId ?? "")).size === v.clients.length, { message: "Each client can only be listed once", path: ["clients"] });
+export const removeDayChangeSchema = z.object({ employeeId: uuid, date: ymd });
 /** HR ends the current schedules of many people on the same date. */
 export const endSchedulesSchema = z.object({
   employeeIds: z.array(uuid).min(1, "Choose at least one person").max(200, "Choose 200 people at most"),

@@ -12,8 +12,8 @@ export function ScheduleChips({ chips, nextChange }: { chips: DayChip[]; nextCha
             <span className="block text-muted-foreground">{WEEKDAYS.find((w) => w.n === day.weekday)?.short}</span>
             {day.shifts.length === 0 ? (
               <span className="block text-muted-foreground">
-                <span aria-hidden>-</span>
-                <span className="sr-only">Rest</span>
+                <span aria-hidden>{day.off ? "Off" : "-"}</span>
+                <span className="sr-only">{day.off ? "Off" : "Rest"}</span>
               </span>
             ) : (
               day.shifts.map((s) => (
@@ -23,10 +23,25 @@ export function ScheduleChips({ chips, nextChange }: { chips: DayChip[]; nextCha
                 </span>
               ))
             )}
+            {day.changed ? <span className="block text-muted-foreground">changed</span> : null}
           </li>
         ))}
       </ol>
       {nextChange ? <p className="text-xs text-muted-foreground">Changes {formatDateOnly(nextChange)}</p> : null}
     </div>
+  );
+}
+
+/** The next seven days of someone with no fixed schedule: hours per day, or Off. */
+export function HoursChips({ days }: { days: { date: string; weekday: number; minutes: number | null; set: boolean }[] }) {
+  return (
+    <ol className="grid w-full grid-cols-7 gap-1 sm:min-w-72" aria-label="Hours for the next days">
+      {days.map((d) => (
+        <li key={d.date} className={`min-w-0 rounded-md border p-1 text-center text-xs ${d.set ? "border-primary" : ""}`}>
+          <span className="block text-muted-foreground">{WEEKDAYS.find((w) => w.n === d.weekday)?.short}</span>
+          <span className="block font-medium">{d.minutes === null ? "-" : d.minutes === 0 ? "Off" : `${d.minutes / 60}h`}</span>
+        </li>
+      ))}
+    </ol>
   );
 }

@@ -11,11 +11,11 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ClientPager, usePaged } from "@/components/client-pager";
-import { formatDateOnly } from "@/lib/time";
-import { setDailyCaps } from "@/modules/org/actions";
-import { endSchedules, setDayHours } from "../schedule-actions";
+import { endSchedules } from "../schedule-actions";
+import { addDays, isoWeekday } from "../schedule";
+import { HoursRangeForm } from "./hours-range-form";
 import { AddScheduleForm, useRun, type RunFn } from "./schedule-forms";
-import { ScheduleChips } from "./schedule-chips";
+import { HoursChips, ScheduleChips } from "./schedule-chips";
 import type { ScheduleClient, ScheduleListRow } from "../queries";
 
 type ScheduleListClients = ScheduleClient[];
@@ -23,69 +23,16 @@ type ScheduleListClients = ScheduleClient[];
 const isCurrent = (r: ScheduleListRow) => r.entries.some((e) => e.status === "current");
 const isUpcoming = (r: ScheduleListRow) => r.entries.some((e) => e.status === "upcoming");
 
-/** For contractors with no fixed schedule: their usual hours per day, and hours for specific days when a day differs. */
-function HoursPerDayForm({ picked, today, run, pending, onDone }: { picked: string[]; today: string; run: RunFn; pending: boolean; onDone: () => void }) {
-  const dialog = useFormDialog();
-  const [usual, setUsual] = useState("");
-  const [rows, setRows] = useState<{ date: string; hours: string }[]>([{ date: today, hours: "" }]);
-  const people = `${picked.length} ${picked.length === 1 ? "person" : "people"}`;
-  const filled = rows.filter((r) => r.date !== "");
-  const bad = filled.some((r) => r.hours.trim() !== "" && !(Number(r.hours) >= 0.25 && Number(r.hours) <= 16)) || (usual.trim() !== "" && !(Number(usual) >= 0.25 && Number(usual) <= 16));
-  const nothing = usual.trim() === "" && filled.length === 0;
-  return (
-    <form
-      className="space-y-4"
-      onSubmit={(e) => {
-        e.preventDefault();
-        run(
-          async () => {
-            if (usual.trim() !== "") {
-              const r = await setDailyCaps({ employeeIds: picked, minutes: Math.round(Number(usual) * 60) });
-              if (!r.ok) return r;
-            }
-            if (filled.length > 0) {
-              const r = await setDayHours({ employeeIds: picked, days: filled.map((d) => ({ date: d.date, minutes: d.hours.trim() === "" ? null : Math.round(Number(d.hours) * 60) })) });
-              if (!r.ok) return r;
-            }
-            return { ok: true };
-          },
-          `Hours saved for ${people}.`,
-          () => {
-            onDone();
-            dialog?.close(true);
-          },
-        );
-      }}
-    >
-      <p className="rounded-lg border bg-muted/40 p-3 text-sm">
-        For contractors with no fixed schedule. The clock warns them and stops after these hours, and the extra hours prompt follows them. Anyone who has a fixed schedule follows the schedule instead, so end it first.
-      </p>
-      <TextField id="hp-usual" label="Usual hours per day" type="number" min="0.25" max="16" step="0.25" value={usual} onChange={(e) => setUsual(e.target.value)} hint="Used on every day that has no hours of its own. Leave empty to keep what is set now." />
-      <fieldset className="space-y-2">
-        <legend className="text-sm font-medium">Hours for specific days (optional)</legend>
-        <p className="text-xs text-muted-foreground">For a day that is different, such as 4 hours today and 6 tomorrow. Leave the hours empty to go back to the usual hours for that day.</p>
-        {rows.map((r, i) => (
-          <div key={i} className="flex flex-wrap items-end gap-2">
-            <TextField id={`hp-date-${i}`} label="Day" type="date" value={r.date} onChange={(e) => setRows((all) => all.map((x, j) => (j === i ? { ...x, date: e.target.value } : x)))} />
-            <TextField id={`hp-hours-${i}`} label="Hours" type="number" min="0.25" max="16" step="0.25" value={r.hours} onChange={(e) => setRows((all) => all.map((x, j) => (j === i ? { ...x, hours: e.target.value } : x)))} />
-            <Button type="button" variant="ghost" size="sm" aria-label={`Remove day ${i + 1}`} onClick={() => setRows((all) => all.filter((_, j) => j !== i))}>
-              Remove
-            </Button>
-          </div>
-        ))}
-        <Button type="button" variant="outline" size="sm" disabled={rows.length >= 31} onClick={() => setRows((all) => [...all, { date: "", hours: "" }])}>
-          Add a day
-        </Button>
-      </fieldset>
-      <Button type="submit" disabled={pending || picked.length === 0 || nothing || bad}>
-        Save hours for {people}
-      </Button>
-    </form>
-  );
-}
+/** The next seven days of someone with no fixed schedule. A weekend with nothing set expects no work. */
+const nextDays = (r: ScheduleListRow, today: string) =>
+  Array.from({ length: 7 }, (_, i) => addDays(today, i)).map((date) => {
+    const set = r.dayHours.find((d) => d.date === date);
+    const weekday = isoWeekday(date);
+    return { date, weekday, set: Boolean(set), minutes: set ? set.minutes : weekday <= 5 ? r.dailyCapMinutes : null };
+  });
 
 /** Set a schedule: shift patterns, or just hours per day for a contractor with no fixed schedule. */
-function SetScheduleForm({ picked, today, clients, run, pending, onDone }: { picked: string[]; today: string; clients: ScheduleListClients; run: RunFn; pending: boolean; onDone: () => void }) {
+function SetScheduleForm({ picked, today, clients, onDone }: { picked: string[]; today: string; clients: ScheduleListClients; onDone: () => void }) {
   const [mode, setMode] = useState<"fixed" | "hours">("fixed");
   return (
     <div className="space-y-4">
@@ -99,7 +46,7 @@ function SetScheduleForm({ picked, today, clients, run, pending, onDone }: { pic
           Hours per day only (no fixed schedule)
         </label>
       </fieldset>
-      {mode === "fixed" ? <AddScheduleForm people={picked} today={today} clients={clients} onDone={onDone} /> : <HoursPerDayForm picked={picked} today={today} run={run} pending={pending} onDone={onDone} />}
+      {mode === "fixed" ? <AddScheduleForm people={picked} today={today} clients={clients} onDone={onDone} /> : <HoursRangeForm picked={picked} today={today} onDone={onDone} />}
     </div>
   );
 }
@@ -205,7 +152,7 @@ export function SchedulesPanel({ rows, withoutSchedule, today, clients }: { rows
               <div className="flex flex-wrap gap-2">
                 <Button type="button" size="sm" variant="ghost" onClick={() => setPicked(new Set())}>Clear selection</Button>
                 <FormDialog label={`Set schedule for ${picked.size}`} title="Set a schedule" description="Times are in the schedule's time zone. By default the new shifts are added to what each person already has. Anyone clocked in now follows the change as soon as you save." size="xl">
-                  <SetScheduleForm picked={[...picked]} today={today} clients={clients} run={run} pending={pending} onDone={() => setPicked(new Set())} />
+                  <SetScheduleForm picked={[...picked]} today={today} clients={clients} onDone={() => setPicked(new Set())} />
                 </FormDialog>
                 <FormDialog label={`End schedule for ${picked.size}`} title="End schedules" description="Ends the current schedule of everyone selected." variant="outline" size="md">
                   <EndSchedulesForm picked={[...picked]} today={today} run={run} pending={pending} onDone={() => setPicked(new Set())} />
@@ -258,12 +205,16 @@ export function SchedulesPanel({ rows, withoutSchedule, today, clients }: { rows
                       <>
                         <Badge variant="outline">No schedule</Badge>
                         <span className="block text-xs text-muted-foreground">{r.dailyCapMinutes ? `Daily hours: ${r.dailyCapMinutes / 60} h` : "No daily hours set: company default"}</span>
-                        {r.dayHours.length > 0 ? <span className="block text-xs text-muted-foreground">Coming up: {r.dayHours.map((d) => `${formatDateOnly(d.date)} ${d.minutes / 60} h`).join(", ")}</span> : null}
+                        {r.dayHours.length > 0 || r.dailyCapMinutes ? <HoursChips days={nextDays(r, today)} /> : null}
                       </>
                     )}
                   </TableCell>
                   <TableCell label="" className="text-right">
                     {!isCurrent(r) ? (
+                      <>
+                      <Button size="sm" variant="ghost" nativeButton={false} render={<Link href={`/schedules/${r.employeeId}`} />}>
+                        Hours
+                      </Button>
                       <FormDialog
                         label="Set schedule"
                         title={`Set a schedule for ${r.name}`}
@@ -272,8 +223,9 @@ export function SchedulesPanel({ rows, withoutSchedule, today, clients }: { rows
                         triggerSize="sm"
                         size="xl"
                       >
-                        <SetScheduleForm picked={[r.employeeId]} today={today} clients={clients} run={run} pending={pending} onDone={() => setPicked(new Set())} />
+                        <SetScheduleForm picked={[r.employeeId]} today={today} clients={clients} onDone={() => setPicked(new Set())} />
                       </FormDialog>
+                      </>
                     ) : (
                       <Button size="sm" variant="outline" nativeButton={false} render={<Link href={`/schedules/${r.employeeId}`} />}>
                         Manage

@@ -5,11 +5,14 @@ import { useState } from "react";
 import { FormDialog } from "@/components/form-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { removeDayChange } from "../schedule-actions";
+import { DayChangeForm } from "./day-change-form";
+import { HoursWeek } from "./hours-week";
 import { formatDateOnly } from "@/lib/time";
 import type { PersonSchedule } from "../queries";
 import { addDays, WEEKDAYS } from "../schedule";
 import type { ScheduleEntry, WeekViewDay } from "../schedule-view";
-import { AddScheduleForm, ChangeScheduleForm, RemoveScheduleForm } from "./schedule-forms";
+import { AddScheduleForm, ChangeScheduleForm, RemoveScheduleForm, useRun } from "./schedule-forms";
 
 type Action = { kind: "choose" | "edit" | "replace" | "remove"; entry: ScheduleEntry };
 
@@ -23,6 +26,7 @@ const titles = { choose: "Change this schedule", edit: "Correct this schedule", 
  */
 export function PersonScheduleView({ data, basePath }: { data: PersonSchedule; basePath: string }) {
   const [action, setAction] = useState<Action | null>(null);
+  const { run, pending } = useRun();
   const byId = new Map(data.entries.map((e) => [e.id, e]));
   const live = data.entries.filter((e) => e.status !== "past");
   const past = data.entries.filter((e) => e.status === "past").reverse().slice(0, 10);
@@ -60,27 +64,35 @@ export function PersonScheduleView({ data, basePath }: { data: PersonSchedule; b
             Next week
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground">Days and shift times are in each schedule&apos;s time zone.</p>
+        {data.hours ? null : <p className="text-xs text-muted-foreground">Days and shift times are in each schedule&apos;s time zone.</p>}
       </div>
 
-      <ol aria-label="Week" className="hidden grid-cols-7 gap-1.5 lg:grid">
+      {data.hours ? <HoursWeek key={data.weekStart} employeeId={data.employeeId} today={data.today} hours={data.hours} canManage={data.canManage} /> : null}
+
+      <ol aria-label="Week" className={data.hours ? "hidden" : "hidden grid-cols-7 gap-1.5 lg:grid"}>
         {data.week.map((day) => (
           <li key={day.date} className="min-h-28 space-y-1.5 rounded-lg border bg-card p-2">
             <p className="text-xs font-medium">
               {dayLabel(day)}
               {day.date === data.today ? <Badge variant="secondary" className="ml-1">Today</Badge> : null}
             </p>
-            {day.shifts.length === 0 ? <p className="text-xs text-muted-foreground">Rest</p> : null}
+            {day.shifts.length === 0 && day.off.length === 0 ? <p className="text-xs text-muted-foreground">Rest</p> : null}
+            {day.off.map((name) => (
+              <p key={name ?? "none"} className="text-xs">
+                <Badge variant="warning">Off</Badge> {name ?? "No client"}
+              </p>
+            ))}
             {day.shifts.map((s) => {
               const body = (
                 <>
                   <span className="block font-medium">{s.clientName ?? "No client"}</span>
                   <span className="block">{s.clientRange}</span>
                   <span className="block text-muted-foreground">Manila {s.manilaRange}</span>
+                  {s.changed ? <Badge variant="info">Changed</Badge> : null}
                 </>
               );
               const box = "block w-full rounded-md border-l-2 border-primary bg-muted/50 p-1.5 text-left text-xs";
-              return data.canManage ? (
+              return data.canManage && !s.changed ? (
                 <button key={s.entryId} type="button" className={`${box} hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring`} onClick={() => open("choose", s.entryId)}>
                   {body}
                 </button>
@@ -94,20 +106,26 @@ export function PersonScheduleView({ data, basePath }: { data: PersonSchedule; b
         ))}
       </ol>
 
-      <ol aria-label="Week by day" className="divide-y rounded-xl border bg-card lg:hidden">
+      <ol aria-label="Week by day" className={data.hours ? "hidden" : "divide-y rounded-xl border bg-card lg:hidden"}>
         {data.week.map((day) => (
           <li key={day.date} className="space-y-2 p-3">
             <p className="text-sm font-medium">
               {dayLabel(day)}
               {day.date === data.today ? <Badge variant="secondary" className="ml-2">Today</Badge> : null}
             </p>
-            {day.shifts.length === 0 ? <p className="text-sm text-muted-foreground">Rest</p> : null}
+            {day.shifts.length === 0 && day.off.length === 0 ? <p className="text-sm text-muted-foreground">Rest</p> : null}
+            {day.off.map((name) => (
+              <p key={name ?? "none"} className="text-sm">
+                <Badge variant="warning">Off</Badge> {name ?? "No client"}
+              </p>
+            ))}
             {day.shifts.map((s) => {
               const entry = byId.get(s.entryId);
               return (
                 <div key={s.entryId} className="space-y-1 text-sm">
                   <p>
                     <span className="font-medium">{s.clientName ?? "No client"}</span> {s.clientRange}
+                    {s.changed ? <Badge variant="info" className="ml-2">Changed</Badge> : null}
                     {entry ? <span className="text-muted-foreground"> {entry.zone}</span> : null}
                   </p>
                   <p className="text-xs text-muted-foreground">
@@ -123,9 +141,30 @@ export function PersonScheduleView({ data, basePath }: { data: PersonSchedule; b
         ))}
       </ol>
 
+      {data.changedDays.length > 0 ? (
+        <section aria-label="Changed days" className="space-y-2">
+          <h3 className="text-base font-semibold">Changed days</h3>
+          <ul className="space-y-2">
+            {data.changedDays.map((c) => (
+              <li key={c.date} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-3 text-sm">
+                <div>
+                  <p className="font-medium">{formatDateOnly(c.date)}</p>
+                  <p className="text-muted-foreground">{c.shifts.map((x) => `${x.clientName ?? "No client"}: ${x.off ? "off" : x.range}`).join("; ")}</p>
+                </div>
+                {c.canUndo ? (
+                  <Button type="button" size="sm" variant="outline" disabled={pending} onClick={() => run(() => removeDayChange({ employeeId: data.employeeId, date: c.date }), "The usual schedule applies again.")}>
+                    Undo
+                  </Button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       <section aria-label="Current and upcoming schedules" className="space-y-2">
         <h3 className="text-base font-semibold">Current and upcoming</h3>
-        {live.length === 0 ? <p className="text-sm text-muted-foreground">No schedule yet, so late, early and extra hours are not tracked.</p> : null}
+        {live.length === 0 ? <p className="text-sm text-muted-foreground">No fixed schedule, so late, early and extra hours are not tracked.</p> : null}
         <ul className="space-y-2">
           {live.map((e) => (
             <li key={e.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-3 text-sm">
@@ -178,11 +217,18 @@ export function PersonScheduleView({ data, basePath }: { data: PersonSchedule; b
   );
 }
 
-/** The header button on a person's page. */
-export function AddScheduleButton({ data }: { data: PersonSchedule }) {
+/** The header buttons on a person's page. */
+export function ScheduleHeaderButtons({ data }: { data: PersonSchedule }) {
   return (
-    <FormDialog label="Add schedule" title={`Add a schedule for ${data.name}`} description="Shift times and days are in the schedule's time zone." size="xl">
-      <AddScheduleForm people={[data.employeeId]} today={data.today} clients={data.clients} clockedIn={data.clockedIn} />
-    </FormDialog>
+    <>
+      {data.entries.some((e) => e.status !== "past") ? (
+        <FormDialog label="Change a day" title={`Change a day for ${data.name}`} description="For one date only. Their usual schedules stay." size="lg" variant="outline">
+          <DayChangeForm data={data} />
+        </FormDialog>
+      ) : null}
+      <FormDialog label="Add schedule" title={`Add a schedule for ${data.name}`} description="Shift times and days are in the schedule's time zone." size="xl">
+        <AddScheduleForm people={[data.employeeId]} today={data.today} clients={data.clients} clockedIn={data.clockedIn} />
+      </FormDialog>
+    </>
   );
 }

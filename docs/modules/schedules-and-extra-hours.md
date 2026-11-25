@@ -23,6 +23,14 @@
 - **Jobs:** `runExtraHoursReminders` (hourly, once per request: a request still waiting when its window starts within 2 hours goes to the lead again and to HR; a client's request waits on the VA and the filer); `runWeeklyExtraHoursNotice` (Monday 8:00 Manila, in-app to HR: last week's approved extra hours per client, by when each window started).
 - **Extra hours page** (everyone): your requests and the form; leads and HR also see the review queue and the "file for the client" form.
 
+## One-day changes and hours per day (owner decision 2026-11-25)
+
+- **One-day changes** (`time.schedule_day_changes`; `setDayChange`, `removeDayChange`; `schedules.manage`, so HR and Super Admin only): on a date in the SCHEDULE's calendar, the change's rows replace the same client's schedules; other clients stay. An `off` row keeps the times it turns off, so it lands on the right day in the person's zone. Saving replaces the day's earlier change; undo marks rows removed. Needs a fixed schedule that day, 7 days back to 120 ahead, hours may not cross (`dayClash`), reason required (audited, never in notices).
+- **`loadEffectiveSchedules`** (schedules plus changes) is what the clock, breaks, flags, export, hours review, make-up and extra-hours warnings read. Editing, the entry lists, leave weekdays and the sheet import read `loadSchedules` (base only). Use the right one in new code.
+- A client turned off that day is refused even inside another client's shift (`offClientsOn`, `stopLimit`). Approved extra or make-up windows still lift it.
+- **Hours per day** (`setDayHours`): 0 minutes is a day off (clock refused, nothing expected for make-up), null clears. It can set the usual hours in the same save (also needs `org.manage_reporting`), skips and names people with a fixed schedule, and `preview` counts without writing. Dates are the person's own days.
+- An automatic clock-out is never stamped before the latest change to schedules, day changes or day hours (`lastScheduleChangeMs`).
+
 ## Several schedules per person, make-up hours (owner decision 2026-11-24)
 
 - **Several at once** replaced "one schedule per client" on 2026-11-25: HR could not enter different times on different days for one client, and the workaround (a later start date) closed the earlier entry. A split day for one client adds its allotted hours together (`stopLimit`). `endSchedules` takes an optional `clientId`. The schedule import creates schedules with no client and leaves anyone with several or client schedules alone.

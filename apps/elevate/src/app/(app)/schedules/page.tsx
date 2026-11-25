@@ -43,7 +43,7 @@ export default async function SchedulesPage({ searchParams }: PageProps<"/schedu
         </div>
         {!mine ? <p className="text-sm text-muted-foreground">You do not have a people record yet, so there is no schedule to show. Ask HR.</p> : null}
         {mine && mine.entries.length === 0 ? <p className="text-sm text-muted-foreground">You have no schedule yet, so late, early and extra hours are not tracked. HR sets schedules.</p> : null}
-        {mine && mine.entries.length > 0 ? <PersonScheduleView data={mine} basePath="/schedules" /> : null}
+        {mine && (mine.entries.length > 0 || mine.hours?.days.some((d) => d.minutes !== null) || mine.hours?.usualMinutes != null) ? <PersonScheduleView data={mine} basePath="/schedules" /> : null}
       </section>
 
       {all ? <SchedulesPanel rows={all.rows} withoutSchedule={all.withoutSchedule} today={todayInZone()} clients={all.clients} /> : null}

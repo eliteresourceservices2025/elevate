@@ -22,6 +22,8 @@ export type StopLimitInput = {
   hasSchedule: boolean;
   /** Today's shifts (`shiftsOn`). */
   shifts: readonly Shift[];
+  /** Clients turned off today by a day change (`offClientsOn`): no work for them even inside another client's shift. */
+  offClientIds?: ReadonlySet<string | null>;
   /** The client the person is working for right now, or null. */
   clientId: string | null;
   /** Worked milliseconds today for each client (null key = no client), up to `nowMs`. */
@@ -50,7 +52,12 @@ export function stopLimit(input: StopLimitInput): StopLimit {
   const { nowMs } = input;
   let limit: StopLimit;
 
-  if (!input.hasSchedule) {
+  if (!input.hasSchedule && input.dailyCapMinutes === 0) {
+    // HR marked the day off: never allowed to work now (approved windows can still lift it).
+    limit = { limitMs: nowMs, reason: "daily_cap", overrunMs: Infinity };
+  } else if (input.hasSchedule && input.offClientIds?.has(input.clientId) && !input.shifts.some((s) => (s.schedule.clientId ?? null) === input.clientId)) {
+    limit = { limitMs: nowMs, reason: "shift_end", overrunMs: Infinity };
+  } else if (!input.hasSchedule) {
     const cap = input.dailyCapMinutes ?? input.companyDefaultCapMinutes;
     limit = { limitMs: nowMs + Math.max(0, cap * MINUTE - input.workedMsToday), reason: "daily_cap", overrunMs: Math.max(0, input.workedMsToday - cap * MINUTE) };
   } else {

@@ -2,6 +2,7 @@ import "server-only";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { DEFAULT_TIMEZONE, formatInZone } from "@/lib/time";
+import { writeAudit } from "@/modules/audit/write";
 import { employees } from "@/modules/people/schema";
 import { recordHistory, type Tx } from "@/modules/people/service";
 import { attendanceLeads, reportingLines, teamMemberships, teams } from "./schema";
@@ -210,6 +211,16 @@ export async function downlineEmployeeIds(executor: Db, userId: string): Promise
 }
 
 export type AttendanceLeadResult = { ok: true; changed: boolean } | { ok: false; error: string };
+
+/** Sets a person's usual hours per day (null = the company default) and audits it. Returns false when nothing changed. Callers authorize first. */
+export async function applyDailyCap(tx: Tx, actor: { id: string; email: string }, employeeId: string, minutes: number | null, bulk: number): Promise<boolean> {
+  const [person] = await tx.select({ id: employees.id, cap: employees.dailyCapMinutes }).from(employees).where(and(eq(employees.id, employeeId), isNull(employees.archivedAt)));
+  if (!person) return false;
+  if ((person.cap ?? null) === minutes) return false;
+  await tx.update(employees).set({ dailyCapMinutes: minutes, updatedAt: new Date() }).where(eq(employees.id, person.id));
+  await writeAudit({ actor, action: "employee.daily_cap", targetType: "employee", targetId: person.id, before: { field: "daily_cap_minutes", set: person.cap !== null }, after: { field: "daily_cap_minutes", set: minutes !== null }, metadata: { bulk } }, tx);
+  return true;
+}
 
 /**
  * Sets (or clears, with null) a person's attendance lead. The lead must be someone still with ERS, not the person, and not below the

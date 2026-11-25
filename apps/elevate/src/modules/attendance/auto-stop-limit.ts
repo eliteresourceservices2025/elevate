@@ -6,8 +6,8 @@ import { clockSourceOf } from "./clock-source";
 import { stopLimit, type StopLimit } from "./day-limits";
 import { approvedWindows } from "./extra-hours-service";
 import { approvedMakeupWindows } from "./makeup-service";
-import { hasScheduleAround, shiftsForWork } from "./schedule";
-import { loadSchedules } from "./schedule-service";
+import { hasScheduleAround, offClientsOn, shiftsForWork } from "./schedule";
+import { loadEffectiveSchedules } from "./schedule-service";
 import { prefsFor, rulesFor } from "./service";
 
 type Executor = Pick<typeof db, "execute" | "insert" | "select" | "update" | "delete">;
@@ -35,7 +35,7 @@ export async function computeStopLimit(executor: Executor, employeeId: string, n
   const working = Boolean(open && open.endAt === null && replay.state !== "out");
   // The day is the one the session started in, or today when not working; a shift that began the day before and is still running counts (a night
   // shift worked after midnight in the person's own zone), and the day's work is counted from where that shift began.
-  const schedules = await loadSchedules(executor, employeeId);
+  const schedules = await loadEffectiveSchedules(executor, employeeId);
   const work = shiftsForWork(schedules, prefs.zone, working ? open.startAt : nowMs);
   const { day } = work;
   const dayStart = work.startMs;
@@ -63,6 +63,7 @@ export async function computeStopLimit(executor: Executor, employeeId: string, n
     nowMs,
     hasSchedule: hasScheduleAround(schedules, day),
     shifts: work.shifts,
+    offClientIds: offClientsOn(schedules, prefs.zone, day),
     clientId,
     workedMsByClient,
     workedMsToday,

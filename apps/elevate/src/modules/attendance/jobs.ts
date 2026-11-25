@@ -11,7 +11,7 @@ import { clockSourceOf } from "./clock-source";
 import { attendanceDayClients, attendanceDays, clockSelfies, correctionEvidence, missedClockoutNotices, quietNotices } from "./schema";
 import { OVERBREAK_GRACE_MS, MINUTE } from "./clock";
 import { EXTRA_THRESHOLD_MINUTES, addDays, earlyLeaveMinutes, extraMinutes, hasScheduleAround, lateMinutes, shiftOn } from "./schedule";
-import { loadSchedules, loadSchedulesFor } from "./schedule-service";
+import { loadEffectiveSchedules, loadEffectiveSchedulesFor } from "./schedule-service";
 import { approvedExtra, effectiveEndMs, grantedByDate, minutesInWindows } from "./extra-hours";
 import { approvedWindows, assignedClients } from "./extra-hours-service";
 import { historicalHolidayDatesFor } from "@/modules/timeoff/service";
@@ -42,7 +42,7 @@ async function flagAbsences(now: Date, from: string, to: string, onlyEmployeeId?
     ) candidates join core.employees e on e.id = candidates.employee_id
     where e.archived_at is null and e.status <> 'separated'
       ${onlyEmployeeId ? sql`and candidates.employee_id = ${onlyEmployeeId}` : sql``}`)) as unknown as { employee_id: string }[];
-  const byPerson = await loadSchedulesFor(db, ids.map((r) => r.employee_id));
+  const byPerson = await loadEffectiveSchedulesFor(db, ids.map((r) => r.employee_id));
   let written = 0;
 
   for (const { employee_id: employeeId } of ids) {
@@ -133,7 +133,7 @@ async function rebuildRange(people: { employee_id: string }[], from: string, to:
     // A two-day margin pairs overnight sessions at either edge without reading unrelated attendance history.
     const events = await loadEventsBetween(db, employeeId, eventFromMs, eventToMs);
     const days = buildDays(events, prefs.zone).filter((d) => d.date >= earliest && d.date <= today);
-    const schedules = await loadSchedules(db, employeeId);
+    const schedules = await loadEffectiveSchedules(db, employeeId);
     const holidays = await historicalHolidayDatesFor(db, employeeId, earliest, today);
     const approved = await approvedWindows(db, employeeId, eventFromMs, eventToMs + DAY_MS);
     const granted = grantedByDate(approved, prefs.zone);
@@ -278,7 +278,7 @@ async function missedAtShiftEnd(now: Date): Promise<number> {
   }[];
   if (open.length === 0) return 0;
 
-  const schedules = await loadSchedulesFor(db, open.map((o) => o.employee_id));
+  const schedules = await loadEffectiveSchedulesFor(db, open.map((o) => o.employee_id));
   const hr = await hrUserIds();
   let noticed = 0;
   for (const o of open) {

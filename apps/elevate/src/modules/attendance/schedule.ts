@@ -36,6 +36,10 @@ export type ScheduleLite = {
   clientId?: string | null;
   /** Minutes of work per scheduled day allotted to that client (absent or null = no separate limit). */
   allottedMinutesPerDay?: number | null;
+  /** A change to one day (effectiveFrom = effectiveTo = that date): it replaces the same client's schedules on it. */
+  dayChange?: boolean;
+  /** A day change that turns the shift off: no work for that client. The times say which shift it was. */
+  off?: boolean;
 };
 
 export type Shift = { date: string; startMs: number; endMs: number; scheduledMinutes: number; schedule: ScheduleLite };
@@ -50,14 +54,47 @@ export const isoWeekday = (date: string) => ((new Date(parse(date)).getUTCDay() 
 export function scheduleFor(schedules: readonly ScheduleLite[], date: string): ScheduleLite | null {
   let best: ScheduleLite | null = null;
   for (const s of schedules) {
+    if (s.dayChange) continue;
     if (s.effectiveFrom <= date && (s.effectiveTo === null || date <= s.effectiveTo) && (best === null || s.effectiveFrom > best.effectiveFrom)) best = s;
   }
   return best;
 }
 
-/** Every schedule in force on a calendar date of the schedule zone. Several can apply at once (their hours never cross). */
+/**
+ * Every schedule in force on a calendar date of the schedule zone. Several can apply at once (their hours never cross). A day change replaces the
+ * schedules of its client on its date; the result can include `off` rows, which are not shifts (callers that make shifts skip them).
+ */
 export function schedulesFor<T extends ScheduleLite>(schedules: readonly T[], date: string): T[] {
-  return schedules.filter((s) => s.effectiveFrom <= date && (s.effectiveTo === null || date <= s.effectiveTo));
+  const inForce = schedules.filter((s) => s.effectiveFrom <= date && (s.effectiveTo === null || date <= s.effectiveTo));
+  const changed = new Set(inForce.filter((s) => s.dayChange).map((s) => s.clientId ?? null));
+  return changed.size === 0 ? inForce : inForce.filter((s) => s.dayChange || !changed.has(s.clientId ?? null));
+}
+
+/** When a schedule's shift on its own calendar date starts and ends, as real instants. */
+export function stretchOn(s: ScheduleLite, date: string): [number, number] {
+  const startMs = fromZonedTime(`${date}T${s.startTime}:00`, s.zone).getTime();
+  let endMs = fromZonedTime(`${date}T${s.endTime}:00`, s.zone).getTime();
+  if (endMs <= startMs) endMs = fromZonedTime(`${addDays(date, 1)}T${s.endTime}:00`, s.zone).getTime();
+  return [startMs, endMs];
+}
+
+/** The clients turned off by a day change for work that would have started on this day in the person's own zone. */
+export function offClientsOn(schedules: readonly ScheduleLite[], personZone: string, date: string): Set<string | null> {
+  const out = new Set<string | null>();
+  for (const s of schedules) {
+    if (s.off && formatInTimeZone(stretchOn(s, s.effectiveFrom)[0], personZone, "yyyy-MM-dd") === date) out.add(s.clientId ?? null);
+  }
+  return out;
+}
+
+/** The first shift, on the days around a changed date, that one of the changed shifts would cross. Null when none do. */
+export function dayClash<T extends ScheduleLite>(effective: readonly T[], date: string): T | null {
+  const around = [addDays(date, -1), date, addDays(date, 1)].flatMap((d) => schedulesFor(effective, d).filter((s) => !s.off && s.weekdays.includes(isoWeekday(d))).map((s) => ({ s, d, range: stretchOn(s, d) })));
+  for (const mine of around.filter((x) => x.s.dayChange && x.d === date)) {
+    const other = around.find((x) => x !== mine && mine.range[0] < x.range[1] && x.range[0] < mine.range[1]);
+    if (other) return other.s;
+  }
+  return null;
 }
 
 /** Every shift that starts on this calendar day in the person's own zone, earliest first (one per schedule). Empty on a rest day. */
@@ -66,7 +103,7 @@ export function shiftsOn(schedules: readonly ScheduleLite[], personZone: string,
   // The schedule zone can be a day ahead of or behind the person, so look a day either side.
   for (const d of [addDays(date, -1), date, addDays(date, 1)]) {
     for (const s of schedulesFor(schedules, d)) {
-      if (!s.weekdays.includes(isoWeekday(d))) continue;
+      if (s.off || !s.weekdays.includes(isoWeekday(d))) continue;
       const startMs = fromZonedTime(`${d}T${s.startTime}:00`, s.zone).getTime();
       let endMs = fromZonedTime(`${d}T${s.endTime}:00`, s.zone).getTime();
       if (endMs <= startMs) endMs = fromZonedTime(`${addDays(d, 1)}T${s.endTime}:00`, s.zone).getTime();
@@ -149,7 +186,7 @@ export function weekOf<T extends ScheduleLite>(schedules: readonly T[], from: st
     const date = addDays(from, i);
     const weekday = isoWeekday(date);
     const shifts = schedulesFor(schedules, date)
-      .filter((s) => s.weekdays.includes(weekday))
+      .filter((s) => !s.off && s.weekdays.includes(weekday))
       .map((s) => {
         const startMs = fromZonedTime(`${date}T${s.startTime}:00`, s.zone).getTime();
         let endMs = fromZonedTime(`${date}T${s.endTime}:00`, s.zone).getTime();
@@ -165,7 +202,8 @@ export function weekOf<T extends ScheduleLite>(schedules: readonly T[], from: st
 }
 
 /** Whether the person has any schedule at all in force around this date (so a day with no shift is a rest day, not "unscheduled"). */
-export const hasScheduleAround = (schedules: readonly ScheduleLite[], date: string) => [addDays(date, -1), date, addDays(date, 1)].some((d) => scheduleFor(schedules, d) !== null);
+export const hasScheduleAround = (schedules: readonly ScheduleLite[], date: string) =>
+  [addDays(date, -1), date, addDays(date, 1)].some((d) => scheduleFor(schedules, d) !== null) || schedules.some((s) => s.dayChange && s.effectiveFrom === date);
 
 /** Minutes late (counted from the shift start) when the first clock-in is later than the grace period; otherwise 0. */
 export function lateMinutes(firstInMs: number, shift: Shift, graceMinutes: number): number {

@@ -18,7 +18,7 @@ import { checkWindow, dayLimitWarning, isAfterTheFact, needsHrForAge, windowMinu
 import { rebuildAfterChange } from "./edit-service";
 import { assignedToClient, liveMinutesOnDay } from "./extra-hours-service";
 import { shiftOn } from "./schedule";
-import { loadSchedules } from "./schedule-service";
+import { loadEffectiveSchedules } from "./schedule-service";
 import { correctionEvidence, extraHoursRequests } from "./schema";
 import { evidencePath, personForUser, prefsFor, rulesFor, verifyEvidence } from "./service";
 import { EVIDENCE_MAX_BYTES, answerExtraSchema, cancelExtraSchema, decideExtraSchema, extraRequestSchema, extraUploadSchema, fileExtraForSchema } from "./validators";
@@ -99,7 +99,7 @@ export async function requestExtraHours(input: unknown): Promise<ActionResult<{ 
 
     const minutes = windowMinutes({ startMs, endMs });
     const after = isAfterTheFact(startMs, nowMs);
-    const schedules = await loadSchedules(db, person.id);
+    const schedules = await loadEffectiveSchedules(db, person.id);
     const warning = dayLimitWarning(shiftOn(schedules, prefs.zone, date)?.scheduledMinutes ?? null, already + minutes, rules.maxDayMinutes);
 
     try {

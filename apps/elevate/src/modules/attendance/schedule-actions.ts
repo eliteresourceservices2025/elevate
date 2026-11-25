@@ -9,16 +9,16 @@ import { ActionFailure, fail, runAction, type ActionResult } from "@/lib/run-act
 import { formatDateOnly } from "@/lib/time";
 import { writeAudit } from "@/modules/audit/write";
 import { notify } from "@/modules/notifications/service";
-import { reportName, todayInZone } from "@/modules/org/service";
+import { applyDailyCap, reportName, todayInZone } from "@/modules/org/service";
 import { employees } from "@/modules/people/schema";
 import { requestAutoStop } from "./auto-stop-limit";
-import { addDays, clashingSchedule, describeSchedule, type ScheduleLite } from "./schedule";
+import { addDays, clashingSchedule, dayClash, describeSchedule, isoWeekday, schedulesFor, type ScheduleLite } from "./schedule";
 import { assignedToClient } from "./extra-hours-service";
-import { dailyHours, schedules } from "./schema";
-import { defaultScheduleZone, loadSchedules } from "./schedule-service";
+import { dailyHours, scheduleDayChanges, schedules } from "./schema";
+import { defaultScheduleZone, loadDayChangesFor, loadSchedules } from "./schedule-service";
 import { lockEmployeeClock } from "./service";
 import { rebuildAttendanceDays } from "./jobs";
-import { assignScheduleSchema, endSchedulesSchema, removeScheduleSchema, replaceScheduleSchema, setDayHoursSchema, updateScheduleSchema } from "./validators";
+import { assignScheduleSchema, dayChangeSchema, endSchedulesSchema, removeDayChangeSchema, removeScheduleSchema, replaceScheduleSchema, setDayHoursSchema, updateScheduleSchema } from "./validators";
 
 // HR (and Super Admin) set shifts. Leads and people read them. A person can hold several at once. Ending or replacing one sets its last day, and
 // one that never took effect is marked removed: nothing is deleted.
@@ -297,48 +297,155 @@ export async function endSchedules(input: unknown): Promise<ActionResult<{ ended
   });
 }
 
+const DAY_CHANGE_AHEAD = 120;
+const daySnapshot = (s: ScheduleLite) => ({ clientId: s.clientId ?? null, off: s.off ?? false, startTime: s.startTime, endTime: s.endTime, breakMinutes: s.breakMinutes, allottedMinutesPerDay: s.allottedMinutesPerDay ?? null, zone: s.zone });
+
+/**
+ * Changes ONE day of a person who has schedules (a client asks for a full day, another says not to work): for each client listed, the shifts they
+ * work that day, or none (off). Saving replaces any earlier change of that day. The clock, flags and hours review follow it; pay and invoices
+ * still come only from clock events.
+ */
+export async function setDayChange(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "schedules.manage");
+    const parsed = dayChangeSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const v = parsed.data;
+    const today = todayInZone();
+    if (v.date < earliestDay() || v.date > addDays(today, DAY_CHANGE_AHEAD)) return fail(`Choose a day from ${MAX_BACKDATE_DAYS} days ago to ${DAY_CHANGE_AHEAD} days ahead.`);
+    const weekday = isoWeekday(v.date);
+
+    await db.transaction(async (tx) => {
+      const person = await activePerson(tx, v.employeeId);
+      await lockEmployeeClock(tx, v.employeeId);
+      const base = await loadSchedules(tx, v.employeeId);
+      const inForce = schedulesFor(base, v.date);
+      if (inForce.length === 0) throw new ActionFailure(`${person.name} has no fixed schedule on ${formatDateOnly(v.date)}. Use hours per day for them instead.`);
+      const usual = inForce.filter((x) => x.weekdays.includes(weekday));
+
+      const rowsToAdd: ScheduleLite[] = [];
+      for (const c of v.clients) {
+        const clientId = c.clientId ?? null;
+        const mine = usual.filter((x) => (x.clientId ?? null) === clientId);
+        const common = { effectiveFrom: v.date, effectiveTo: v.date, weekdays: [weekday], clientId, dayChange: true };
+        if (c.shifts.length === 0) {
+          if (mine.length === 0) throw new ActionFailure("There is no shift to turn off for that client on that day.");
+          // The off row keeps the times of the shift it turns off, so it falls on the same day in the person's own zone.
+          rowsToAdd.push(...mine.map((x) => ({ ...common, startTime: x.startTime, endTime: x.endTime, breakMinutes: 0, zone: x.zone, allottedMinutesPerDay: null, off: true })));
+          continue;
+        }
+        let zone = inForce.find((x) => (x.clientId ?? null) === clientId)?.zone;
+        if (clientId) {
+          if (!(await assignedToClient(tx, v.employeeId, clientId, v.date))) throw new ActionFailure(`${person.name} is not assigned to that client on ${formatDateOnly(v.date)}.`);
+          if (!zone) {
+            const [client] = (await tx.execute(sql`select time_zone from core.clients where id = ${clientId}`)) as unknown as { time_zone: string }[];
+            zone = client?.time_zone;
+          }
+        }
+        zone ??= inForce[0].zone;
+        rowsToAdd.push(...c.shifts.map((x) => ({ ...common, startTime: x.startTime, endTime: x.endTime, breakMinutes: x.breakMinutes, zone, allottedMinutesPerDay: x.allottedMinutesPerDay ?? null, off: false })));
+      }
+
+      const earlier = (await loadDayChangesFor(tx, [v.employeeId])).get(v.employeeId) ?? [];
+      const replaced = earlier.filter((x) => x.effectiveFrom === v.date);
+      const clash = dayClash([...base, ...earlier.filter((x) => x.effectiveFrom !== v.date), ...rowsToAdd], v.date);
+      if (clash) throw new ActionFailure(`Those hours overlap ${clash.startTime} to ${clash.endTime} (${clash.zone}). Change the times, or turn that shift off.`);
+
+      if (replaced.length > 0) await tx.update(scheduleDayChanges).set({ removedAt: new Date(), removedBy: actor.id }).where(and(eq(scheduleDayChanges.employeeId, v.employeeId), eq(scheduleDayChanges.date, v.date), isNull(scheduleDayChanges.removedAt)));
+      await tx.insert(scheduleDayChanges).values(rowsToAdd.map((x) => ({ employeeId: v.employeeId, date: v.date, clientId: x.clientId ?? null, off: x.off ?? false, startTime: x.startTime, endTime: x.endTime, breakMinutes: x.breakMinutes, allottedMinutesPerDay: x.allottedMinutesPerDay ?? null, zone: x.zone, reason: v.reason, createdBy: actor.id })));
+      await writeAudit({ actor, action: "schedule.day_change", targetType: "employee", targetId: v.employeeId, before: replaced.length > 0 ? { date: v.date, shifts: replaced.map(daySnapshot) } : null, after: { date: v.date, shifts: rowsToAdd.map(daySnapshot) }, metadata: { reason: v.reason } }, tx);
+      await tell(tx, person.userId, "Your schedule changed for one day", `${formatDateOnly(v.date)} is different from usual. See Schedules for the hours.`);
+    });
+    await afterChange([v.employeeId], v.date);
+    refresh();
+    return { ok: true, data: undefined };
+  });
+}
+
+/** Undoes the change of one day: the usual schedules apply again. */
+export async function removeDayChange(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "schedules.manage");
+    const parsed = removeDayChangeSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const v = parsed.data;
+    if (v.date < earliestDay()) return fail(`A change more than ${MAX_BACKDATE_DAYS} days old cannot be undone.`);
+
+    await db.transaction(async (tx) => {
+      const person = await activePerson(tx, v.employeeId);
+      await lockEmployeeClock(tx, v.employeeId);
+      const mine = ((await loadDayChangesFor(tx, [v.employeeId])).get(v.employeeId) ?? []).filter((x) => x.effectiveFrom === v.date);
+      if (mine.length === 0) throw new ActionFailure("That day has no change to undo.");
+      await tx.update(scheduleDayChanges).set({ removedAt: new Date(), removedBy: actor.id }).where(and(eq(scheduleDayChanges.employeeId, v.employeeId), eq(scheduleDayChanges.date, v.date), isNull(scheduleDayChanges.removedAt)));
+      await writeAudit({ actor, action: "schedule.day_change_undo", targetType: "employee", targetId: v.employeeId, before: { date: v.date, shifts: mine.map(daySnapshot) }, after: null }, tx);
+      await tell(tx, person.userId, "Your usual schedule applies again", `The change for ${formatDateOnly(v.date)} was undone.`);
+    });
+    await afterChange([v.employeeId], v.date);
+    refresh();
+    return { ok: true, data: undefined };
+  });
+}
+
 const DAY_HOURS_BACK = 31;
 const DAY_HOURS_AHEAD = 120;
 
 /**
- * HR sets the hours of specific days for people with no fixed schedule (a contractor who works 4 hours today and other hours tomorrow): the clock
- * stops after that many hours that day, the extra hours prompt follows it and make-up hours count it. A day with minutes null goes back to their
- * usual hours per day. All or nothing: someone not found stops the whole change. One audit row per person says how many days, never the hours.
+ * HR sets the hours of specific days (and optionally the usual hours per day) for people with no fixed schedule: the clock stops after that many
+ * hours that day, 0 blocks clock-in, null goes back to the usual hours. People who have a fixed schedule on those days are skipped and named, since
+ * these numbers would do nothing for them. All or nothing otherwise. `preview` returns the counts without writing. The audit says how many days,
+ * never the hours.
  */
-export async function setDayHours(input: unknown): Promise<ActionResult<{ changed: number }>> {
+export async function setDayHours(input: unknown): Promise<ActionResult<{ changed: number; replaced: number; skipped: string[] }>> {
   const actor = await requireUser();
   return runAction(async () => {
     await authorize(actor, "schedules.manage");
     const parsed = setDayHoursSchema.safeParse(input);
     if (!parsed.success) return fail(first(parsed.error));
-    const { days } = parsed.data;
+    const { days, usualMinutes, preview } = parsed.data;
+    if (usualMinutes !== undefined) await authorize(actor, "org.manage_reporting");
     const ids = [...new Set(parsed.data.employeeIds)];
     const today = todayInZone();
     if (days.some((d) => d.date < addDays(today, -DAY_HOURS_BACK) || d.date > addDays(today, DAY_HOURS_AHEAD))) return fail(`Choose days from the last ${DAY_HOURS_BACK} days to the next ${DAY_HOURS_AHEAD} days.`);
 
     let changed = 0;
+    let replaced = 0;
+    const skipped: string[] = [];
+    const touchedIds: string[] = [];
     await db.transaction(async (tx) => {
       for (const employeeId of ids) {
-        const [person] = await tx.select({ id: employees.id }).from(employees).where(and(eq(employees.id, employeeId), isNull(employees.archivedAt), sql`${employees.status} <> 'separated'`));
-        if (!person) throw new ActionFailure("One of those people was not found.");
+        const person = await activePerson(tx, employeeId);
+        await lockEmployeeClock(tx, employeeId);
+        const fixed = await loadSchedules(tx, employeeId);
+        const dates = days.length > 0 ? days.map((d) => d.date) : [today];
+        if (dates.some((date) => schedulesFor(fixed, date).length > 0)) {
+          skipped.push(person.name);
+          continue;
+        }
         let touched = 0;
         for (const d of days) {
           const [row] = await tx.select({ minutes: dailyHours.minutes }).from(dailyHours).where(and(eq(dailyHours.employeeId, employeeId), eq(dailyHours.date, d.date)));
-          if (d.minutes === null) {
-            if (!row) continue;
-            await tx.delete(dailyHours).where(and(eq(dailyHours.employeeId, employeeId), eq(dailyHours.date, d.date)));
-          } else if (!row) {
-            await tx.insert(dailyHours).values({ employeeId, date: d.date, minutes: d.minutes, setBy: actor.id });
-          } else if (row.minutes !== d.minutes) {
-            await tx.update(dailyHours).set({ minutes: d.minutes, setBy: actor.id, setAt: new Date() }).where(and(eq(dailyHours.employeeId, employeeId), eq(dailyHours.date, d.date)));
-          } else continue;
+          if (row ? row.minutes === d.minutes : d.minutes === null) continue;
           touched += 1;
+          if (row) replaced += 1;
+          if (preview) continue;
+          if (d.minutes === null) await tx.delete(dailyHours).where(and(eq(dailyHours.employeeId, employeeId), eq(dailyHours.date, d.date)));
+          else if (!row) await tx.insert(dailyHours).values({ employeeId, date: d.date, minutes: d.minutes, setBy: actor.id });
+          else await tx.update(dailyHours).set({ minutes: d.minutes, setBy: actor.id, setAt: new Date() }).where(and(eq(dailyHours.employeeId, employeeId), eq(dailyHours.date, d.date)));
         }
-        if (touched > 0) await writeAudit({ actor, action: "schedule.day_hours", targetType: "employee", targetId: employeeId, metadata: { days: touched, bulk: ids.length } }, tx);
+        const usualChanged = !preview && usualMinutes !== undefined && (await applyDailyCap(tx, actor, employeeId, usualMinutes, ids.length));
         changed += touched;
+        if (preview || (touched === 0 && !usualChanged)) continue;
+        touchedIds.push(employeeId);
+        if (touched > 0) await writeAudit({ actor, action: "schedule.day_hours", targetType: "employee", targetId: employeeId, metadata: { days: touched, bulk: ids.length } }, tx);
+        await tell(tx, person.userId, "Your hours per day changed", "See Schedules for your hours.");
       }
     });
-    refresh();
-    return { ok: true, data: { changed } };
+    if (touchedIds.length > 0) {
+      await afterChange(touchedIds, today);
+      refresh();
+    }
+    return { ok: true, data: { changed, replaced, skipped } };
   });
 }
