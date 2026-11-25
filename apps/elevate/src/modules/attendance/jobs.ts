@@ -34,7 +34,7 @@ async function flagAbsences(now: Date, from: string, to: string, onlyEmployeeId?
   // Include existing absence rows, even if the schedule that produced them was removed or shortened.
   const ids = (await db.execute(sql`
     select distinct candidates.employee_id from (
-      select s.employee_id from time.schedules s where s.effective_from <= (${to}::date + 1)
+      select s.employee_id from time.schedules s where s.removed_at is null and s.effective_from <= (${to}::date + 1)
         and (s.effective_to is null or s.effective_to >= (${from}::date - 1))
       union
       select d.employee_id from time.attendance_days d where d.date between ${from}::date and ${to}::date

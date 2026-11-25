@@ -57,7 +57,7 @@ function Summary({ mine }: { mine: MyTime }) {
             )}
           </p>
           <Fact label="Breaks">{day.breakMinutes ? dur(day.breakMinutes) : "None"}</Fact>
-          <Fact label="Shift">{day.shift ? day.shift.range : day.holiday ? "Holiday" : mine.schedule ? "Rest day" : "No schedule"}</Fact>
+          <Fact label="Shift">{day.shift ? day.shift.range : day.holiday ? "Holiday" : mine.schedules.length > 0 ? "Rest day" : "No schedule"}</Fact>
         </SummaryCard>
       ) : null}
       <SummaryCard label="Week so far" aria-label="Week summary">
@@ -73,15 +73,22 @@ function Summary({ mine }: { mine: MyTime }) {
       </SummaryCard>
       <section aria-label="My schedule" className="rounded-2xl border bg-card p-5 shadow-sm animate-in fade-in-0 duration-300 motion-reduce:animate-none">
         <p className="text-xs font-medium text-muted-foreground">Your schedule</p>
-        {mine.schedule ? (
+        {mine.schedules.length > 0 ? (
           <>
-            <p className="mt-1 text-sm font-semibold">
-              {mine.schedule.days}, {mine.schedule.client} ({mine.schedule.zone})
-            </p>
-            <p className="text-sm text-muted-foreground">
-              <strong className="font-medium text-foreground">{mine.schedule.manila}</strong> in Manila
-            </p>
-            <Fact label="Since">{formatDateOnly(mine.schedule.effectiveFrom)}</Fact>
+            <ul className="mt-1 space-y-2">
+              {mine.schedules.map((s) => (
+                <li key={s.id}>
+                  <p className="text-sm font-semibold">
+                    {s.clientName ? `${s.clientName}: ` : ""}
+                    {s.days}, {s.clientRange} ({s.zone})
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    <strong className="font-medium text-foreground">{s.manilaRange}</strong> in Manila, from {formatDateOnly(s.from)}
+                    {s.to ? ` to ${formatDateOnly(s.to)}` : ""}
+                  </p>
+                </li>
+              ))}
+            </ul>
             <Fact label="Times shown in">{mine.zone}</Fact>
             <p className="border-t pt-2 text-right text-sm">
               <Link href="/schedules" className="text-primary underline-offset-4 hover:underline">
@@ -122,7 +129,7 @@ function DayRow({ d, mine, isToday }: { d: Day; mine: MyTime; isToday: boolean }
     </>
   ) : d.holiday ? (
     <Badge variant="outline">Holiday</Badge>
-  ) : mine.schedule ? (
+  ) : mine.schedules.length > 0 ? (
     "Rest day"
   ) : null;
   const inTime = d.firstIn ? formatInZone(d.firstIn, mine.zone, "h:mm a") : "—";

@@ -95,22 +95,33 @@ export const weekSchema = z.object({ weekStart: z.string().regex(/^\d{4}-\d{2}-\
 const ymd = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a date").refine((v) => !Number.isNaN(Date.parse(`${v}T00:00:00Z`)), "Enter a real date");
 const hhmm = z.string().refine(isValidTime, "Use a time like 09:00");
 
-/** HR gives one or many people the same shift pattern from a date. */
-export const assignScheduleSchema = z.object({
-  employeeIds: z.array(uuid).min(1, "Choose at least one person").max(200, "Choose 200 people at most"),
-  effectiveFrom: ymd,
+/** One shift pattern: days, times, the unpaid break and (optionally) the client with their hours per day. */
+const shiftRow = {
   startTime: hhmm,
   endTime: hhmm,
   weekdays: z.array(z.number().int().min(1).max(7)).min(1, "Choose at least one working day").max(7).transform((d) => [...new Set(d)].sort((a, b) => a - b)),
   breakMinutes: z.preprocess(toNumber, z.number().int().min(0, "Zero or more").max(240, "240 at most")).default(0),
-  /** The client this schedule is for (empty = the person's general schedule), and the minutes a day allotted to that client (empty = no separate limit). */
+  /** The client this shift is for (empty = no client), and the minutes a day allotted to that client (empty = no separate limit). */
   clientId: z.preprocess(blankToUndefined, uuid.optional()),
   allottedMinutesPerDay: z.preprocess(blankToUndefined, z.preprocess(toNumber, z.number().int().min(1, "At least 1 minute").max(960, "960 minutes (16 hours) at most")).optional()),
-  /** Empty = each person's client zone (or the company zone). */
-  zone: z.preprocess(blankToUndefined, z.string().refine(isValidTimeZone, "Choose a valid time zone").optional()),
+};
+/** Empty = the client's zone (with no client, the person's current client or company zone). */
+const scheduleZone = z.preprocess(blankToUndefined, z.string().refine(isValidTimeZone, "Choose a valid time zone").optional());
+
+/** HR gives one or many people one or more shift patterns from a date. "add" keeps what they have; "replace_all" ends everything else the day before. */
+export const assignScheduleSchema = z.object({
+  employeeIds: z.array(uuid).min(1, "Choose at least one person").max(200, "Choose 200 people at most"),
+  effectiveFrom: ymd,
+  zone: scheduleZone,
+  mode: z.enum(["add", "replace_all"]).default("add"),
+  shifts: z.array(z.object(shiftRow)).min(1, "Add at least one shift").max(14, "14 shifts at most"),
 });
-export const endScheduleSchema = z.object({ employeeId: uuid, endDate: ymd });
-/** HR ends the current schedule of many people on the same date (for example imported schedules that should not have been set). */
+/** HR replaces one schedule from a date: it ends the day before and the new shift starts. */
+export const replaceScheduleSchema = z.object({ scheduleId: uuid, effectiveFrom: ymd, zone: scheduleZone, ...shiftRow });
+/** HR fixes one recent or upcoming schedule in place (a mistake), with a reason. Dates are not changed here. */
+export const updateScheduleSchema = z.object({ scheduleId: uuid, zone: scheduleZone, reason: z.string().trim().min(5, "Say why in a few words").max(300, "Use 300 characters or fewer"), ...shiftRow });
+/** HR removes one schedule: it stops after the last day, or is dropped when it had not started by then. */
+export const removeScheduleSchema = z.object({ scheduleId: uuid, lastDay: ymd });
 /** HR sets the hours of specific days (a date and minutes; null clears that day) for one or many people with no fixed schedule. */
 export const setDayHoursSchema = z
   .object({
@@ -118,24 +129,14 @@ export const setDayHoursSchema = z
     days: z.array(z.object({ date: ymd, minutes: z.union([z.number().int("Whole minutes").min(1, "At least 1 minute").max(960, "16 hours at most"), z.null()]) })).min(1, "Add at least one day").max(31, "31 days at most"),
   })
   .refine((v) => new Set(v.days.map((d) => d.date)).size === v.days.length, { message: "Each day can only be listed once", path: ["days"] });
+/** HR ends the current schedules of many people on the same date. */
 export const endSchedulesSchema = z.object({
   employeeIds: z.array(uuid).min(1, "Choose at least one person").max(200, "Choose 200 people at most"),
   endDate: ymd,
-  /** Only this client's schedule (leave out to end every schedule in force that day). */
+  /** Only this client's schedules (leave out to end every schedule in force that day). */
   clientId: z.preprocess(blankToUndefined, uuid.optional()),
-});
-/** HR fixes a recent schedule in place (a mistake), with a reason. Dates are not changed here. */
-export const correctScheduleSchema = z.object({
-  employeeId: uuid,
-  /** Only this client's recent schedules (leave out for the general schedule). */
-  clientId: z.preprocess(blankToUndefined, uuid.optional()),
-  startTime: hhmm,
-  endTime: hhmm,
-  weekdays: z.array(z.number().int().min(1).max(7)).min(1, "Choose at least one working day").max(7).transform((d) => [...new Set(d)].sort((a, b) => a - b)),
-  breakMinutes: z.preprocess(toNumber, z.number().int().min(0, "Zero or more").max(240, "240 at most")).default(0),
-  /** Empty keeps each schedule's own zone. */
-  zone: z.preprocess(blankToUndefined, z.string().refine(isValidTimeZone, "Choose a valid time zone").optional()),
-  reason: z.string().trim().min(5, "Say why in a few words").max(300, "Use 300 characters or fewer"),
+  /** Also remove schedules that would start after the end date. */
+  includeUpcoming: z.boolean().default(false),
 });
 
 const instant = z.string().refine((v) => !Number.isNaN(Date.parse(v)), "Enter a real date and time");

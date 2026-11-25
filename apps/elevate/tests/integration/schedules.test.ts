@@ -58,6 +58,10 @@ const event = (employeeId: string, type: string, when: string) => db.execute(sql
 const dayRow = async (employeeId: string, date: string) => (await rows<{ flags: string[]; scheduled_minutes: number | null; late_minutes: number; early_leave_minutes: number; extra_minutes: number; sessions: number; worked_minutes: number }>(sql`select flags, scheduled_minutes, late_minutes, early_leave_minutes, extra_minutes, sessions, worked_minutes from time.attendance_days where employee_id = ${employeeId} and date = ${date}::date`))[0];
 const notes = (userId: string, kind: string) => rows(sql`select 1 from ops.notifications where user_id = ${userId} and kind = ${kind}`);
 
+/** One shift pattern in the flat shape these tests read best in. */
+const assignOne = ({ employeeIds, effectiveFrom, zone, mode, ...shift }: Record<string, unknown>) => scheduleActions.assignSchedule({ employeeIds, effectiveFrom, zone, mode, shifts: [shift] });
+const idOf = async (employeeId: string) => (await rows<{ id: string }>(sql`select id from time.schedules where employee_id = ${employeeId} and removed_at is null order by effective_from desc limit 1`))[0].id;
+
 let hr: TestUser;
 beforeAll(async () => {
   hr = await makeUser("hr", ["hr_admin", "employee"]);
@@ -72,7 +76,7 @@ describe("assigning schedules", () => {
     const ben = await person("SchBen");
     await db.execute(sql`insert into core.client_assignments (employee_id, client_id, start_date) values (${ana.employeeId}, ${client.id}, current_date - 30)`);
     as(hr);
-    expect(await scheduleActions.assignSchedule({ ...base, employeeIds: [ana.employeeId, ben.employeeId] })).toEqual({ ok: true, data: { assigned: 2 } });
+    expect(await assignOne({ ...base, employeeIds: [ana.employeeId, ben.employeeId] })).toEqual({ ok: true, data: { assigned: 2 } });
     const zoneOf = async (id: string) => (await rows<{ zone: string; weekdays: number[]; break_minutes: number }>(sql`select zone, weekdays, break_minutes from time.schedules where employee_id = ${id}`))[0];
     expect(await zoneOf(ana.employeeId)).toMatchObject({ zone: "America/New_York", weekdays: [1, 2, 3, 4, 5], break_minutes: 60 });
     expect((await zoneOf(ben.employeeId)).zone).toBe("America/Phoenix"); // no client: the company zone
@@ -83,49 +87,50 @@ describe("assigning schedules", () => {
     expect(body).toContain(describeSchedule({ ...base, effectiveTo: null, zone: "America/New_York" }, base.effectiveFrom).manila);
   });
 
-  it("closes the person's old schedule the day before a new one starts, and refuses a start that overlaps one", async () => {
+  it("replacing everything closes the old schedule the day before, and adding crossing hours is refused", async () => {
     const p = await person("SchChange");
     as(hr);
-    expect((await scheduleActions.assignSchedule({ ...base, effectiveFrom: day(-3), employeeIds: [p.employeeId], zone: PHX })).ok).toBe(true);
-    expect((await scheduleActions.assignSchedule({ ...base, effectiveFrom: day(2), startTime: "10:00", endTime: "18:00", employeeIds: [p.employeeId], zone: PHX })).ok).toBe(true);
+    expect((await assignOne({ ...base, effectiveFrom: day(-3), employeeIds: [p.employeeId], zone: PHX })).ok).toBe(true);
+    expect((await assignOne({ ...base, effectiveFrom: day(2), startTime: "10:00", endTime: "18:00", employeeIds: [p.employeeId], zone: PHX, mode: "replace_all" })).ok).toBe(true);
     const list = await rows<{ effective_from: string; effective_to: string | null; start_time: string }>(sql`select effective_from::text, effective_to::text, start_time from time.schedules where employee_id = ${p.employeeId} order by effective_from`);
     expect(list).toEqual([
       { effective_from: day(-3), effective_to: day(1), start_time: "09:00" },
       { effective_from: day(2), effective_to: null, start_time: "10:00" },
     ]);
-    // A start on or before the latest one would rewrite history
-    const clash = await scheduleActions.assignSchedule({ ...base, effectiveFrom: day(2), employeeIds: [p.employeeId] });
+    // Adding hours that cross what they hold is refused
+    const clash = await assignOne({ ...base, effectiveFrom: day(2), employeeIds: [p.employeeId] });
     expect(clash.ok).toBe(false);
-    expect(!clash.ok && clash.error).toContain("already has a schedule starting");
-    // The database itself refuses two schedules that cover the same day
+    expect(!clash.ok && clash.error).toContain("overlaps another schedule");
+    // The database itself refuses crossing hours on the same day
     await expect(schedule(p.employeeId, { from: day(5) })).rejects.toThrow();
   });
 
   it("is all or nothing, and checks dates, times and days", async () => {
     const a = await person("SchAllA");
     as(hr);
-    expect((await scheduleActions.assignSchedule({ ...base, employeeIds: [a.employeeId, randomUUID()] })).ok).toBe(false);
+    expect((await assignOne({ ...base, employeeIds: [a.employeeId, randomUUID()] })).ok).toBe(false);
     expect(await rows(sql`select 1 from time.schedules where employee_id = ${a.employeeId}`)).toHaveLength(0);
-    expect(await scheduleActions.assignSchedule({ ...base, effectiveFrom: day(-8), employeeIds: [a.employeeId] })).toEqual({ ok: false, error: "A schedule cannot start more than 7 days ago." });
+    expect(await assignOne({ ...base, effectiveFrom: day(-8), employeeIds: [a.employeeId] })).toEqual({ ok: false, error: "A schedule cannot start more than 7 days ago." });
     for (const bad of [{ startTime: "9am" }, { endTime: "25:00" }, { weekdays: [] }, { weekdays: [8] }, { breakMinutes: 500 }, { zone: "Mars/Base" }, { employeeIds: [] }, { effectiveFrom: "tomorrow" }]) {
-      expect((await scheduleActions.assignSchedule({ ...base, employeeIds: [a.employeeId], ...bad })).ok).toBe(false);
+      expect((await assignOne({ ...base, employeeIds: [a.employeeId], ...bad })).ok).toBe(false);
     }
   });
 
   it("ends a schedule, and only HR and Super Admin can do either", async () => {
     const p = await person("SchEnd");
     as(hr);
-    await scheduleActions.assignSchedule({ ...base, effectiveFrom: day(-2), employeeIds: [p.employeeId], zone: PHX });
-    expect(await scheduleActions.endSchedule({ employeeId: p.employeeId, endDate: day(0) })).toEqual({ ok: true, data: undefined });
+    await assignOne({ ...base, effectiveFrom: day(-2), employeeIds: [p.employeeId], zone: PHX });
+    const scheduleId = await idOf(p.employeeId);
+    expect(await scheduleActions.removeSchedule({ scheduleId, lastDay: day(0) })).toEqual({ ok: true, data: { outcome: "ended" } });
     expect((await rows<{ effective_to: string }>(sql`select effective_to::text from time.schedules where employee_id = ${p.employeeId}`))[0].effective_to).toBe(day(0));
-    expect(await rows(sql`select 1 from ops.notifications where user_id = ${p.user.id} and title = 'Your schedule ended' and body like '%attendance flags%'`)).toHaveLength(1);
-    expect(await scheduleActions.endSchedule({ employeeId: p.employeeId, endDate: day(0) })).toEqual({ ok: true, data: undefined }); // still open? no: ended today, ending again today is allowed
-    expect((await scheduleActions.endSchedule({ employeeId: randomUUID(), endDate: day(0) })).ok).toBe(false);
+    expect(await rows(sql`select 1 from ops.notifications where user_id = ${p.user.id} and title = 'A schedule ended'`)).toHaveLength(1);
+    expect((await scheduleActions.removeSchedule({ scheduleId, lastDay: day(0) })).ok).toBe(false); // already ends that day
+    expect((await scheduleActions.removeSchedule({ scheduleId: randomUUID(), lastDay: day(0) })).ok).toBe(false);
 
     for (const role of ["team_lead", "recruiter", "executive", "employee"] as RoleSlug[]) {
       as(await makeUser("nosch", [role]));
-      expect(await scheduleActions.assignSchedule({ ...base, employeeIds: [p.employeeId] })).toEqual({ ok: false, error: NO_ACCESS });
-      expect(await scheduleActions.endSchedule({ employeeId: p.employeeId, endDate: day(0) })).toEqual({ ok: false, error: NO_ACCESS });
+      expect(await assignOne({ ...base, employeeIds: [p.employeeId] })).toEqual({ ok: false, error: NO_ACCESS });
+      expect(await scheduleActions.removeSchedule({ scheduleId, lastDay: day(0) })).toEqual({ ok: false, error: NO_ACCESS });
       await expect(queries.listSchedules()).rejects.toThrow();
     }
   });
@@ -137,16 +142,17 @@ describe("assigning schedules", () => {
     as(hr);
     const list = await queries.listSchedules();
     const mine = list.rows.find((r) => r.employeeId === has.employeeId)!;
-    expect(mine.current).toMatchObject({ days: "Every day", manila: expect.stringContaining("PM") });
-    expect(list.rows.find((r) => r.employeeId === none.employeeId)!.current).toBeNull();
+    expect(mine.entries).toEqual([expect.objectContaining({ days: "Every day", status: "current", manilaRange: expect.stringContaining("PM") })]);
+    expect(mine.chips.every((c) => c.shifts.length === 1)).toBe(true);
+    expect(list.rows.find((r) => r.employeeId === none.employeeId)!.entries).toEqual([]);
     expect(list.withoutSchedule).toBeGreaterThanOrEqual(1);
 
     as(has.user);
     const week = await queries.getMyTime();
-    expect(week?.schedule).toMatchObject({ days: "Every day", zone: "America/New_York" });
+    expect(week?.schedules).toEqual([expect.objectContaining({ days: "Every day", zone: "America/New_York" })]);
     expect(week?.days.every((d) => d.shift !== null && d.scheduledMinutes === 420)).toBe(true);
     as(none.user);
-    expect((await queries.getMyTime())?.schedule).toBeNull();
+    expect((await queries.getMyTime())?.schedules).toEqual([]);
   });
 
   it("gives each person their own schedule page, and a lead a read-only view of their team's", async () => {
@@ -163,19 +169,27 @@ describe("assigning schedules", () => {
 
     as(mine.user);
     const view = await queries.getMySchedule();
-    expect(view?.current).toMatchObject({ days: "Every day", client: "10:00 AM - 6:00 PM", zone: "America/New_York", breakMinutes: 60 });
-    expect(view?.upcoming).toEqual([expect.objectContaining({ from: day(20), days: "Mon to Wed", breakMinutes: 30 })]);
-    expect(view?.past).toEqual([expect.objectContaining({ from: day(-30), to: day(-1) })]);
+    const by = (status: string) => view?.entries.filter((e) => e.status === status);
+    expect(by("current")).toEqual([expect.objectContaining({ days: "Every day", clientRange: "10:00 AM - 6:00 PM", zone: "America/New_York", breakMinutes: 60 })]);
+    expect(by("upcoming")).toEqual([expect.objectContaining({ from: day(20), days: "Mon to Wed", breakMinutes: 30 })]);
+    expect(by("past")).toEqual([expect.objectContaining({ from: day(-30), to: day(-1) })]);
+    expect(view?.canManage).toBe(false);
+    expect((await queries.getPersonSchedule(mine.employeeId)).canManage).toBe(false);
+    await expect(queries.getPersonSchedule(other.employeeId)).rejects.toThrow(); // not their own
     await expect(queries.listTeamSchedules()).rejects.toThrow(); // an employee has no team view
 
     as({ ...lead.user, roles: ["team_lead", "employee"] });
     const team = await queries.listTeamSchedules();
     expect(team.rows.map((r) => r.employeeId)).toEqual([mine.employeeId]); // only their downline, not the other person
-    expect(team.rows[0].current?.manila).toContain("PM");
-    expect(team.rows[0].upcoming).toMatchObject({ effectiveFrom: day(20) });
+    expect(team.rows[0].entries.map((e) => e.status)).toEqual(["current", "upcoming"]);
+    expect(team.rows[0].entries[0].manilaRange).toContain("PM");
+    expect((await queries.getPersonSchedule(mine.employeeId)).canManage).toBe(false); // a lead reads their team
+    await expect(queries.getPersonSchedule(other.employeeId)).rejects.toThrow();
 
     as(hr);
     await expect(queries.listTeamSchedules()).rejects.toThrow(); // HR uses the full list instead
+    expect((await queries.getPersonSchedule(mine.employeeId)).canManage).toBe(true);
+    await expect(queries.getPersonSchedule(randomUUID())).rejects.toThrow();
 
     const noRecord = await makeUser("PageNoRecord", ["employee"]);
     as(noRecord);

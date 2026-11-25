@@ -234,8 +234,9 @@ export const clockCorrections = time
   .enableRLS();
 
 /**
- * A person's shift pattern, in the schedule's (client's) time zone. Changes are new rows: setting a new schedule closes the
- * previous one the day before. Two schedules for one person can never overlap (exclusion constraint in the migration).
+ * A person's shift patterns, in the schedule's (client's) time zone. A person can hold any number at once (the same client, different
+ * clients or none) as long as their hours never cross: a trigger in the migration refuses crossing hours in one zone and the actions
+ * check across zones. Ending or replacing one sets its last day; one that never took effect is marked removed, never deleted.
  */
 export const schedules = time
   .table(
@@ -252,13 +253,18 @@ export const schedules = time
       /** ISO weekdays worked: 1 = Monday ... 7 = Sunday. The others are rest days. */
       weekdays: smallint("weekdays").array().notNull(),
       breakMinutes: smallint("break_minutes").notNull().default(0),
-      /** The client this schedule is for (null = the person's one general schedule). A person can have one schedule per client at the same time, as long as the hours do not overlap. */
+      /** The client this schedule is for (null = a general schedule with no client). */
       clientId: uuid("client_id").references(() => clients.id),
       /** Minutes of work per scheduled day allotted to that client; the clock stops at this much for the client (null = no separate limit). */
       allottedMinutesPerDay: smallint("allotted_minutes_per_day"),
       zone: text("zone").notNull(),
       createdBy: uuid("created_by"),
       createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+      /** Set when HR removed an entry that was never meant to apply. Every reader skips these rows. */
+      removedAt: timestamp("removed_at", { withTimezone: true }),
+      removedBy: uuid("removed_by"),
+      /** When HR last added or changed this row: an automatic clock-out is never stamped before the latest change (see `performClock`). */
+      changedAt: timestamp("changed_at", { withTimezone: true }),
     },
     (t) => [
       index("schedules_employee_idx").on(t.employeeId, t.effectiveFrom),

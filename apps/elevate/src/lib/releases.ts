@@ -16,6 +16,16 @@ export type Release = {
 
 export const RELEASES: Release[] = [
   {
+    version: "1.1.1",
+    date: "2026-11-25",
+    title: "Several schedules for one person",
+    highlights: [
+      "A person can now have several schedules at once: different times on different days, for the same client or different ones.",
+      "Each person has a week page showing every shift in the client's time and in Manila time. HR can add, edit, replace or remove one schedule without touching the others.",
+      "The Schedules list shows each person's week at a glance.",
+    ],
+  },
+  {
     version: "1.1.0",
     date: "2026-11-25",
     title: "Reports you can read and answer",

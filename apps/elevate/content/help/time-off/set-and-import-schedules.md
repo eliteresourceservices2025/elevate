@@ -1,47 +1,56 @@
 ---
 title: Set and import schedules
-summary: Give people shift schedules one by one, or import many from the attendance sheet.
+summary: Give people one or more shift schedules, or import many from the attendance sheet.
 category: time-off
 audience: super_admin, hr_admin, team_lead
 order: 3
 video: set-and-import-schedules
-updated: 2026-10-21
+updated: 2026-11-25
 ---
 
-A **schedule** is a person's shift pattern. The time clock uses it to flag lateness, early leaves, absences and extra hours. A person with no schedule gets no flags.
+A **schedule** is a shift pattern: the days, the start and end times and, if it is for a client, the client. A person can have **several at once**, for example different times on different days, or two clients. The time clock uses them to flag lateness, early leaves, absences and extra hours. A person with no schedule gets no flags.
 
 A shift belongs to the day it **starts** in the person's own time zone.
 
 # Who sees what
 
-- Everyone sees their own schedule.
+- Everyone sees their own schedules.
 - A Team Lead sees their team's schedules, read only.
 - HR and Super Admin set and change schedules.
 
-# Set a schedule
+# Add a schedule
 
 1. Click **Schedules** in the left menu.
-2. Tick the people in the list first.
-3. Open **Set a schedule**.
-4. Fill in:
-   - **Shift starts** and **Shift ends**. An end before the start means the shift ends the next day.
-   - **Working days.** The other days are rest days.
-   - **Unpaid break (minutes)**
-   - **Starts on**
-   - **Time zone.** Leave it empty to use each person's client zone.
-5. Save. A schedule the person already has ends the day before.
+2. Tick the people in the list first, then click **Set schedule for** them. Or click a person's name, then **Add schedule**.
+3. Choose what saving does:
+   - **Add to their current schedules** keeps what they have.
+   - **Replace all their schedules from the start date** ends everything else the day before.
+4. Fill in **Starts on** and, if needed, **Time zone**. Leave the zone empty to use each client's time zone.
+5. For each shift pattern, fill in **Client**, **Shift starts**, **Shift ends**, **Client hours per day**, **Unpaid break (minutes)** and **Working days**. An end before the start means the shift ends the next day.
+6. For another time or client, click **Add another shift pattern**.
+7. Save. A message says **Schedule saved**.
 
-Times show in the schedule's zone and also in Manila time (**In Manila**).
+Two shifts of one person cannot overlap. If they do, nothing is saved and the message says which one.
+
+Days with no shift are rest days. The person cannot clock in on a rest day unless extra or make-up hours are approved.
 
 ![The Schedules page: tick people, then set a schedule.](help:set-and-import-schedules/01-schedules.png)
 
-# Fix a recent mistake
+# See one person's week
 
-Use **Correct** on a schedule and write **Why is this being corrected?** It changes entries from the last 7 days on. A message says **Schedule corrected.** Older schedules are never rewritten: set a new one from a date instead. A person on two clients in one day needs one shift, from the earliest start to the latest end.
+Click a person's name. Each day shows every shift in the client's time and in Manila time. Use **Previous week** and **Next week** to look around. Below are the current, upcoming and earlier schedules.
 
-# End a schedule
+# Change one schedule
 
-Use the end action. A message says **Schedule ended.**
+On the person's page, each schedule has its own buttons. The others stay as they are.
+
+- **Edit** fixes a mistake. Write **Why is this being corrected?** It is offered for schedules from the last 7 days or that have not started. A message says **Schedule corrected.**
+- **Replace** gives new hours from a date. The old ones end the day before. A message says **Schedule replaced.**
+- **Remove** stops it after the last day you choose. One that has not started simply does not apply.
+
+# End every schedule
+
+Tick the people, then click **End schedule for** them. Tick **Also remove schedules that start after that day** if they have upcoming ones.
 
 # Import many at once from the attendance sheet
 
@@ -59,16 +68,17 @@ HR and Super Admin can import the team's attendance sheet.
 
 Changes more than 7 days back are **Backdated changes**. You must read the impact and tick **I have reviewed this and want to apply the backdated changes.**
 
-The import never reads worked hours from the sheet. ELEVATE is the only source of hours. You can discard a preview. It is removed after 14 days.
+The import never reads worked hours from the sheet. ELEVATE is the only source of hours. It does not change the schedules of someone who has several, or who has client schedules: change those on their own page. You can discard a preview. It is removed after 14 days.
 
 ![Import schedules and clients from the attendance sheet.](help:set-and-import-schedules/02-import-schedules.png)
 
 # Common mistakes
 
-- **Setting a schedule from the wrong date.** The old one ends the day before.
+- **Choosing Replace all when you meant to add.** Replacing ends their other schedules.
+- **Leaving a working day without a shift.** That day is a rest day and clock-in is refused.
 - **Trusting hours in the sheet.** They are ignored on purpose.
 
 # Try it yourself
 
 - Open **Schedules** and read your own schedule.
-- Set a schedule for a test person.
+- Add two shift patterns for a test person.

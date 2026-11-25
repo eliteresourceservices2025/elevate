@@ -143,7 +143,7 @@ Jibble mirror, repair job, safety lock, pause switch.
 Shift schedules, nightly flags, extra-hours requests.
 
 - A shift belongs to the day it starts in the person's own zone; people with no schedule get no flags.
-- A person can have one schedule per client at once (client and allotted hours per day on each; hours never overlap); make-up hours (`/make-up-hours`, asked before working, a lead approves, never your own) are straight time, never extra hours (owner decision 2026-11-24).
+- A person can have any number of schedules at once, even several for one client (client and allotted hours per day on each; hours never overlap; nothing deleted, an entry that never took effect is marked removed) (owner decision 2026-11-25); make-up hours (`/make-up-hours`, asked before working, a lead approves, never your own) are straight time, never extra hours (owner decision 2026-11-24).
 - On schedules and extra-hours requests copy says "extra hours", never "overtime" (payroll screens say "overtime (OT)", by the executives' choice); ELEVATE labels hours; the hours export computes nothing, and only the payroll module computes pay (never tax).
 
 ### Hours review, export and system health — `docs/modules/hours-review-and-health.md`

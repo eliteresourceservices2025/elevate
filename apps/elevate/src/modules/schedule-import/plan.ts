@@ -13,7 +13,7 @@ import type { Observation } from "./reader";
 export type LivePerson = { id: string; workEmail: string; first: string; middle: string | null; last: string; preferred: string | null; status: string };
 export type LiveClient = { id: string; name: string };
 export type LiveAssignment = { id: string; employeeId: string; clientId: string; startDate: string; endDate: string | null; hoursPerWeek: number | null };
-export type LiveSchedule = { id: string; employeeId: string; effectiveFrom: string; effectiveTo: string | null; startTime: string; endTime: string; zone: string; weekdays: number[]; breakMinutes: number };
+export type LiveSchedule = { id: string; employeeId: string; effectiveFrom: string; effectiveTo: string | null; startTime: string; endTime: string; zone: string; weekdays: number[]; breakMinutes: number; clientId?: string | null };
 /** Matches HR confirmed earlier: normalized sheet spelling to the real person or client id. */
 export type LiveAliases = { persons: Record<string, string>; clients: Record<string, string> };
 export type LiveData = { employees: LivePerson[]; clients: LiveClient[]; assignments: LiveAssignment[]; schedules: LiveSchedule[]; aliases?: LiveAliases };
@@ -234,10 +234,14 @@ export function buildPlan(observations: Observation[], live: LiveData, options: 
     if (multi && useCombined) groupAttention.push(`Works ${segments.length} clients in one shift (${segments.map((s) => `${s.clientName}: ${s.text}`).join("; ")}). The unpaid break is the gap between them. The hours per week are the person's total on each client.`);
 
     const open = live.assignments.filter((a) => a.employeeId === person.id && a.endDate === null);
-    const openSchedule = live.schedules.find((s) => s.employeeId === person.id && s.effectiveTo === null) ?? null;
+    const openSchedules = live.schedules.filter((s) => s.employeeId === person.id && s.effectiveTo === null);
+    const openSchedule = openSchedules[0] ?? null;
+    // The sheet makes one shift with no client. Someone with several, or with client schedules, was set up by hand: leave theirs alone.
+    const byHand = openSchedules.length > 1 || openSchedules.some((s) => s.clientId);
+    if (byHand && useCombined) groupAttention.push("This person has several schedules or client schedules, so the import does not change them. Change them on the person's Schedules page.");
     const groupClientIds = new Set(segments.map((s) => s.clientId));
     const others = open.filter((a) => !groupClientIds.has(a.clientId));
-    const scheduleAction: ScheduleAction = !useCombined
+    const scheduleAction: ScheduleAction = !useCombined || byHand
       ? "unset"
       : !openSchedule ? "add"
       : same({ startTime: openSchedule.startTime, endTime: openSchedule.endTime, zone: openSchedule.zone, weekdays: openSchedule.weekdays, breakMinutes: openSchedule.breakMinutes }, shift) ? "same" : "change";

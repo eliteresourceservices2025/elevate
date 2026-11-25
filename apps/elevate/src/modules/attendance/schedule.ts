@@ -32,7 +32,7 @@ export type ScheduleLite = {
   /** Planned unpaid break inside the shift. */
   breakMinutes: number;
   zone: string;
-  /** The client this schedule is for (strict time rules); a person can have one schedule per client at once. Absent or null = the general schedule. */
+  /** The client this schedule is for; absent or null = no client. A person can hold several at once, for the same client or not. */
   clientId?: string | null;
   /** Minutes of work per scheduled day allotted to that client (absent or null = no separate limit). */
   allottedMinutesPerDay?: number | null;
@@ -55,19 +55,12 @@ export function scheduleFor(schedules: readonly ScheduleLite[], date: string): S
   return best;
 }
 
-/** Every schedule in force on a calendar date of the schedule zone: the latest one that started, for each client. */
-export function schedulesFor(schedules: readonly ScheduleLite[], date: string): ScheduleLite[] {
-  const best = new Map<string | null, ScheduleLite>();
-  for (const s of schedules) {
-    if (!(s.effectiveFrom <= date && (s.effectiveTo === null || date <= s.effectiveTo))) continue;
-    const key = s.clientId ?? null;
-    const held = best.get(key);
-    if (!held || s.effectiveFrom > held.effectiveFrom) best.set(key, s);
-  }
-  return [...best.values()];
+/** Every schedule in force on a calendar date of the schedule zone. Several can apply at once (their hours never cross). */
+export function schedulesFor<T extends ScheduleLite>(schedules: readonly T[], date: string): T[] {
+  return schedules.filter((s) => s.effectiveFrom <= date && (s.effectiveTo === null || date <= s.effectiveTo));
 }
 
-/** Every shift that starts on this calendar day in the person's own zone, earliest first (one per client schedule). Empty on a rest day. */
+/** Every shift that starts on this calendar day in the person's own zone, earliest first (one per schedule). Empty on a rest day. */
 export function shiftsOn(schedules: readonly ScheduleLite[], personZone: string, date: string): Shift[] {
   const shifts: Shift[] = [];
   // The schedule zone can be a day ahead of or behind the person, so look a day either side.
@@ -86,7 +79,7 @@ export function shiftsOn(schedules: readonly ScheduleLite[], personZone: string,
 }
 
 /**
- * The day's shift as one: when a person has several schedules (one per client) on a day, the flags, late and extra-hours rules see one shift
+ * The day's shift as one: when a person has several schedules on a day, the flags, late and extra-hours rules see one shift
  * from the first start to the last end whose scheduled minutes add up (the gap between them is not scheduled time). With one schedule it is
  * that shift itself. Null on a rest day.
  */
@@ -135,6 +128,40 @@ export function hoursOverlap(a: ScheduleLite, b: ScheduleLite): boolean {
   const from = a.effectiveFrom > b.effectiveFrom ? a.effectiveFrom : b.effectiveFrom;
   const bs = stretchesAround(b, from);
   return stretchesAround(a, from).some(([aStart, aEnd]) => bs.some(([bStart, bEnd]) => aStart < bEnd && bStart < aEnd));
+}
+
+/** Whether two schedules are ever in force on the same day. */
+export const datesOverlap = (a: ScheduleLite, b: ScheduleLite) => (a.effectiveTo === null || a.effectiveTo >= b.effectiveFrom) && (b.effectiveTo === null || b.effectiveTo >= a.effectiveFrom);
+
+/** The first schedule the candidate would clash with: in force on some of the same days with hours that cross. */
+export const clashingSchedule = <T extends ScheduleLite>(existing: readonly T[], candidate: ScheduleLite): T | null =>
+  existing.find((s) => datesOverlap(s, candidate) && hoursOverlap(s, candidate)) ?? null;
+
+export type WeekShift<T extends ScheduleLite = ScheduleLite> = { schedule: T; startLabel: string; clientRange: string; secondaryRange: string };
+export type WeekDay<T extends ScheduleLite = ScheduleLite> = { date: string; weekday: number; shifts: WeekShift<T>[] };
+
+/**
+ * Seven days from `from`, each with the shifts that apply, in the SCHEDULE's days and times (what HR typed). The second zone is shown beside
+ * it, with its weekday when the shift falls on another day there.
+ */
+export function weekOf<T extends ScheduleLite>(schedules: readonly T[], from: string, secondaryZone = SECONDARY_TIMEZONE): WeekDay<T>[] {
+  return Array.from({ length: 7 }, (_, i) => {
+    const date = addDays(from, i);
+    const weekday = isoWeekday(date);
+    const shifts = schedulesFor(schedules, date)
+      .filter((s) => s.weekdays.includes(weekday))
+      .map((s) => {
+        const startMs = fromZonedTime(`${date}T${s.startTime}:00`, s.zone).getTime();
+        let endMs = fromZonedTime(`${date}T${s.endTime}:00`, s.zone).getTime();
+        if (endMs <= startMs) endMs = fromZonedTime(`${addDays(date, 1)}T${s.endTime}:00`, s.zone).getTime();
+        const otherDay = formatInTimeZone(startMs, secondaryZone, "yyyy-MM-dd") === date ? "" : `${formatInTimeZone(startMs, secondaryZone, "EEE")} `;
+        const range = (zone: string) => `${formatInTimeZone(startMs, zone, "h:mm a")} - ${formatInTimeZone(endMs, zone, "h:mm a")}`;
+        return { startMs, shift: { schedule: s, startLabel: formatInTimeZone(startMs, s.zone, "h:mm a"), clientRange: range(s.zone), secondaryRange: `${otherDay}${range(secondaryZone)}` } };
+      })
+      .sort((a, b) => a.startMs - b.startMs)
+      .map((x) => x.shift);
+    return { date, weekday, shifts };
+  });
 }
 
 /** Whether the person has any schedule at all in force around this date (so a day with no shift is a rest day, not "unscheduled"). */

@@ -16,7 +16,7 @@ const toLite = (r: Row): ScheduleLite & { id: string } => ({ id: r.id, effective
 export async function loadSchedules(executor: Executor, employeeId: string): Promise<(ScheduleLite & { id: string })[]> {
   const rows = (await executor.execute(sql`
     select id, effective_from::text, effective_to::text, start_time, end_time, weekdays, break_minutes, zone, client_id, allotted_minutes_per_day
-    from time.schedules where employee_id = ${employeeId} order by effective_from`)) as unknown as Row[];
+    from time.schedules where employee_id = ${employeeId} and removed_at is null order by effective_from, start_time`)) as unknown as Row[];
   return rows.map(toLite);
 }
 
@@ -26,9 +26,15 @@ export async function loadSchedulesFor(executor: Executor, employeeIds: string[]
   if (employeeIds.length === 0) return out;
   const rows = (await executor.execute(sql`
     select employee_id, id, effective_from::text, effective_to::text, start_time, end_time, weekdays, break_minutes, zone, client_id, allotted_minutes_per_day
-    from time.schedules where employee_id in (${sql.join(employeeIds.map((id) => sql`${id}`), sql`, `)}) order by effective_from`)) as unknown as (Row & { employee_id: string })[];
+    from time.schedules where employee_id in (${sql.join(employeeIds.map((id) => sql`${id}`), sql`, `)}) and removed_at is null order by effective_from, start_time`)) as unknown as (Row & { employee_id: string })[];
   for (const r of rows) out.set(r.employee_id, [...(out.get(r.employee_id) ?? []), toLite(r)]);
   return out;
+}
+
+/** When this person's schedules were last added or changed (ms), or 0. */
+export async function lastScheduleChangeMs(executor: Executor, employeeId: string): Promise<number> {
+  const [row] = (await executor.execute(sql`select floor(extract(epoch from max(changed_at)) * 1000) as ms from time.schedules where employee_id = ${employeeId}`)) as unknown as { ms: string | number | null }[];
+  return Number(row?.ms ?? 0);
 }
 
 /** The time zone a new schedule starts with: the person's current client's zone, or the company zone. */

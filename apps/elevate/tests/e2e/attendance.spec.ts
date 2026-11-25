@@ -314,13 +314,30 @@ test("HR sets a schedule and the employee sees it in both time zones", async ({ 
   await waitForHydration(hrPage, "#sc-filter");
   await hrPage.getByLabel("Find a person or team").fill(`Shift${stamp}`);
   await hrPage.getByLabel(/^Select Sam/).check();
-  await (await hydrated(hrPage.getByRole("button", { name: "Set a schedule for 1 person" }))).click();
+  await (await hydrated(hrPage.getByRole("button", { name: "Set schedule for 1", exact: true }))).click();
   await hrPage.getByLabel("Shift starts").fill("21:00");
   await hrPage.getByLabel("Shift ends").fill("05:00");
   await hrPage.getByLabel("Time zone").fill("Asia/Manila");
-  await hrPage.getByRole("button", { name: "Set schedule for 1 person" }).click();
-  await expect(hrPage.getByText("Schedule set for 1 person.")).toBeVisible(slow);
-  await expect(hrPage.getByText("Mon to Fri, 9:00 PM - 5:00 AM (Asia/Manila)").first()).toBeVisible(slow);
+  await hrPage.getByRole("button", { name: "Save schedule for 1 person" }).click();
+  await expect(hrPage.getByText("Schedule saved for 1 person.")).toBeVisible(slow);
+
+  // A second pattern is added beside the first; each can be removed on the person's page.
+  await hrPage.getByRole("tab", { name: /All people/ }).click();
+  await hrPage.getByRole("link", { name: new RegExp(`Shift${stamp}`) }).click();
+  await hrPage.waitForURL("**/schedules/*", slow);
+  await (await hydrated(hrPage.getByRole("button", { name: "Add schedule" }))).click();
+  await hrPage.getByLabel("Shift starts").fill("09:00");
+  await hrPage.getByLabel("Shift ends").fill("11:00");
+  await hrPage.getByLabel("Time zone").fill("Asia/Manila");
+  for (const day of ["Mon", "Tue", "Wed", "Thu", "Fri"]) await hrPage.getByRole("dialog").getByLabel(day, { exact: true }).uncheck();
+  await hrPage.getByRole("dialog").getByLabel("Sat", { exact: true }).check();
+  await hrPage.getByRole("button", { name: "Save schedule for 1 person" }).click();
+  const live = hrPage.getByRole("region", { name: "Current and upcoming schedules" });
+  await expect(live.getByRole("listitem")).toHaveCount(2, slow);
+  await live.getByRole("listitem").filter({ hasText: "9:00 AM - 11:00 AM" }).getByRole("button", { name: "Remove" }).click();
+  await hrPage.getByRole("button", { name: "Remove schedule" }).click();
+  // It started today, so it still applies today and stops after it.
+  await expect(hrPage.getByText("Schedule ended.")).toBeVisible(slow);
 
   const page = await (await browser.newContext()).newPage();
   await signInEnrollingMfa(page, employee);
@@ -505,15 +522,18 @@ test("the Schedules menu item opens its own page and stays highlighted; the empl
   const slow = { timeout: 30_000 };
   const hrPage = await (await browser.newContext()).newPage();
   await signInEnrollingMfa(hrPage, await createHrAccount());
+  // The menu is grouped: open the group that holds Schedules first.
+  await hrPage.getByRole("navigation", { name: "Main" }).getByText("Time and attendance").click();
   await hrPage.getByRole("link", { name: "Schedules", exact: true }).click();
   await hrPage.waitForURL("**/schedules", slow);
-  await expect(hrPage.getByRole("button", { name: "Set a schedule" })).toBeVisible(slow);
+  await expect(hrPage.getByRole("heading", { name: "Schedule workspace" })).toBeVisible(slow);
   await expect(hrPage.getByRole("link", { name: "Schedules", exact: true })).toHaveAttribute("aria-current", "page");
-  await expect(hrPage.getByRole("link", { name: "Attendance", exact: true })).not.toHaveAttribute("aria-current", "page");
+  await expect(hrPage.getByRole("link", { name: /^Attendance/ })).not.toHaveAttribute("aria-current", "page"); // its name can carry a count
 
   const worker = await createEmployeeAccount("Sia", `Sched${Date.now()}`);
   const page = await (await browser.newContext()).newPage();
   await signInEnrollingMfa(page, worker);
+  await page.getByRole("navigation", { name: "Main" }).getByText("Time and attendance").click();
   await page.getByRole("link", { name: "Schedules", exact: true }).click();
   await page.waitForURL("**/schedules", slow);
   await expect(page.getByRole("region", { name: "My schedule" })).toContainText("no schedule yet", slow);
@@ -580,13 +600,13 @@ test("long lists show one page at a time: Schedules pages through everyone and k
   const pager = hrPage.getByRole("navigation", { name: "Pages" });
   await expect(pager).toContainText("Page 1 of");
   const first = await rows.first().innerText();
-  await hrPage.getByRole("button", { name: "Next", exact: true }).click();
+  await hrPage.getByRole("button", { name: "Next page" }).click();
   await expect(pager).toContainText("Page 2 of");
   expect(await rows.first().innerText()).not.toBe(first);
   // Selecting on page 2 survives going back
   await rows.first().getByRole("checkbox").check();
-  await hrPage.getByRole("button", { name: "Previous", exact: true }).click();
-  await expect(hrPage.getByRole("button", { name: /Set a schedule for 1 person/ })).toBeVisible();
+  await hrPage.getByRole("button", { name: "Previous page" }).click();
+  await expect(hrPage.getByRole("button", { name: /Set schedule for 1/ })).toBeVisible();
 });
 
 test("a lead marks a day as test only, it leaves the review list, and the mark can be taken off", async ({ browser }) => {
