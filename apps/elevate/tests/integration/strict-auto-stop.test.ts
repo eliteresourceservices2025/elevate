@@ -103,6 +103,21 @@ describe("runAutoStop", () => {
     expect(ev[3].at).toBeGreaterThan(ev[2].at); // the end of the break replays before the clock-out, whatever their ids
   });
 
+  it("a stop held back to the person's last event still comes after it (the real clock writes microseconds)", async () => {
+    const w = await worker("micro");
+    await event(w.employeeId, "clock_in", at(-300));
+    // A break that began 20 minutes ago, 789 microseconds into its millisecond, as clock_timestamp() would write it
+    await db.execute(sql`insert into time.clock_events (employee_id, type, occurred_at, planned_break_minutes)
+      values (${w.employeeId}, 'break_start', date_trunc('milliseconds', now() - interval '20 minutes') + interval '789 microseconds', 30)`);
+    expect(await runAutoStop(w.employeeId)).toMatchObject({ status: "stopped" });
+    const ordered = await rows<{ type: string }>(sql`select type from time.clock_events where employee_id = ${w.employeeId} order by occurred_at, created_at`);
+    expect(ordered.map((e) => e.type)).toEqual(["clock_in", "break_start", "break_end", "clock_out"]);
+    // The person really is clocked out, so the next sweep finds nothing to do and adds nothing
+    expect(await runAutoStop(w.employeeId)).toEqual({ status: "stale" });
+    expect(await eventsOf(w.employeeId)).toHaveLength(4);
+    expect(await noticesFor(w.user.id)).toHaveLength(1);
+  });
+
   it("does not stop a person who is on a break with hours still to work after it", async () => {
     const w = await worker("breakleft");
     await event(w.employeeId, "clock_in", at(-100));

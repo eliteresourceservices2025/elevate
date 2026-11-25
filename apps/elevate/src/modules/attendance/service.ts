@@ -165,7 +165,9 @@ export async function performClock(actor: { id: string; email: string }, type: C
       const due = await computeStopLimit(tx, person.id, system.nowMs, { replay });
       if (!due || due.limitMs > system.nowMs) throw new ActionFailure("Their hours are not used up yet.");
       const lastEventAt = recent.length > 0 ? Math.max(...recent.map((e) => e.at)) : 0;
-      stampMs = Math.min(system.nowMs, Math.max(lastEventAt, system.nowMs - due.overrunMs));
+      // Never before the last event, and strictly after it: events written by the real clock carry microseconds, so a stamp equal to the
+      // last event's millisecond could sort just before it and leave the person looking clocked in (and stopped again by every sweep).
+      stampMs = Math.min(system.nowMs, Math.max(lastEventAt + 1, system.nowMs - due.overrunMs));
     }
     const prefs = await prefsFor(tx, person.id);
     const rules = await rulesFor(tx, person.id);
