@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { fromZonedTime } from "date-fns-tz";
 import { breakAllowanceLeft, dailyBreakAllowance, stopLimit, type StopLimitInput } from "./day-limits";
-import { shiftsOn, type ScheduleLite, type Shift } from "./schedule";
+import { shiftsForWork, shiftsOn, type ScheduleLite, type Shift } from "./schedule";
 import type { Break } from "./clock";
 
 const PHX = "America/Phoenix";
@@ -26,8 +26,8 @@ describe("shiftsOn", () => {
     expect(shiftsOn([clientA, clientB], PHX, "2030-03-09")).toEqual([]);
   });
 
-  it("uses only the latest schedule of one client when two overlap by date", () => {
-    const old: ScheduleLite = { ...clientA, effectiveFrom: "2030-01-01", effectiveTo: "2030-03-31", endTime: "12:00" };
+  it("skips a schedule of the same client that has already ended", () => {
+    const old: ScheduleLite = { ...clientA, effectiveFrom: "2030-01-01", effectiveTo: "2030-02-28", endTime: "12:00" };
     const current: ScheduleLite = { ...clientA, effectiveFrom: "2030-03-01" };
     expect(shiftsOn([old, current], PHX, DATE)).toHaveLength(1);
     expect(shiftsOn([old, current], PHX, DATE)[0].schedule).toBe(current);
@@ -285,5 +285,32 @@ describe("hoursOverlap across zones (final review)", () => {
     const b: ScheduleLite = { ...clientB, startTime: "23:00", endTime: "03:00", zone: "Asia/Manila" };
     expect(hoursOverlap(a, b)).toBe(true);
     expect(hoursOverlap(a, { ...b, startTime: "04:00", endTime: "08:00" })).toBe(false);
+  });
+});
+
+describe("a split day for one client", () => {
+  const morning: ScheduleLite = { ...base, startTime: "09:00", endTime: "13:00", allottedMinutesPerDay: 240 };
+  const afternoon: ScheduleLite = { ...base, startTime: "14:00", endTime: "18:00", allottedMinutesPerDay: 240 };
+
+  it("adds the client's hours of both shifts together", () => {
+    const shifts = shiftsOn([morning, afternoon], PHX, DATE);
+    expect(shifts).toHaveLength(2);
+    const r = stopLimit({ nowMs: shifts[1].startMs + 3_600_000, hasSchedule: true, shifts, clientId: "A", workedMsByClient: new Map([["A", 5 * 3_600_000]]), workedMsToday: 5 * 3_600_000, dailyCapMinutes: null, companyDefaultCapMinutes: 480, approvedWindows: [] });
+    // 8 hours allotted, 5 used: the shift end (3 hours away) is the limit, not the 4 hours of one shift.
+    expect(r.limitMs).toBe(shifts[1].endMs);
+    expect(r.overrunMs).toBe(0);
+  });
+});
+
+describe("a night shift past midnight", () => {
+  const nightly: ScheduleLite = { ...base, startTime: "22:00", endTime: "06:00", weekdays: [1, 2, 3, 4, 5, 6, 7], allottedMinutesPerDay: 240 };
+
+  it("keeps its own allotted hours and does not add the next night's", () => {
+    const work = shiftsForWork([nightly], PHX, ms("02:00"));
+    expect(work.shifts).toHaveLength(2);
+    const worked = 4 * 3_600_000;
+    const r = stopLimit({ nowMs: ms("02:00"), hasSchedule: true, shifts: work.shifts, clientId: "A", workedMsByClient: new Map([["A", worked]]), workedMsToday: worked, dailyCapMinutes: null, companyDefaultCapMinutes: 480, approvedWindows: [] });
+    expect(r.reason).toBe("client_allotment");
+    expect(r.limitMs).toBe(ms("02:00"));
   });
 });

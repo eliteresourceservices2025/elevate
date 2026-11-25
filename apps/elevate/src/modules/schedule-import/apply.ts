@@ -167,9 +167,11 @@ export async function applyBatch(actor: Actor, input: ApplyInput): Promise<Apply
             const existing = await loadSchedules(sp, row.personId);
             const later = existing.find((s) => s.effectiveFrom >= row.firstDay);
             if (later) throw new RowConflict("The person already has a schedule starting on or after that date.");
-            const current = existing.find((s) => s.effectiveTo === null || s.effectiveTo >= row.firstDay);
-            if (current) await sp.update(schedules).set({ effectiveTo: dayBefore }).where(eq(schedules.id, current.id));
-            await sp.insert(schedules).values({ employeeId: row.personId, effectiveFrom: row.firstDay, effectiveTo: null, startTime: row.startTime, endTime: row.endTime, weekdays: row.weekdays, breakMinutes, zone: row.zone, createdBy: actor.id });
+            const running = existing.filter((s) => s.effectiveTo === null || s.effectiveTo >= row.firstDay);
+            if (running.length > 1 || running.some((s) => s.clientId)) throw new RowConflict("The person has several schedules or client schedules: change them on their Schedules page.");
+            const current = running[0];
+            if (current) await sp.update(schedules).set({ effectiveTo: dayBefore, changedAt: new Date() }).where(eq(schedules.id, current.id));
+            await sp.insert(schedules).values({ employeeId: row.personId, effectiveFrom: row.firstDay, effectiveTo: null, startTime: row.startTime, endTime: row.endTime, weekdays: row.weekdays, breakMinutes, zone: row.zone, createdBy: actor.id, changedAt: new Date() });
             await writeAudit(
               { actor, action: "schedule.assign", targetType: "employee", targetId: row.personId, before: current ? { effectiveFrom: current.effectiveFrom, startTime: current.startTime, endTime: current.endTime, weekdays: current.weekdays, zone: current.zone } : null,
                 after: { effectiveFrom: row.firstDay, startTime: row.startTime, endTime: row.endTime, weekdays: row.weekdays, breakMinutes, zone: row.zone }, metadata: { source: "schedule_import" } },

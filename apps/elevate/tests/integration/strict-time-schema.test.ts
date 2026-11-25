@@ -36,8 +36,8 @@ describe("schedules for several clients", () => {
     await expect(schedule({ client: clientB, start: "14:00", end: "18:00", allotted: 240 })).resolves.toBeDefined();
   });
 
-  it("refuses a second schedule for the same client on overlapping dates", async () => {
-    await expect(schedule({ client: clientA, start: "19:00", end: "20:00" })).rejects.toThrow();
+  it("accepts a second schedule for the same client when the hours do not cross", async () => {
+    await expect(schedule({ client: clientA, start: "19:00", end: "20:00" })).resolves.toBeDefined();
   });
 
   it("refuses overlapping hours on a shared weekday", async () => {

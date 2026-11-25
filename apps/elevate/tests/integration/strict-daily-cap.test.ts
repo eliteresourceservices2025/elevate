@@ -66,7 +66,7 @@ describe("setDailyCap", () => {
     await orgActions.setDailyCap({ employeeId: worker.employeeId, minutes: null });
     const again = (await queries.listSchedules()).rows.find((r) => r.employeeId === worker.employeeId)!;
     expect(again.dailyCapMinutes).toBeNull();
-    expect(again.current).toBeNull();
+    expect(again.entries).toEqual([]);
   });
 });
 

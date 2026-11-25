@@ -63,7 +63,10 @@ export function stopLimit(input: StopLimitInput): StopLimit {
       limit = { limitMs: nowMs, reason: "shift_end", overrunMs: lastEnd === -Infinity ? Infinity : nowMs - lastEnd };
     } else {
       limit = { limitMs: shift.endMs, reason: "shift_end", overrunMs: 0 };
-      const allotted = shift.schedule.allottedMinutesPerDay ?? null;
+      // A client with several shifts on this day (a split day) has their allotted minutes added up; if any of them has no limit, there is none.
+      // Only this day's: a night shift still running from yesterday must not add the next day's hours to its own.
+      const parts = forClient.length > 0 ? forClient.filter((s) => s.date === shift.date) : [shift];
+      const allotted = parts.every((s) => s.schedule.allottedMinutesPerDay != null) ? parts.reduce((sum, s) => sum + (s.schedule.allottedMinutesPerDay ?? 0), 0) : null;
       if (allotted !== null) {
         const worked = input.workedMsByClient.get(input.clientId) ?? 0;
         const left = Math.max(0, allotted * MINUTE - worked);

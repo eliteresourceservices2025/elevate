@@ -52,8 +52,8 @@ test("HR imports schedules and clients from an attendance sheet: upload, preview
   await hr.getByRole("button", { name: /Would change: 1/ }).click();
 
   // Apply the matched row
-  hr.once("dialog", (d) => void d.accept());
   await hr.getByRole("button", { name: /Apply 1 change/ }).click();
+  await hr.getByRole("button", { name: "Yes, continue" }).click();
   await expect(hr.getByText("The import was applied.")).toBeVisible(slow);
 
   const check = postgres(process.env.DATABASE_URL_DIRECT!, { prepare: false, onnotice: () => {} });

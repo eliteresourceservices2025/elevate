@@ -18,6 +18,7 @@ import { clientProjects, employees } from "@/modules/people/schema";
 import { projectOpenTo, projectRequired } from "./project-access";
 import { MINUTE, breakLabel, ipAllowed, overbreakOf, replayClock, roundCoordinate, transition, validCoordinates, type ClockEventLite, type ClockState, type ClockType } from "./clock";
 import { computeStopLimit, requestAutoStop } from "./auto-stop-limit";
+import { lastScheduleChangeMs } from "./schedule-service";
 import { breakLeftToday } from "./break-left";
 import { clockSourceOf } from "./clock-source";
 import { assignedClients } from "./extra-hours-service";
@@ -167,7 +168,8 @@ export async function performClock(actor: { id: string; email: string }, type: C
       const lastEventAt = recent.length > 0 ? Math.max(...recent.map((e) => e.at)) : 0;
       // Never before the last event, and strictly after it: events written by the real clock carry microseconds, so a stamp equal to the
       // last event's millisecond could sort just before it and leave the person looking clocked in (and stopped again by every sweep).
-      stampMs = Math.min(system.nowMs, Math.max(lastEventAt + 1, system.nowMs - due.overrunMs));
+      // Nor before the last schedule change: when HR removes or shortens the shift someone is working, the time already worked stands.
+      stampMs = Math.min(system.nowMs, Math.max(lastEventAt + 1, system.nowMs - due.overrunMs, await lastScheduleChangeMs(tx, person.id)));
     }
     const prefs = await prefsFor(tx, person.id);
     const rules = await rulesFor(tx, person.id);

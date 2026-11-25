@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDays, describeSchedule, earlyLeaveMinutes, extraMinutes, hasScheduleAround, isValidTime, isoWeekday, lateMinutes, scheduleFor, shiftOn, weekdaysLabel, workingWeekdaysInZone, type ScheduleLite } from "./schedule";
+import { addDays, clashingSchedule, describeSchedule, earlyLeaveMinutes, extraMinutes, hasScheduleAround, isValidTime, isoWeekday, lateMinutes, scheduleFor, shiftOn, weekOf, weekdaysLabel, workingWeekdaysInZone, type ScheduleLite } from "./schedule";
 
 const NY = "America/New_York";
 const MANILA = "Asia/Manila";
@@ -145,5 +145,33 @@ describe("showing a schedule", () => {
     // A shift that starts at 8 PM in Phoenix (Mon to Fri) starts at 11 AM the next day in Manila
     const lateStart: ScheduleLite = { ...nightShift, startTime: "20:00", endTime: "04:00" };
     expect([...workingWeekdaysInZone(lateStart, MANILA)].sort()).toEqual([2, 3, 4, 5, 6]);
+  });
+});
+
+describe("several patterns for one person", () => {
+  const base = { effectiveFrom: "2026-11-25", effectiveTo: null, breakMinutes: 30, zone: "America/New_York", clientId: "A" };
+  const tueThu = { ...base, startTime: "08:00", endTime: "16:30", weekdays: [2, 4] };
+  const monWed = { ...base, startTime: "08:30", endTime: "17:00", weekdays: [1, 3] };
+  const friday = { ...base, startTime: "13:30", endTime: "22:00", weekdays: [5], effectiveFrom: "2026-11-26" };
+
+  it("all apply together, even for the same client", () => {
+    const week = weekOf([tueThu, monWed, friday], "2026-11-30", "Asia/Manila");
+    expect(week.map((d) => d.shifts.map((x) => x.clientRange))).toEqual([
+      ["8:30 AM - 5:00 PM"],
+      ["8:00 AM - 4:30 PM"],
+      ["8:30 AM - 5:00 PM"],
+      ["8:00 AM - 4:30 PM"],
+      ["1:30 PM - 10:00 PM"],
+      [],
+      [],
+    ]);
+    // Friday afternoon in New York is already Saturday in Manila.
+    expect(week[4].shifts[0].secondaryRange).toBe("Sat 2:30 AM - 11:00 AM");
+  });
+
+  it("clash only when they share a day, hours and dates", () => {
+    expect(clashingSchedule([tueThu, monWed], friday)).toBeNull();
+    expect(clashingSchedule([tueThu], { ...monWed, weekdays: [4] })).toBe(tueThu);
+    expect(clashingSchedule([{ ...tueThu, effectiveTo: "2026-11-25" }], { ...tueThu, effectiveFrom: "2026-11-26" })).toBeNull();
   });
 });

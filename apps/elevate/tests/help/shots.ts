@@ -316,7 +316,7 @@ export const SHOTS: Shot[] = [
     article: "set-and-import-schedules",
     file: "01-schedules",
     viewport: { width: 1280, height: 1000 },
-    targets: { "people": (p) => p.getByRole("table").first(), "Set a schedule": (p) => p.getByText("Set a schedule").first(), "in Manila": (p) => p.getByText("In Manila").first() },
+    targets: { "people": (p) => p.getByRole("table").first(), "This week": (p) => p.getByText("This week").first() },
     alt: "The Schedules page: tick people, then set a schedule.",
     role: "hr_admin",
     path: "/schedules",

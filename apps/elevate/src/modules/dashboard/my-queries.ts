@@ -76,12 +76,12 @@ export async function getMyScheduleTile(): Promise<MyScheduleTile | null> {
     days = [...days, ...(next?.days ?? [])];
   }
   const shown = days.slice(0, 3);
-  const hasAnyShift = week.schedule !== null || next?.schedule != null;
+  const hasAnyShift = week.schedules.length > 0 || (next?.schedules.length ?? 0) > 0;
   if (!hasAnyShift) return null;
   const first = shown[0];
   return {
     zone: week.zone,
-    client: week.schedule?.client ?? null,
+    client: week.schedules.length === 1 ? week.schedules[0].clientRange : `${week.schedules.length} schedules`,
     clientZone: first?.shift?.zone ?? null,
     clientRange: first?.date === today ? (first.shift?.clientRange ?? null) : null,
     days: shown.map((d) => ({ date: d.date, label: d.date === today ? "Today" : d.weekday, today: d.date === today, range: d.shift?.range ?? null, holiday: d.holiday })),

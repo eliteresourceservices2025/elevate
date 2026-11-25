@@ -1,28 +1,27 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
-import { toast } from "@/components/feedback-dialog";
-import { useConfirm } from "@/components/confirm-dialog";
+import Link from "next/link";
+import { useMemo, useState } from "react";
 import { TextField } from "@/components/form-fields";
 import { FormDialog, useFormDialog } from "@/components/form-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { NativeSelect } from "@/components/ui/native-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ClientPager, usePaged } from "@/components/client-pager";
 import { formatDateOnly } from "@/lib/time";
 import { setDailyCaps } from "@/modules/org/actions";
-import { endSchedule, endSchedules, assignSchedule, correctSchedule, setDayHours } from "../schedule-actions";
-import { describeSchedule, WEEKDAYS } from "../schedule";
-import type { ScheduleListRow } from "../queries";
+import { endSchedules, setDayHours } from "../schedule-actions";
+import { AddScheduleForm, useRun, type RunFn } from "./schedule-forms";
+import { ScheduleChips } from "./schedule-chips";
+import type { ScheduleClient, ScheduleListRow } from "../queries";
 
-const ZONES = ["America/New_York", "America/Chicago", "America/Denver", "America/Phoenix", "America/Los_Angeles", "Asia/Manila", "Europe/London", "Australia/Sydney", "UTC"];
+type ScheduleListClients = ScheduleClient[];
 
-type RunFn = (fn: () => Promise<{ ok: boolean; error?: string }>, success: string | (() => string), after?: () => void) => void;
+const isCurrent = (r: ScheduleListRow) => r.entries.some((e) => e.status === "current");
+const isUpcoming = (r: ScheduleListRow) => r.entries.some((e) => e.status === "upcoming");
 
 /** For contractors with no fixed schedule: their usual hours per day, and hours for specific days when a day differs. */
 function HoursPerDayForm({ picked, today, run, pending, onDone }: { picked: string[]; today: string; run: RunFn; pending: boolean; onDone: () => void }) {
@@ -85,116 +84,23 @@ function HoursPerDayForm({ picked, today, run, pending, onDone }: { picked: stri
   );
 }
 
-/** Set a schedule: a fixed shift, or just hours per day for a contractor with no fixed schedule. */
-function SetScheduleForm(props: { picked: string[]; today: string; clients: { id: string; name: string }[]; run: RunFn; pending: boolean; onDone: () => void }) {
+/** Set a schedule: shift patterns, or just hours per day for a contractor with no fixed schedule. */
+function SetScheduleForm({ picked, today, clients, run, pending, onDone }: { picked: string[]; today: string; clients: ScheduleListClients; run: RunFn; pending: boolean; onDone: () => void }) {
   const [mode, setMode] = useState<"fixed" | "hours">("fixed");
   return (
     <div className="space-y-4">
       <fieldset className="flex flex-wrap gap-4" aria-label="Kind of schedule">
         <label htmlFor="sc-mode-fixed" className="flex items-center gap-2 text-sm">
           <input id="sc-mode-fixed" type="radio" name="sc-mode" className="size-4 accent-primary" checked={mode === "fixed"} onChange={() => setMode("fixed")} />
-          Fixed shift (start and end times)
+          Fixed shifts (start and end times)
         </label>
         <label htmlFor="sc-mode-hours" className="flex items-center gap-2 text-sm">
           <input id="sc-mode-hours" type="radio" name="sc-mode" className="size-4 accent-primary" checked={mode === "hours"} onChange={() => setMode("hours")} />
           Hours per day only (no fixed schedule)
         </label>
       </fieldset>
-      {mode === "fixed" ? <FixedScheduleForm {...props} /> : <HoursPerDayForm picked={props.picked} today={props.today} run={props.run} pending={props.pending} onDone={props.onDone} />}
+      {mode === "fixed" ? <AddScheduleForm people={picked} today={today} clients={clients} onDone={onDone} /> : <HoursPerDayForm picked={picked} today={today} run={run} pending={pending} onDone={onDone} />}
     </div>
-  );
-}
-
-/** The shift form for the people ticked in the list (in a modal, so its fields start fresh each time it opens). */
-function FixedScheduleForm({ picked, today, clients, run, pending, onDone }: { picked: string[]; today: string; clients: { id: string; name: string }[]; run: RunFn; pending: boolean; onDone: () => void }) {
-  const dialog = useFormDialog();
-  const [from, setFrom] = useState(today);
-  const [start, setStart] = useState("09:00");
-  const [end, setEnd] = useState("17:00");
-  const [days, setDays] = useState<number[]>([1, 2, 3, 4, 5]);
-  const [breakMinutes, setBreakMinutes] = useState("60");
-  const [zone, setZone] = useState("");
-  const [clientId, setClientId] = useState("");
-  const [clientHours, setClientHours] = useState("");
-  const preview = useMemo(
-    () =>
-      zone
-        ? describeSchedule(
-            { effectiveFrom: from, effectiveTo: null, startTime: start, endTime: end, weekdays: days, breakMinutes: Number(breakMinutes) || 0, zone },
-            from,
-          )
-        : null,
-    [from, start, end, days, breakMinutes, zone],
-  );
-  return (
-    <form
-      className="space-y-4"
-      onSubmit={(e) => {
-        e.preventDefault();
-        run(
-          () => assignSchedule({ employeeIds: picked, effectiveFrom: from, startTime: start, endTime: end, weekdays: days, breakMinutes, zone, clientId, allottedMinutesPerDay: clientHours.trim() === "" ? "" : Math.round(Number(clientHours) * 60) }),
-          `Schedule set for ${picked.length} ${picked.length === 1 ? "person" : "people"}.`,
-          () => {
-            onDone();
-            dialog?.close(true);
-          },
-        );
-      }}
-    >
-      <div className="grid gap-3 sm:grid-cols-2">
-        <TextField id="sc-from" label="Starts on" type="date" value={from} onChange={(e) => setFrom(e.target.value)} required />
-        <TextField id="sc-break" label="Unpaid break (minutes)" type="number" min="0" max="240" value={breakMinutes} onChange={(e) => setBreakMinutes(e.target.value)} hint="Taken out of the scheduled hours." />
-        <TextField id="sc-start" label="Shift starts" type="time" value={start} onChange={(e) => setStart(e.target.value)} required />
-        <TextField id="sc-end" label="Shift ends" type="time" value={end} onChange={(e) => setEnd(e.target.value)} required hint="An end before the start means the shift ends the next day." />
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <Label htmlFor="sc-client">Client for this schedule (optional)</Label>
-          <NativeSelect id="sc-client" value={clientId} onChange={(e) => setClientId(e.target.value)}>
-            <option value="">General schedule (no client)</option>
-            {clients.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </NativeSelect>
-          <p className="text-xs text-muted-foreground">A person can have one schedule per client, as long as the hours do not overlap. They must be assigned to the client.</p>
-        </div>
-        <TextField id="sc-client-hours" label="Client hours per day (optional)" type="number" min="0.25" max="16" step="0.25" value={clientHours} onChange={(e) => setClientHours(e.target.value)} hint="The clock stops for this client after this many hours a day." />
-      </div>
-      <TextField id="sc-zone" label="Time zone" list="sc-zones" value={zone} onChange={(e) => setZone(e.target.value)} placeholder="Each person's client zone" />
-      <datalist id="sc-zones">
-        {ZONES.map((z) => (
-          <option key={z} value={z} />
-        ))}
-      </datalist>
-      <fieldset className="space-y-1.5">
-        <legend className="text-sm font-medium">Working days</legend>
-        <div className="flex flex-wrap gap-3">
-          {WEEKDAYS.map((w) => (
-            <label key={w.n} htmlFor={`sc-day-${w.n}`} className="flex items-center gap-1.5 text-sm">
-              <input id={`sc-day-${w.n}`} type="checkbox" className="size-4 accent-primary" checked={days.includes(w.n)} onChange={(e) => setDays((d) => (e.target.checked ? [...d, w.n] : d.filter((x) => x !== w.n)))} />
-              {w.short}
-            </label>
-          ))}
-        </div>
-        <p className="text-xs text-muted-foreground">The other days are rest days.</p>
-      </fieldset>
-      <div className="rounded-lg border bg-muted/40 p-3 text-sm" aria-live="polite">
-        <p className="font-medium">Shift preview</p>
-        {preview ? (
-          <>
-            <p className="mt-1">{preview.days}: {preview.client} ({preview.zone})</p>
-            <p className="text-muted-foreground">Manila: {preview.manila}. Unpaid break: {breakMinutes || 0} min.</p>
-          </>
-        ) : (
-          <p className="mt-1 text-muted-foreground">Choose a time zone to confirm the Manila conversion. Leaving it blank uses each person&apos;s client zone.</p>
-        )}
-      </div>
-      <Button type="submit" disabled={pending || picked.length === 0 || days.length === 0}>
-        Set schedule for {picked.length} {picked.length === 1 ? "person" : "people"}
-      </Button>
-    </form>
   );
 }
 
@@ -202,6 +108,7 @@ function FixedScheduleForm({ picked, today, clients, run, pending, onDone }: { p
 function EndSchedulesForm({ picked, today, run, pending, onDone }: { picked: string[]; today: string; run: RunFn; pending: boolean; onDone: () => void }) {
   const dialog = useFormDialog();
   const [endDate, setEndDate] = useState(today);
+  const [includeUpcoming, setIncludeUpcoming] = useState(false);
   const earliest = useMemo(() => new Date(Date.parse(`${today}T00:00:00Z`) - 7 * 86_400_000).toISOString().slice(0, 10), [today]);
   return (
     <form
@@ -211,7 +118,7 @@ function EndSchedulesForm({ picked, today, run, pending, onDone }: { picked: str
         let message = "Schedules ended.";
         run(
           async () => {
-            const result = await endSchedules({ employeeIds: picked, endDate });
+            const result = await endSchedules({ employeeIds: picked, endDate, includeUpcoming });
             if (result.ok) message = `Ended ${result.data.ended} ${result.data.ended === 1 ? "schedule" : "schedules"}${result.data.skipped > 0 ? `. ${result.data.skipped} had no schedule to end.` : "."}`;
             return result;
           },
@@ -224,9 +131,13 @@ function EndSchedulesForm({ picked, today, run, pending, onDone }: { picked: str
       }}
     >
       <p className="text-sm text-muted-foreground">
-        The current schedule ends after the day you choose. From the next day, ELEVATE no longer uses it to flag late arrivals, absences, early leaves or extra hours. Their days are rebuilt, the history stays recorded, and each person is notified. People with no schedule are skipped. Earlier days keep the schedule they had.
+        Anyone clocked in now follows the change as soon as you save. Every current schedule ends after the day you choose. From the next day, ELEVATE no longer uses it to flag late arrivals, absences, early leaves or extra hours. Their days are rebuilt, the history stays recorded, and each person is notified. People with no schedule are skipped. Earlier days keep the schedule they had.
       </p>
       <TextField id="es-date" label="Last day of the schedule" type="date" value={endDate} min={earliest} onChange={(e) => setEndDate(e.target.value)} required hint="Up to 7 days back. Today is the usual choice." />
+      <label htmlFor="es-upcoming" className="flex items-center gap-2 text-sm">
+        <input id="es-upcoming" type="checkbox" className="size-4 accent-primary" checked={includeUpcoming} onChange={(e) => setIncludeUpcoming(e.target.checked)} />
+        Also remove schedules that start after that day
+      </label>
       <Button type="submit" variant="destructive" disabled={pending || picked.length === 0 || !endDate}>
         End schedule for {picked.length} {picked.length === 1 ? "person" : "people"}
       </Button>
@@ -235,59 +146,26 @@ function EndSchedulesForm({ picked, today, run, pending, onDone }: { picked: str
 }
 
 /** HR: give people shifts (one at a time or many at once), and see who has none. Times are in the schedule's zone, shown in Manila too. */
-export function SchedulesPanel({ rows, withoutSchedule, today, clients }: { rows: ScheduleListRow[]; withoutSchedule: number; today: string; clients: { id: string; name: string }[] }) {
-  const router = useRouter();
-  const confirm = useConfirm();
-  const [pending, startTransition] = useTransition();
+export function SchedulesPanel({ rows, withoutSchedule, today, clients }: { rows: ScheduleListRow[]; withoutSchedule: number; today: string; clients: ScheduleListClients }) {
+  const { run, pending } = useRun();
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState("");
   const [view, setView] = useState<"needs" | "current" | "upcoming" | "all">("needs");
-  // Correcting a recent schedule in place (a mistake), with a reason.
-  const [fix, setFix] = useState<ScheduleListRow | null>(null);
-  const [fixStart, setFixStart] = useState("09:00");
-  const [fixEnd, setFixEnd] = useState("17:00");
-  const [fixBreak, setFixBreak] = useState("60");
-  const [fixDays, setFixDays] = useState<number[]>([1, 2, 3, 4, 5]);
-  const [fixZone, setFixZone] = useState("");
-  const [fixReason, setFixReason] = useState("");
-  const openFix = (r: ScheduleListRow) => {
-    if (!r.correctable) return;
-    setFix(r);
-    setFixStart(r.correctable.startTime);
-    setFixEnd(r.correctable.endTime);
-    setFixBreak(String(r.correctable.breakMinutes));
-    setFixDays(r.correctable.weekdays);
-    setFixZone("");
-    setFixReason("");
-  };
 
   const counts = useMemo(
-    () => ({ needs: withoutSchedule, current: rows.filter((r) => r.current).length, upcoming: rows.filter((r) => r.upcoming).length, all: rows.length }),
+    () => ({ needs: withoutSchedule, current: rows.filter(isCurrent).length, upcoming: rows.filter(isUpcoming).length, all: rows.length }),
     [rows, withoutSchedule],
   );
 
   const shown = useMemo(() => {
     const q = filter.trim().toLowerCase();
     return rows.filter((r) => {
-      const matchesView = view === "all" || (view === "needs" && !r.current) || (view === "current" && Boolean(r.current)) || (view === "upcoming" && Boolean(r.upcoming));
+      const matchesView = view === "all" || (view === "needs" && !isCurrent(r)) || (view === "current" && isCurrent(r)) || (view === "upcoming" && isUpcoming(r));
       return matchesView && (q === "" || r.name.toLowerCase().includes(q) || (r.team ?? "").toLowerCase().includes(q));
     });
   }, [rows, filter, view]);
 
   const paged = usePaged(shown, `${filter}|${view}`);
-
-  const run: RunFn = (fn, success, after) =>
-    startTransition(async () => {
-      try {
-        const result = await fn();
-        if (!result.ok) return void toast.error(result.error ?? "Something went wrong.");
-        toast.success(typeof success === "function" ? success() : success);
-        after?.();
-        router.refresh();
-      } catch {
-        toast.error("No connection. Try again.");
-      }
-    });
 
   const toggle = (id: string) =>
     setPicked((p) => {
@@ -297,74 +175,8 @@ export function SchedulesPanel({ rows, withoutSchedule, today, clients }: { rows
       return next;
     });
 
-  const askToEnd = async (r: ScheduleListRow) => {
-    const proceed = await confirm({
-      title: `End ${r.name}'s schedule today?`,
-      description: "After today, ELEVATE will no longer use this schedule to flag late arrivals, absences, early leaves, or extra hours. The history stays recorded.",
-      confirmLabel: "End schedule today",
-      cancelLabel: "Keep schedule",
-      destructive: true,
-    });
-    if (!proceed) return;
-    run(() => endSchedule({ employeeId: r.employeeId, endDate: today }), "Schedule ended. The person was notified.");
-  };
-
   return (
     <div className="space-y-6">
-      {fix ? (
-        <FormDialog
-          label="Correct schedule"
-          title={`Correct the recent schedule for ${fix.name}`}
-          description="Use this only for a recent mistake. Older schedule history is kept; set a new dated schedule instead."
-          size="xl"
-          open
-          onOpenChange={(open) => !open && setFix(null)}
-          hideTrigger
-        >
-        <form
-          className="space-y-4"
-          onSubmit={(e) => {
-            e.preventDefault();
-            run(
-              () => correctSchedule({ employeeId: fix.employeeId, clientId: fix.correctable?.clientId ?? "", startTime: fixStart, endTime: fixEnd, weekdays: fixDays, breakMinutes: fixBreak, zone: fixZone, reason: fixReason }),
-              "Schedule corrected.",
-              () => setFix(null),
-            );
-          }}
-        >
-          <p className="text-sm text-muted-foreground">
-            This rewrites the {fix.correctable && fix.correctable.count > 1 ? `${fix.correctable.count} schedule entries` : "schedule entry"} that started in the last 7 days, keeping their dates. Identical touching entries are joined, and your reason is audited.
-          </p>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <TextField id="fx-start" label="Shift starts" type="time" value={fixStart} onChange={(e) => setFixStart(e.target.value)} required />
-            <TextField id="fx-end" label="Shift ends" type="time" value={fixEnd} onChange={(e) => setFixEnd(e.target.value)} required />
-            <TextField id="fx-break" label="Unpaid break (minutes)" type="number" min="0" max="240" value={fixBreak} onChange={(e) => setFixBreak(e.target.value)} />
-            <TextField id="fx-zone" label="Time zone" list="sc-zones" value={fixZone} onChange={(e) => setFixZone(e.target.value)} placeholder="Keep each entry's zone" />
-          </div>
-          <fieldset className="space-y-1.5">
-            <legend className="text-sm font-medium">Working days</legend>
-            <div className="flex flex-wrap gap-3">
-              {WEEKDAYS.map((w) => (
-                <label key={w.n} htmlFor={`fx-day-${w.n}`} className="flex items-center gap-1.5 text-sm">
-                  <input id={`fx-day-${w.n}`} type="checkbox" className="size-4 accent-primary" checked={fixDays.includes(w.n)} onChange={(e) => setFixDays((d) => (e.target.checked ? [...d, w.n] : d.filter((x) => x !== w.n)))} />
-                  {w.short}
-                </label>
-              ))}
-            </div>
-          </fieldset>
-          <TextField id="fx-reason" label="Why is this being corrected?" value={fixReason} onChange={(e) => setFixReason(e.target.value)} required maxLength={300} hint="For example: two clients, one shift. No client or patient details." />
-          <div className="flex flex-wrap items-center gap-3">
-            <Button type="submit" disabled={pending || fixDays.length === 0 || fixReason.trim().length < 5}>
-              Correct schedule
-            </Button>
-            <Button type="button" variant="ghost" onClick={() => setFix(null)}>
-              Cancel
-            </Button>
-          </div>
-        </form>
-        </FormDialog>
-      ) : null}
-
       <section aria-label="Schedules" className="space-y-2">
         <div className="space-y-3 rounded-xl border bg-card p-4">
           <div className="flex flex-wrap items-end justify-between gap-3">
@@ -392,7 +204,7 @@ export function SchedulesPanel({ rows, withoutSchedule, today, clients }: { rows
               <p className="text-sm font-medium">{picked.size} {picked.size === 1 ? "person" : "people"} selected</p>
               <div className="flex flex-wrap gap-2">
                 <Button type="button" size="sm" variant="ghost" onClick={() => setPicked(new Set())}>Clear selection</Button>
-                <FormDialog label={`Set schedule for ${picked.size}`} title="Set a schedule" description="Times are in the schedule's time zone. Choosing a new schedule ends an existing schedule the day before, while keeping its history." size="xl">
+                <FormDialog label={`Set schedule for ${picked.size}`} title="Set a schedule" description="Times are in the schedule's time zone. By default the new shifts are added to what each person already has. Anyone clocked in now follows the change as soon as you save." size="xl">
                   <SetScheduleForm picked={[...picked]} today={today} clients={clients} run={run} pending={pending} onDone={() => setPicked(new Set())} />
                 </FormDialog>
                 <FormDialog label={`End schedule for ${picked.size}`} title="End schedules" description="Ends the current schedule of everyone selected." variant="outline" size="md">
@@ -423,8 +235,7 @@ export function SchedulesPanel({ rows, withoutSchedule, today, clients }: { rows
                 </TableHead>
                 <TableHead>Person</TableHead>
                 <TableHead>Team</TableHead>
-                <TableHead>Schedule</TableHead>
-                <TableHead>In Manila</TableHead>
+                <TableHead>This week</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -434,23 +245,15 @@ export function SchedulesPanel({ rows, withoutSchedule, today, clients }: { rows
                   <TableCell data-select="">
                     <input type="checkbox" aria-label={`Select ${r.name}`} className="size-4 accent-primary" checked={picked.has(r.employeeId)} onChange={() => toggle(r.employeeId)} />
                   </TableCell>
-                  <TableCell className="font-medium">{r.name}</TableCell>
+                  <TableCell className="font-medium">
+                    <Link href={`/schedules/${r.employeeId}`} className="text-primary underline-offset-4 hover:underline">
+                      {r.name}
+                    </Link>
+                  </TableCell>
                   <TableCell label="Team">{r.team ?? "No team"}</TableCell>
-                  <TableCell label="Schedule">
-                    {r.current ? (
-                      <span>
-                        {r.current.clientName ? <strong className="font-medium">{r.current.clientName}: </strong> : null}
-                        {r.current.days}, {r.current.client}
-                        {r.current.allottedMinutes ? ` (${r.current.allottedMinutes / 60} h a day for the client)` : ""}
-                        <span className="block text-xs text-muted-foreground">from {formatDateOnly(r.current.effectiveFrom)}</span>
-                        {r.others.map((o) => (
-                          <span key={o.effectiveFrom + o.client + (o.clientName ?? "")} className="block text-xs">
-                            Also {o.clientName ? `${o.clientName}: ` : ""}
-                            {o.days}, {o.client}
-                            {o.allottedMinutes ? ` (${o.allottedMinutes / 60} h a day)` : ""}
-                          </span>
-                        ))}
-                      </span>
+                  <TableCell label="This week">
+                    {r.entries.length > 0 ? (
+                      <ScheduleChips chips={r.chips} nextChange={r.nextChange} />
                     ) : (
                       <>
                         <Badge variant="outline">No schedule</Badge>
@@ -458,15 +261,9 @@ export function SchedulesPanel({ rows, withoutSchedule, today, clients }: { rows
                         {r.dayHours.length > 0 ? <span className="block text-xs text-muted-foreground">Coming up: {r.dayHours.map((d) => `${formatDateOnly(d.date)} ${d.minutes / 60} h`).join(", ")}</span> : null}
                       </>
                     )}
-                    {r.upcoming ? (
-                      <span className="block text-xs text-muted-foreground">
-                        Then from {formatDateOnly(r.upcoming.effectiveFrom)}: {r.upcoming.days}, {r.upcoming.client}
-                      </span>
-                    ) : null}
                   </TableCell>
-                  <TableCell label="In Manila">{r.current?.manila ?? "-"}</TableCell>
-                  <TableCell label="" className="flex flex-wrap justify-end gap-1">
-                    {!r.current ? (
+                  <TableCell label="" className="text-right">
+                    {!isCurrent(r) ? (
                       <FormDialog
                         label="Set schedule"
                         title={`Set a schedule for ${r.name}`}
@@ -477,17 +274,11 @@ export function SchedulesPanel({ rows, withoutSchedule, today, clients }: { rows
                       >
                         <SetScheduleForm picked={[r.employeeId]} today={today} clients={clients} run={run} pending={pending} onDone={() => setPicked(new Set())} />
                       </FormDialog>
-                    ) : null}
-                    {r.correctable ? (
-                      <Button size="sm" variant="outline" disabled={pending} onClick={() => openFix(r)}>
-                        Correct
+                    ) : (
+                      <Button size="sm" variant="outline" nativeButton={false} render={<Link href={`/schedules/${r.employeeId}`} />}>
+                        Manage
                       </Button>
-                    ) : null}
-                    {r.current ? (
-                      <Button size="sm" variant="ghost" disabled={pending} onClick={() => void askToEnd(r)}>
-                        End today
-                      </Button>
-                    ) : null}
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

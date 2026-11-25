@@ -54,8 +54,8 @@ export async function loadLiveData(): Promise<LiveData> {
   const clientRows = await rows<{ id: string; name: string }>(sql`select id, name from core.clients where archived_at is null and is_active`);
   const assignments = await rows<{ id: string; employee_id: string; client_id: string; start_date: string; end_date: string | null; hours_per_week: string | null }>(sql`
     select id, employee_id, client_id, start_date::text, end_date::text, hours_per_week::text from core.client_assignments where end_date is null`);
-  const schedules = await rows<{ id: string; employee_id: string; effective_from: string; effective_to: string | null; start_time: string; end_time: string; zone: string; weekdays: number[]; break_minutes: number }>(sql`
-    select id, employee_id, effective_from::text, effective_to::text, start_time, end_time, zone, weekdays, break_minutes from time.schedules where effective_to is null`);
+  const schedules = await rows<{ id: string; employee_id: string; effective_from: string; effective_to: string | null; start_time: string; end_time: string; zone: string; weekdays: number[]; break_minutes: number; client_id: string | null }>(sql`
+    select id, employee_id, effective_from::text, effective_to::text, start_time, end_time, zone, weekdays, break_minutes, client_id from time.schedules where effective_to is null and removed_at is null`);
   const aliasRows = await rows<{ kind: string; sheet_key: string; employee_id: string | null; client_id: string | null }>(sql`select kind, sheet_key, employee_id, client_id from ops.schedule_import_aliases`);
   const aliases = { persons: {} as Record<string, string>, clients: {} as Record<string, string> };
   for (const a of aliasRows) {
@@ -66,7 +66,7 @@ export async function loadLiveData(): Promise<LiveData> {
     employees: employeeRows.map((e) => ({ id: e.id, workEmail: e.work_email, first: e.first, middle: e.middle, last: e.last, preferred: e.preferred, status: e.status })),
     clients: clientRows,
     assignments: assignments.map((a) => ({ id: a.id, employeeId: a.employee_id, clientId: a.client_id, startDate: a.start_date, endDate: a.end_date, hoursPerWeek: a.hours_per_week === null ? null : Number(a.hours_per_week) })),
-    schedules: schedules.map((s) => ({ id: s.id, employeeId: s.employee_id, effectiveFrom: s.effective_from, effectiveTo: s.effective_to, startTime: s.start_time, endTime: s.end_time, zone: s.zone, weekdays: s.weekdays, breakMinutes: s.break_minutes })),
+    schedules: schedules.map((s) => ({ id: s.id, employeeId: s.employee_id, effectiveFrom: s.effective_from, effectiveTo: s.effective_to, startTime: s.start_time, endTime: s.end_time, zone: s.zone, weekdays: s.weekdays, breakMinutes: s.break_minutes, clientId: s.client_id })),
     aliases,
   };
 }

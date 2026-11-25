@@ -16,7 +16,8 @@ import { breakLeftToday } from "./break-left";
 import { clockSourceOf } from "./clock-source";
 import { approvedWindows } from "./extra-hours-service";
 import { assignedClientsWithProjects, loadCurrentWork } from "./work-log";
-import { describeSchedule, extraMinutes, hasScheduleAround, scheduleFor, schedulesFor, shiftOn, shiftRange, type ScheduleLite } from "./schedule";
+import { extraMinutes, hasScheduleAround, shiftOn, shiftRange, type ScheduleLite } from "./schedule";
+import { nextChange, toEntry, weekChips, weekView, type DayChip, type ScheduleEntry, type WeekViewDay } from "./schedule-view";
 import { clockRules } from "./schema";
 import { loadSchedules, loadSchedulesFor } from "./schedule-service";
 import { loadEventsBetween, loadRecentEvents, monitoringPolicyPublished, pendingClockOut, prefsFor, rulesFor } from "./service";
@@ -168,8 +169,8 @@ export type MyTime = {
   zone: string;
   weekStart: string;
   days: { date: string; weekday: string; workedMinutes: number; breakMinutes: number; overbreakMinutes: number; sessions: number; firstIn: number | null; lastOut: number | null; open: boolean; sessionList: SessionDetail[]; scheduledMinutes: number | null; extraMinutes: number; approvedExtraMinutes: number; shift: { range: string; clientRange: string; zone: string } | null; holiday: boolean }[];
-  /** The person's schedule in force this week, described in the client's zone and Manila; null when they have none. */
-  schedule: { days: string; client: string; manila: string; zone: string; effectiveFrom: string } | null;
+  /** Every schedule in force during the week shown. */
+  schedules: ScheduleEntry[];
   weekMinutes: number;
   prefs: { shareLocation: boolean; timeZone: string | null };
   monitoringPublished: boolean;
@@ -231,7 +232,9 @@ export async function getMyTime(weekStartInput?: string): Promise<MyTime | null>
       holiday,
     };
   });
-  const current = scheduleFor(schedules, weekStart) ?? scheduleFor(schedules, addDays(weekStart, 6));
+  const weekEnd = addDays(weekStart, 6);
+  const inWeek = schedules.filter((x) => x.effectiveFrom <= weekEnd && (x.effectiveTo === null || x.effectiveTo >= weekStart));
+  const clientNames = await scheduleClientNames([inWeek]);
 
   const rows = (await db.execute(sql`
     select c.id, c.employee_id, c.reason, c.proposed, c.status, c.decision_note, c.created_at, c.kind, c.origin, c.original_proposed, c.requested_by, c.void_event_ids,
@@ -243,7 +246,7 @@ export async function getMyTime(weekStartInput?: string): Promise<MyTime | null>
   const sessionIds = days.flatMap((d) => d.sessionList.map((s) => s.eventId).filter((id): id is string => Boolean(id)));
   const noteRows = sessionIds.length === 0 ? [] : ((await db.execute(sql`select session_event_id, body, edited from time.shift_notes where employee_id = ${me.id} and session_event_id in (${list(sessionIds)})`)) as unknown as { session_event_id: string; body: string; edited: boolean }[]);
   return {
-    schedule: current ? { ...describeSchedule(current, weekStart), effectiveFrom: current.effectiveFrom } : null,
+    schedules: inWeek.map((x) => toEntry(x, todayInZone(), clientNames)),
     notes: Object.fromEntries(noteRows.map((n) => [n.session_event_id, { body: n.body, edited: n.edited }])),
     serverNowMs: Date.now(),
     noteWindowMs: EOD_EDIT_WINDOW_MS,
@@ -453,24 +456,21 @@ export async function listShiftNotes(): Promise<{ rows: NoteRow[]; scope: "all" 
   };
 }
 
+/** A client a shift can be for, with its time zone (the zone a new shift takes when HR names none). */
+export type ScheduleClient = { id: string; name: string; timeZone: string };
+
 export type ScheduleListRow = {
   employeeId: string;
   name: string;
   team: string | null;
-  zone: string | null;
-  current: CurrentScheduleLine | null;
-  /** The person's other schedules in force today (one per extra client), when they have more than one. */
-  others: CurrentScheduleLine[];
-  /** A schedule that starts later, when one is already set. */
-  upcoming: { effectiveFrom: string; days: string; client: string } | null;
-  /** Recent schedules HR may correct in place (started in the last 7 days or later), with the newest one's shift to prefill. */
-  /** HR's daily cap in minutes for this person (used when they have no schedule); null = the company default. */
+  /** Schedules in force today or starting later. */
+  entries: ScheduleEntry[];
+  chips: DayChip[];
+  nextChange: string | null;
   dailyCapMinutes: number | null;
-  /** Hours HR set for specific days in the next two weeks (people with no fixed schedule). */
+  /** Hours HR set for the coming days (people with no schedule). */
   dayHours: { date: string; minutes: number }[];
-  correctable: { count: number; startTime: string; endTime: string; weekdays: number[]; breakMinutes: number; zone: string; clientId: string | null } | null;
 };
-export type CurrentScheduleLine = { days: string; client: string; manila: string; effectiveFrom: string; breakMinutes: number; clientName: string | null; allottedMinutes: number | null };
 
 /** Names of the clients the given schedules are for. */
 async function scheduleClientNames(lists: Iterable<readonly ScheduleLite[]>): Promise<Map<string, string>> {
@@ -480,58 +480,39 @@ async function scheduleClientNames(lists: Iterable<readonly ScheduleLite[]>): Pr
   const found = (await db.execute(sql`select id, name from core.clients where id in (${list([...ids])})`)) as unknown as { id: string; name: string }[];
   return new Map(found.map((c) => [c.id, c.name]));
 }
-const currentLine = (s: ScheduleLite, today: string, names: Map<string, string>): CurrentScheduleLine => ({
-  ...pickDescription(s, today),
-  effectiveFrom: s.effectiveFrom,
-  breakMinutes: s.breakMinutes,
-  clientName: s.clientId ? (names.get(s.clientId) ?? null) : null,
-  allottedMinutes: s.allottedMinutesPerDay ?? null,
-});
 
-/** Everyone active with their current schedule (or none). HR only. */
-export async function listSchedules(): Promise<{ rows: ScheduleListRow[]; withoutSchedule: number; clients: { id: string; name: string }[] }> {
+type ListPerson = { id: string; first: string; last: string; preferred: string | null; team: string | null; cap: number | null };
+
+function listRow(p: ListPerson, all: (ScheduleLite & { id: string })[], names: Map<string, string>, today: string, dayHours: { date: string; minutes: number }[]): ScheduleListRow {
+  return {
+    employeeId: p.id,
+    name: reportName({ first: p.first, last: p.last, preferred: p.preferred }),
+    team: p.team,
+    entries: all.map((s) => toEntry(s, today, names)).filter((e) => e.status !== "past"),
+    chips: weekChips(all, today, names),
+    nextChange: nextChange(all, today),
+    dailyCapMinutes: p.cap === null ? null : Number(p.cap),
+    dayHours,
+  };
+}
+
+/** Everyone active with their schedules (or none). HR only. */
+export async function listSchedules(): Promise<{ rows: ScheduleListRow[]; withoutSchedule: number; clients: ScheduleClient[] }> {
   const user = await requireUser();
   await authorize(user, "schedules.manage");
   const people = (await db.execute(sql`
     select e.id, e.legal_first_name as first, e.legal_last_name as last, e.preferred_name as preferred, t.name as team, e.daily_cap_minutes as cap
     from core.employees e left join core.teams t on t.id = e.team_id
-    where e.archived_at is null and e.status <> 'separated' order by e.legal_last_name, e.legal_first_name limit 1000`)) as unknown as { id: string; first: string; last: string; preferred: string | null; team: string | null; cap: number | null }[];
+    where e.archived_at is null and e.status <> 'separated' order by e.legal_last_name, e.legal_first_name limit 1000`)) as unknown as ListPerson[];
   const byPerson = await loadSchedulesFor(db, people.map((p) => p.id));
   const names = await scheduleClientNames(byPerson.values());
   const today = todayInZone();
   const dayHoursBy = new Map<string, { date: string; minutes: number }[]>();
   for (const d of (await db.execute(sql`select employee_id, date::text as date, minutes from time.daily_hours where date between ${today}::date and (${today}::date + 14) order by date`)) as unknown as { employee_id: string; date: string; minutes: number }[]) dayHoursBy.set(d.employee_id, [...(dayHoursBy.get(d.employee_id) ?? []), { date: d.date, minutes: Number(d.minutes) }]);
-  const rows = people.map((p) => {
-    const list = byPerson.get(p.id) ?? [];
-    const nowAll = schedulesFor(list, today);
-    const now = nowAll[0] ?? null;
-    const later = list.find((s) => s.effectiveFrom > today);
-    return {
-      employeeId: p.id,
-      name: reportName({ first: p.first, last: p.last, preferred: p.preferred }),
-      team: p.team,
-      zone: now?.zone ?? later?.zone ?? null,
-      current: now ? currentLine(now, today, names) : null,
-      others: nowAll.slice(1).map((s) => currentLine(s, today, names)),
-      dailyCapMinutes: p.cap === null ? null : Number(p.cap),
-      dayHours: dayHoursBy.get(p.id) ?? [],
-      correctable: (() => {
-        const lastAny = list.filter((s) => s.effectiveFrom >= addDays(today, -7)).pop();
-        const recent = list.filter((s) => s.effectiveFrom >= addDays(today, -7) && (s.clientId ?? null) === (lastAny?.clientId ?? null));
-        const last = recent[recent.length - 1];
-        return last ? { count: recent.length, startTime: last.startTime, endTime: last.endTime, weekdays: [...last.weekdays], breakMinutes: last.breakMinutes, zone: last.zone, clientId: last.clientId ?? null } : null;
-      })(),
-      upcoming: later ? { effectiveFrom: later.effectiveFrom, days: describeSchedule(later, later.effectiveFrom).days, client: describeSchedule(later, later.effectiveFrom).client } : null,
-    };
-  });
-  const clients = (await db.execute(sql`select id, name from core.clients where archived_at is null order by name limit 500`)) as unknown as { id: string; name: string }[];
-  return { rows, withoutSchedule: rows.filter((r) => !r.current).length, clients };
+  const rows = people.map((p) => listRow(p, byPerson.get(p.id) ?? [], names, today, dayHoursBy.get(p.id) ?? []));
+  const clients = (await db.execute(sql`select id, name, time_zone as "timeZone" from core.clients where archived_at is null order by name limit 500`)) as unknown as ScheduleClient[];
+  return { rows, withoutSchedule: rows.filter((r) => !r.entries.some((e) => e.status === "current")).length, clients };
 }
-
-const pickDescription = (s: Parameters<typeof describeSchedule>[0], date: string) => {
-  const d = describeSchedule(s, date);
-  return { days: d.days, client: `${d.client} (${d.zone})`, manila: d.manila };
-};
 
 
 export type CorrectionBatch = { batchId: string; filedBy: string; createdAt: string; waiting: number; people: number; reason: string; mine: boolean };
@@ -548,30 +529,65 @@ export async function listCorrectionBatches(): Promise<CorrectionBatch[]> {
   return rows.map((r) => ({ batchId: r.batch_id, filedBy: r.filer ?? "HR", createdAt: new Date(r.created_at).toISOString(), waiting: r.waiting, people: r.people, reason: r.reason, mine: r.requested_by === user.id }));
 }
 
-export type ScheduleLine = { from: string; to: string | null; days: string; client: string; manila: string; zone: string; breakMinutes: number; clientName: string | null; allottedMinutes: number | null };
-export type MyScheduleView = { current: ScheduleLine | null; /** The person's other schedules in force today (one per extra client). */ others: ScheduleLine[]; upcoming: ScheduleLine[]; past: ScheduleLine[] };
-
-const toLine = (s: ScheduleLite, names: Map<string, string>): ScheduleLine => {
-  const d = describeSchedule(s, s.effectiveFrom);
-  return { from: s.effectiveFrom, to: s.effectiveTo, days: d.days, client: d.client, manila: d.manila, zone: d.zone, breakMinutes: s.breakMinutes, clientName: s.clientId ? (names.get(s.clientId) ?? null) : null, allottedMinutes: s.allottedMinutesPerDay ?? null };
+export type PersonSchedule = {
+  employeeId: string;
+  name: string;
+  today: string;
+  weekStart: string;
+  week: WeekViewDay[];
+  entries: ScheduleEntry[];
+  /** HR can change it. */
+  canManage: boolean;
+  /** The clients a new shift can be for (the person's assignments); empty unless HR. */
+  clients: ScheduleClient[];
+  /** A change takes effect on a running clock, so HR is warned. */
+  clockedIn: boolean;
 };
 
-/** The signed-in person's own schedule: the one in force, ones that start later, and earlier ones. Null without a people record. */
-export async function getMySchedule(): Promise<MyScheduleView | null> {
+async function personSchedule(employeeId: string, name: string, week: string | undefined, canManage: boolean): Promise<PersonSchedule> {
+  const schedules = await loadSchedules(db, employeeId);
+  const today = todayInZone();
+  const asked = week && /^\d{4}-\d{2}-\d{2}$/.test(week) && !Number.isNaN(Date.parse(`${week}T00:00:00Z`)) ? week : today;
+  const weekStart = mondayOf(asked);
+  const names = await scheduleClientNames([schedules]);
+  const clients = canManage
+    ? ((await db.execute(sql`
+        select distinct c.id, c.name, c.time_zone as "timeZone" from core.client_assignments a join core.clients c on c.id = a.client_id
+        where a.employee_id = ${employeeId} and c.archived_at is null and (a.end_date is null or a.end_date >= ${today}::date) order by c.name`)) as unknown as ScheduleClient[])
+    : [];
+  return {
+    employeeId,
+    name,
+    today,
+    weekStart,
+    week: weekView(schedules, weekStart, names),
+    entries: schedules.map((s) => toEntry(s, today, names)),
+    canManage,
+    clients: clients.map((c) => ({ id: c.id, name: c.name, timeZone: c.timeZone })),
+    clockedIn: canManage && replayClock(await loadRecentEvents(db, employeeId)).state !== "out",
+  };
+}
+
+/** The signed-in person's own schedules and week. Null without a people record. */
+export async function getMySchedule(week?: string): Promise<PersonSchedule | null> {
   const user = await requireUser();
   await authorize(user, "schedules.view", { ownerUserId: user.id });
   const me = await myEmployee(user.id);
   if (!me) return null;
-  const schedules = await loadSchedules(db, me.id);
-  const today = todayInZone();
-  const names = await scheduleClientNames([schedules]);
-  const nowAll = schedulesFor(schedules, today);
-  return {
-    current: nowAll[0] ? toLine(nowAll[0], names) : null,
-    others: nowAll.slice(1).map((s) => toLine(s, names)),
-    upcoming: schedules.filter((s) => s.effectiveFrom > today).map((s) => toLine(s, names)),
-    past: schedules.filter((s) => !nowAll.includes(s) && s.effectiveFrom <= today).map((s) => toLine(s, names)).reverse().slice(0, 10),
-  };
+  return personSchedule(me.id, "My schedule", week, false);
+}
+
+/** One person's schedules: HR (anyone, and may change them), a lead for their team, or the person. */
+export async function getPersonSchedule(employeeId: string, week?: string): Promise<PersonSchedule> {
+  const user = await requireUser();
+  const known = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(employeeId);
+  const [p] = known
+    ? ((await db.execute(sql`select id, user_id, legal_first_name as first, legal_last_name as last, preferred_name as preferred from core.employees where id = ${employeeId} and archived_at is null and status <> 'separated'`)) as unknown as { id: string; user_id: string | null; first: string; last: string; preferred: string | null }[])
+    : [];
+  // Someone who does not exist reads the same as someone you may not see.
+  if (!p) throw new ForbiddenError("schedules.view");
+  await authorize(user, "schedules.view", { ownerUserId: p.user_id ?? undefined, managerChainUserIds: await timeChainUserIds(db, p.id) });
+  return personSchedule(p.id, reportName({ first: p.first, last: p.last, preferred: p.preferred }), week, scopeFor(user, "schedules.manage") !== null);
 }
 
 /** A Team Lead's view of their downline's schedules (read only). HR uses listSchedules, which can change them. */
@@ -582,29 +598,10 @@ export async function listTeamSchedules(): Promise<{ rows: ScheduleListRow[] }> 
   const ids = await timeDownlineEmployeeIds(db, user.id);
   if (ids.length === 0) return { rows: [] };
   const people = (await db.execute(sql`
-    select e.id, e.legal_first_name as first, e.legal_last_name as last, e.preferred_name as preferred, t.name as team
-    from core.employees e left join core.teams t on t.id = e.team_id where e.id in (${list(ids)}) and e.archived_at is null and e.status <> 'separated' order by e.legal_last_name, e.legal_first_name`)) as unknown as { id: string; first: string; last: string; preferred: string | null; team: string | null }[];
+    select e.id, e.legal_first_name as first, e.legal_last_name as last, e.preferred_name as preferred, t.name as team, null::int as cap
+    from core.employees e left join core.teams t on t.id = e.team_id where e.id in (${list(ids)}) and e.archived_at is null and e.status <> 'separated' order by e.legal_last_name, e.legal_first_name`)) as unknown as ListPerson[];
   const byPerson = await loadSchedulesFor(db, people.map((p) => p.id));
   const names = await scheduleClientNames(byPerson.values());
   const today = todayInZone();
-  return {
-    rows: people.map((p) => {
-      const sched = byPerson.get(p.id) ?? [];
-      const nowAll = schedulesFor(sched, today);
-      const now = nowAll[0] ?? null;
-      const later = sched.find((s) => s.effectiveFrom > today);
-      return {
-        employeeId: p.id,
-        name: reportName({ first: p.first, last: p.last, preferred: p.preferred }),
-        team: p.team,
-        zone: now?.zone ?? later?.zone ?? null,
-        current: now ? currentLine(now, today, names) : null,
-        others: nowAll.slice(1).map((s) => currentLine(s, today, names)),
-        dailyCapMinutes: null,
-        dayHours: [],
-        correctable: null,
-        upcoming: later ? { effectiveFrom: later.effectiveFrom, days: describeSchedule(later, later.effectiveFrom).days, client: describeSchedule(later, later.effectiveFrom).client } : null,
-      };
-    }),
-  };
+  return { rows: people.map((p) => listRow(p, byPerson.get(p.id) ?? [], names, today, [])) };
 }
