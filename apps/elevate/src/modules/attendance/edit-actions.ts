@@ -5,12 +5,14 @@ import { revalidatePath } from "next/cache";
 import { ForbiddenError, authorize, scopeFor } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { formatInZone } from "@/lib/time";
 import { ActionFailure, fail, runAction, type ActionResult } from "@/lib/run-action";
 import { writeAudit } from "@/modules/audit/write";
 import { hrUserIds, notify } from "@/modules/notifications/service";
 import { reportName, timeChainUserIds } from "@/modules/org/service";
 import { employees } from "@/modules/people/schema";
 import { rebuildAfterChange } from "./edit-service";
+import { assignedToClient } from "./extra-hours-service";
 import { clockCorrections, clockEvents, clockEventVoids } from "./schema";
 import { MAX_APPEAL_AGE_MS, MAX_EDIT_AGE_MS, checkProposal, lockEmployeeClock, prefsFor } from "./service";
 import { editAttendanceSchema, loadDaySchema } from "./validators";
@@ -26,10 +28,11 @@ function refresh() {
   for (const p of ["/attendance", "/team-attendance", "/hours-review", "/dashboard"]) revalidatePath(p);
 }
 
-export type DayEvent = { id: string; type: string; at: string; source: string; removed: boolean };
+export type DayEvent = { id: string; type: string; at: string; source: string; removed: boolean; clientId: string | null; clientName: string | null };
+export type EditableDay = { zone: string; events: DayEvent[]; /** The clients the person is assigned to on that day. */ clients: { id: string; name: string }[] };
 
 /** One person's clock events on one calendar day of their own zone (and the evening of the day before, for a night shift), with the ones already removed marked. */
-export async function loadEditableDay(input: unknown): Promise<ActionResult<{ zone: string; events: DayEvent[] }>> {
+export async function loadEditableDay(input: unknown): Promise<ActionResult<EditableDay>> {
   const actor = await requireUser();
   return runAction(async () => {
     const scope = scopeFor(actor, "attendance.edit_hours");
@@ -45,11 +48,21 @@ export async function loadEditableDay(input: unknown): Promise<ActionResult<{ zo
     const from = Date.parse(`${date}T00:00:00Z`) - 2 * 86_400_000;
     const to = Date.parse(`${date}T00:00:00Z`) + 3 * 86_400_000;
     const rows = (await db.execute(sql`
-      select e.id, e.type, e.occurred_at, e.source, (v.id is not null) as removed
-      from time.clock_events e left join time.clock_event_voids v on v.event_id = e.id
+      select e.id, e.type, e.occurred_at, e.source, (v.id is not null) as removed, e.client_id, c.name as client_name
+      from time.clock_events e left join time.clock_event_voids v on v.event_id = e.id left join core.clients c on c.id = e.client_id
       where e.employee_id = ${employeeId} and e.occurred_at between to_timestamp(${from / 1000}) and to_timestamp(${to / 1000})
-      order by e.occurred_at, e.created_at`)) as unknown as { id: string; type: string; occurred_at: string | Date; source: string; removed: boolean }[];
-    return { ok: true, data: { zone, events: rows.map((r) => ({ id: r.id, type: r.type, at: new Date(r.occurred_at).toISOString(), source: r.source, removed: r.removed })) } };
+      order by e.occurred_at, e.created_at`)) as unknown as { id: string; type: string; occurred_at: string | Date; source: string; removed: boolean; client_id: string | null; client_name: string | null }[];
+    const clients = (await db.execute(sql`
+      select distinct c.id, c.name from core.client_assignments a join core.clients c on c.id = a.client_id
+      where a.employee_id = ${employeeId} and c.archived_at is null and a.start_date <= ${date}::date and (a.end_date is null or a.end_date >= ${date}::date) order by c.name`)) as unknown as { id: string; name: string }[];
+    return {
+      ok: true,
+      data: {
+        zone,
+        clients: clients.map((c) => ({ id: c.id, name: c.name })),
+        events: rows.map((r) => ({ id: r.id, type: r.type, at: new Date(r.occurred_at).toISOString(), source: r.source, removed: r.removed, clientId: r.client_id, clientName: r.client_name })),
+      },
+    };
   });
 }
 
@@ -65,7 +78,7 @@ export async function editAttendance(input: unknown): Promise<ActionResult<{ app
     const parsed = editAttendanceSchema.safeParse(input);
     if (!parsed.success) return fail(first(parsed.error));
     const { employeeId, voidEventIds, reason } = parsed.data;
-    const events = parsed.data.events.map((e) => ({ type: e.type, at: new Date(e.at).toISOString() }));
+    const events = parsed.data.events.map((e) => ({ type: e.type, at: new Date(e.at).toISOString(), ...(e.clientId ? { clientId: e.clientId } : {}) }));
     const [target] = await db
       .select({ id: employees.id, userId: employees.userId, first: employees.legalFirstName, last: employees.legalLastName, preferred: employees.preferredName })
       .from(employees)
@@ -80,6 +93,19 @@ export async function editAttendance(input: unknown): Promise<ActionResult<{ app
     const effective = async (executor: Pick<typeof db, "execute">) =>
       voidEventIds.length === 0 ? 0 : (((await executor.execute(sql`select count(*)::int as n from time.v_clock_events where employee_id = ${employeeId} and id = any(${`{${voidEventIds.join(",")}}`}::uuid[])`)) as unknown as { n: number }[])[0]?.n ?? 0);
     if ((await effective(db)) !== voidEventIds.length) return fail("One of those events is not on this person's record, or it was already removed.");
+    // A client must be one the person works for on that day (in their own zone). Jibble's own entries are mapped on the Jibble page instead:
+    // the import would bring back anything changed here.
+    const withClient = events.filter((e) => e.clientId);
+    if (withClient.length > 0) {
+      const zone = (await prefsFor(db, employeeId)).zone;
+      for (const e of withClient) {
+        if (!(await assignedToClient(db, employeeId, e.clientId!, formatInZone(Date.parse(e.at), zone, "yyyy-MM-dd")))) return fail("They are not assigned to that client on that day.");
+      }
+      if (voidEventIds.length > 0) {
+        const fromJibble = (await db.execute(sql`select (extract(epoch from occurred_at) * 1000)::float8 as at from time.clock_events where employee_id = ${employeeId} and source = 'jibble' and id = any(${`{${voidEventIds.join(",")}}`}::uuid[])`)) as unknown as { at: number }[];
+        if (fromJibble.some((j) => withClient.some((e) => Date.parse(e.at) === Math.round(Number(j.at))))) return fail("That time came from Jibble. Choose its client by mapping the project or activity on the Jibble page.");
+      }
+    }
     const problem = await checkProposal(employeeId, events, Date.now(), undefined, opts);
     if (problem) return fail(problem);
 
@@ -108,7 +134,7 @@ export async function editAttendance(input: unknown): Promise<ActionResult<{ app
       if ((await effective(tx)) !== voidEventIds.length) throw new ActionFailure("One of those events was changed by someone else a moment ago. Load the day again.");
       const again = await checkProposal(employeeId, events, Date.now(), tx, opts);
       if (again) throw new ActionFailure(again);
-      const removedRows = voidEventIds.length === 0 ? [] : ((await tx.execute(sql`select id, type, occurred_at from time.clock_events where id = any(${`{${voidEventIds.join(",")}}`}::uuid[])`)) as unknown as { id: string; type: string; occurred_at: string | Date }[]);
+      const removedRows = voidEventIds.length === 0 ? [] : ((await tx.execute(sql`select id, type, occurred_at, client_id from time.clock_events where id = any(${`{${voidEventIds.join(",")}}`}::uuid[])`)) as unknown as { id: string; type: string; occurred_at: string | Date; client_id: string | null }[]);
       earliest = Math.min(earliest, ...removedRows.map((r) => new Date(r.occurred_at).getTime()));
       const [row] = await tx
         .insert(clockCorrections)
@@ -116,7 +142,10 @@ export async function editAttendance(input: unknown): Promise<ActionResult<{ app
         .returning({ id: clockCorrections.id });
       if (voidEventIds.length > 0) await tx.insert(clockEventVoids).values(voidEventIds.map((eventId) => ({ eventId, reason, voidedBy: actor.id, correctionId: row.id })));
       if (events.length > 0) {
-        await tx.insert(clockEvents).values(events.map((e) => ({ employeeId, type: e.type, occurredAt: new Date(e.at), source: "admin_correction", correctionId: row.id, correctionReason: reason, createdBy: actor.id })));
+        // One at a time, so events given the same time are recorded in the order listed.
+        for (const e of events) {
+          await tx.insert(clockEvents).values({ employeeId, type: e.type, occurredAt: new Date(e.at), clientId: e.clientId ?? null, source: "admin_correction", correctionId: row.id, correctionReason: reason, createdBy: actor.id, createdAt: sql`clock_timestamp()` as unknown as Date });
+        }
       }
       if (target.userId) await notify(tx, { userId: target.userId, kind: "attendance.time_changed", title: "Your recorded time was changed", body: reason, link: "/attendance" });
       await writeAudit(
@@ -125,7 +154,7 @@ export async function editAttendance(input: unknown): Promise<ActionResult<{ app
           action: "clock.edit_hours",
           targetType: "employee",
           targetId: employeeId,
-          before: { removed: removedRows.map((r) => ({ id: r.id, type: r.type, at: new Date(r.occurred_at).toISOString() })) },
+          before: { removed: removedRows.map((r) => ({ id: r.id, type: r.type, at: new Date(r.occurred_at).toISOString(), clientId: r.client_id })) },
           after: { added: events },
           metadata: { correctionId: row.id, reason },
         },

@@ -9,9 +9,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { formatInZone } from "@/lib/time";
-import { editAttendance, loadEditableDay, type DayEvent } from "../edit-actions";
+import { editAttendance, loadEditableDay, type EditableDay } from "../edit-actions";
 import type { FilablePerson } from "../queries";
 
 const TYPES = [
@@ -19,11 +20,13 @@ const TYPES = [
   { key: "break_start", label: "Break start" },
   { key: "break_end", label: "Break end" },
   { key: "clock_out", label: "Clock out" },
+  { key: "switch_client", label: "Switch client" },
 ] as const;
-const TYPE_LABEL = new Map<string, string>([...TYPES.map((t) => [t.key, t.label] as const), ["switch_client", "Switch client"]]);
+const TYPE_LABEL = new Map<string, string>(TYPES.map((t) => [t.key, t.label] as const));
+const hasClient = (type: string) => type === "clock_in" || type === "switch_client";
 const MAX_CHANGES = 6;
 
-type Add = { type: (typeof TYPES)[number]["key"]; at: string };
+type Add = { type: (typeof TYPES)[number]["key"]; at: string; clientId: string };
 
 /**
  * Change someone's recorded time: pick the person and the day, tick the events that were recorded wrongly (they are marked removed, never
@@ -35,7 +38,9 @@ export function EditHoursForm({ people, applyNow, initial }: { people: FilablePe
   const [find, setFind] = useState("");
   const [employeeId, setEmployeeId] = useState(initial?.employeeId ?? "");
   const [date, setDate] = useState(() => initial?.date ?? new Date().toLocaleDateString("sv-SE"));
-  const [day, setDay] = useState<{ zone: string; events: DayEvent[] } | null>(null);
+  const [day, setDay] = useState<EditableDay | null>(null);
+  // Recorded events getting another client: event id to the new client.
+  const [moves, setMoves] = useState<Map<string, string>>(new Map());
   const [voids, setVoids] = useState<Set<string>>(new Set());
   const [adds, setAdds] = useState<Add[]>([]);
   const [reason, setReason] = useState("");
@@ -50,6 +55,7 @@ export function EditHoursForm({ people, applyNow, initial }: { people: FilablePe
       setDay(null);
       setVoids(new Set());
       setAdds([]);
+      setMoves(new Map());
       const result = await loadEditableDay({ employeeId, date });
       if (!result.ok) return void toast.error(result.error);
       setDay(result.data);
@@ -64,8 +70,20 @@ export function EditHoursForm({ people, applyNow, initial }: { people: FilablePe
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const changes = voids.size + adds.filter((a) => a.at).length;
-  const ready = Boolean(day) && changes > 0 && reason.trim().length >= 5 && adds.every((a) => a.at !== "");
+  // A change of client is the old event removed and the same one added with the new client.
+  const moved = (day?.events ?? []).filter((e) => moves.get(e.id) && !voids.has(e.id));
+  const removals = voids.size + moved.length;
+  const additions = adds.length + moved.length;
+  const changes = removals + adds.filter((a) => a.at).length;
+  const full = removals >= MAX_CHANGES || additions >= MAX_CHANGES;
+  const ready = Boolean(day) && changes > 0 && removals <= MAX_CHANGES && additions <= MAX_CHANGES && reason.trim().length >= 5 && adds.every((a) => a.at !== "" && (a.type !== "switch_client" || a.clientId !== ""));
+  const setMove = (id: string, clientId: string | null) =>
+    setMoves((prev) => {
+      const next = new Map(prev);
+      if (clientId === null) next.delete(id);
+      else next.set(id, clientId);
+      return next;
+    });
 
   const save = () =>
     start(async () => {
@@ -73,8 +91,11 @@ export function EditHoursForm({ people, applyNow, initial }: { people: FilablePe
       try {
         const result = await editAttendance({
           employeeId,
-          voidEventIds: [...voids],
-          events: adds.map((a) => ({ type: a.type, at: fromZonedTime(a.at, day.zone).toISOString() })),
+          voidEventIds: [...voids, ...moved.map((e) => e.id)],
+          events: [
+            ...moved.map((e) => ({ type: e.type, at: e.at, clientId: moves.get(e.id) })),
+            ...adds.map((a) => ({ type: a.type, at: fromZonedTime(a.at, day.zone).toISOString(), clientId: hasClient(a.type) ? a.clientId : "" })),
+          ],
           reason,
         });
         if (!result.ok) return void toast.error(result.error);
@@ -145,15 +166,37 @@ export function EditHoursForm({ people, applyNow, initial }: { people: FilablePe
                       />
                       <span className={e.removed ? "text-muted-foreground line-through" : voids.has(e.id) ? "text-destructive line-through" : undefined}>
                         {TYPE_LABEL.get(e.type) ?? e.type} · {formatInZone(e.at, day.zone, "EEE MMM d, h:mm a")}
+                        {hasClient(e.type) ? <span className="text-muted-foreground"> · {e.clientName ?? "No client"}</span> : null}
                       </span>
                     </label>
+                    {hasClient(e.type) && !e.removed && !voids.has(e.id) && e.source !== "jibble" && day.clients.length > 0 ? (
+                      moves.has(e.id) ? (
+                        <span className="flex items-center gap-2">
+                          <NativeSelect aria-label={`New client for ${TYPE_LABEL.get(e.type)} at ${formatInZone(e.at, day.zone, "h:mm a")}`} value={moves.get(e.id)} onChange={(ev) => setMove(e.id, ev.target.value)}>
+                            <option value="">Choose a client</option>
+                            {day.clients.filter((c) => c.id !== e.clientId).map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.name}
+                              </option>
+                            ))}
+                          </NativeSelect>
+                          <Button type="button" size="sm" variant="ghost" onClick={() => setMove(e.id, null)}>
+                            Keep
+                          </Button>
+                        </span>
+                      ) : day.clients.some((c) => c.id !== e.clientId) ? (
+                        <Button type="button" size="sm" variant="outline" disabled={full} onClick={() => setMove(e.id, "")}>
+                          Change client
+                        </Button>
+                      ) : null
+                    ) : null}
                     {e.removed ? <Badge variant="outline">Removed</Badge> : null}
                     {e.source === "admin_correction" && !e.removed ? <Badge variant="secondary">Corrected</Badge> : null}
                   </li>
                 ))}
               </ul>
             )}
-            <p className="text-xs text-muted-foreground">Tick an event to remove it (it was recorded by mistake).</p>
+            <p className="text-xs text-muted-foreground">Tick an event to remove it (it was recorded by mistake). Change client moves the time that follows to another client.</p>
           </section>
 
           <section aria-label="Events to add" className="space-y-2">
@@ -168,12 +211,22 @@ export function EditHoursForm({ people, applyNow, initial }: { people: FilablePe
                   ))}
                 </SelectField>
                 <TextField id={`eh-at-${i}`} label={`When (${day.zone})`} type="datetime-local" value={a.at} onChange={(e) => setAdds((list) => list.map((x, j) => (j === i ? { ...x, at: e.target.value } : x)))} required />
+                {hasClient(a.type) && day.clients.length > 0 ? (
+                  <SelectField id={`eh-client-${i}`} label="Client" value={a.clientId} onChange={(e) => setAdds((list) => list.map((x, j) => (j === i ? { ...x, clientId: e.target.value } : x)))}>
+                    <option value="">{a.type === "switch_client" ? "Choose a client" : "No client"}</option>
+                    {day.clients.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </SelectField>
+                ) : null}
                 <Button type="button" variant="ghost" size="sm" onClick={() => setAdds((list) => list.filter((_, j) => j !== i))}>
                   Remove row
                 </Button>
               </div>
             ))}
-            <Button type="button" variant="outline" size="sm" disabled={voids.size + adds.length >= MAX_CHANGES} onClick={() => setAdds((list) => [...list, { type: "clock_in", at: "" }])}>
+            <Button type="button" variant="outline" size="sm" disabled={full} onClick={() => setAdds((list) => [...list, { type: "clock_in", at: "", clientId: "" }])}>
               Add an event
             </Button>
           </section>

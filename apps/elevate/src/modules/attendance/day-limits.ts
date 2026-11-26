@@ -28,6 +28,8 @@ export type StopLimitInput = {
   clientId: string | null;
   /** Worked milliseconds today for each client (null key = no client), up to `nowMs`. */
   workedMsByClient: ReadonlyMap<string | null, number>;
+  /** The working stretches themselves (breaks left out). With them, time before the shift starts never uses up the client's allotted hours. */
+  stretches?: readonly { from: number; to: number; clientId: string | null }[];
   workedMsToday: number;
   /** HR's per-person daily cap in minutes, used only when there is no schedule. */
   dailyCapMinutes: number | null;
@@ -75,9 +77,15 @@ export function stopLimit(input: StopLimitInput): StopLimit {
       const parts = forClient.length > 0 ? forClient.filter((s) => s.date === shift.date) : [shift];
       const allotted = parts.every((s) => s.schedule.allottedMinutesPerDay != null) ? parts.reduce((sum, s) => sum + (s.schedule.allottedMinutesPerDay ?? 0), 0) : null;
       if (allotted !== null) {
-        const worked = input.workedMsByClient.get(input.clientId) ?? 0;
+        // Early work counts as worked time but not against the allotment: the allotment is counted from where the client's shift starts,
+        // so clocking in early never stops the clock before the shift ends (owner decision 2026-11-25).
+        const startsAt = Math.min(...parts.map((s) => s.startMs));
+        const worked = input.stretches
+          ? input.stretches.reduce((sum, w) => (w.clientId === input.clientId ? sum + Math.max(0, w.to - Math.max(w.from, startsAt)) : sum), 0)
+          : (input.workedMsByClient.get(input.clientId) ?? 0);
         const left = Math.max(0, allotted * MINUTE - worked);
-        if (nowMs + left < limit.limitMs) limit = { limitMs: nowMs + left, reason: "client_allotment", overrunMs: Math.max(0, worked - allotted * MINUTE) };
+        const from = input.stretches ? Math.max(nowMs, startsAt) : nowMs;
+        if (from + left < limit.limitMs) limit = { limitMs: from + left, reason: "client_allotment", overrunMs: Math.max(0, worked - allotted * MINUTE) };
       }
     }
   }

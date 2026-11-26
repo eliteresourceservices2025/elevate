@@ -437,7 +437,7 @@ const DAY_MS = 86_400_000;
 export const MAX_APPEAL_AGE_MS = 31 * DAY_MS;
 export const MAX_EDIT_AGE_MS = 365 * DAY_MS;
 
-export type ProposedEvents = { type: ClockType; at: string }[];
+export type ProposedEvents = { type: ClockType; at: string; clientId?: string }[];
 
 /**
  * Replays the person's events (without the ones being removed) together with the proposed ones: every proposed event must fit, nothing

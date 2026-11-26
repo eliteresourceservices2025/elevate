@@ -16,6 +16,15 @@ export type Release = {
 
 export const RELEASES: Release[] = [
   {
+    version: "1.3.0",
+    date: "2026-11-25",
+    title: "Start early without being cut short",
+    highlights: [
+      "Clocking in before your shift no longer uses up the client's hours, so the clock does not stop before the shift ends. The early time still counts as worked and can show as extra hours to review.",
+      "HR can change which client recorded time belongs to, from Change someone's time.",
+    ],
+  },
+  {
     version: "1.2.1",
     date: "2026-11-25",
     title: "Hours show as soon as you clock out",

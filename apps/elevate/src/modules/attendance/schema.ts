@@ -206,7 +206,7 @@ export const clockCorrections = time
       sourceJibbleEntryId: text("source_jibble_entry_id"),
       reason: text("reason").notNull(),
       /** The events to add: [{ type, at (ISO instant) }]. */
-      proposed: jsonb("proposed").$type<{ type: string; at: string }[]>().notNull(),
+      proposed: jsonb("proposed").$type<{ type: string; at: string; clientId?: string }[]>().notNull(),
       /** Why it is needed: forgot, connection_problem, device_problem or other. */
       kind: text("kind").notNull().default("other"),
       /** Corrections filed together from one spreadsheet (an outage, many people at once) share a batch id, so another HR admin can decide them together. */

@@ -63,6 +63,10 @@ A day with no schedule shows **No schedule**. **Rest day** means the person has 
 
 ![Open Days to see each day, then click Approve week.](help:approve-weekly-hours/02-approve-week.png)
 
+# Time under the wrong client
+
+Go to **Team attendance**, click **Change someone's time**, choose the person and day, and click **Show this day**. Beside a clock-in or switch, click **Change client**, pick the client and write why. The old entry stays in the record as removed. Time that came from Jibble is mapped on the Jibble page instead.
+
 # Rules
 
 - You can never approve your own hours.

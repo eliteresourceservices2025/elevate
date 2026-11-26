@@ -1,7 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import type { db } from "@/lib/db";
-import { segmentMs, type Replay } from "./clock";
+import { segmentMs, workLog, type Replay } from "./clock";
 import { clockSourceOf } from "./clock-source";
 import { stopLimit, type StopLimit } from "./day-limits";
 import { approvedWindows } from "./extra-hours-service";
@@ -49,6 +49,9 @@ export async function computeStopLimit(executor: Executor, employeeId: string, n
     }
   }
 
+  // Every session that reaches into this day, including one clocked in early (before a night shift's start).
+  const stretches = replay.sessions.filter((s) => (s.endAt ?? nowMs) > dayStart).flatMap((s) => workLog(s, nowMs));
+
   const clientId = opts.clientId !== undefined ? opts.clientId : currentClientOf(replay);
   const [person] = (await executor.execute(sql`select daily_cap_minutes as cap from core.employees where id = ${employeeId}`)) as unknown as { cap: number | null }[];
   const extraWindows = (await approvedWindows(executor, employeeId, nowMs - 12 * HOUR, nowMs + 24 * HOUR)).filter((w) => clientId === null || w.clientId === clientId);
@@ -66,6 +69,7 @@ export async function computeStopLimit(executor: Executor, employeeId: string, n
     offClientIds: offClientsOn(schedules, prefs.zone, day),
     clientId,
     workedMsByClient,
+    stretches,
     workedMsToday,
     dailyCapMinutes: dayHours ?? person?.cap ?? null,
     companyDefaultCapMinutes: rules.defaultDailyCapMinutes,

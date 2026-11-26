@@ -156,7 +156,7 @@ export async function answerIdlePrompt(input: unknown): Promise<ActionResult> {
 
 // --- Corrections ---------------------------------------------------------------------------------
 
-type Proposed = { type: "clock_in" | "break_start" | "break_end" | "clock_out"; at: string }[];
+type Proposed = { type: "clock_in" | "break_start" | "break_end" | "clock_out" | "switch_client"; at: string; clientId?: string }[];
 
 export async function requestCorrection(input: unknown): Promise<ActionResult> {
   const actor = await requireUser();
@@ -330,9 +330,18 @@ export async function decideCorrection(input: unknown): Promise<ActionResult> {
       const hrOnly = c.origin === "jibble" || c.requestedBy !== person.userId || needsHrDecision(Math.min(...original.map((p) => Date.parse(p.at))), c.createdAt.getTime());
       if (hrOnly && scopeFor(actor, "attendance.approve_correction") !== "all") throw new ActionFailure("Only HR can decide this request.");
 
-      const adjusted = events ? (events.map((e) => ({ type: e.type, at: new Date(e.at).toISOString() })) as Proposed) : null;
+      // A reviewer adjusts times only: the client each event was asked for stays with it (matched by type, in order).
+      const left = [...original];
+      const adjusted = events
+        ? (events.map((e) => {
+            const i = left.findIndex((o) => o.type === e.type);
+            const [was] = i >= 0 ? left.splice(i, 1) : [];
+            return { type: e.type, at: new Date(e.at).toISOString(), ...(was?.clientId ? { clientId: was.clientId } : {}) };
+          }) as Proposed)
+        : null;
       const changed = adjusted !== null && JSON.stringify(adjusted) !== JSON.stringify(original);
       const proposed = adjusted ?? original;
+      if (proposed.some((p) => p.type === "switch_client" && !p.clientId)) throw new ActionFailure("A switch needs its client. Make that change from Change someone's time.");
 
       if (decision === "approve" && c.origin === "jibble" && sourceEvidence) {
         const startMs = Date.parse(sourceEvidence.time);
@@ -363,6 +372,7 @@ export async function decideCorrection(input: unknown): Promise<ActionResult> {
               employeeId: c.employeeId,
               type: p.type,
               occurredAt: new Date(p.at),
+              clientId: p.clientId ?? null,
               source: "admin_correction",
               correctionId: c.id,
               correctionReason: c.reason,

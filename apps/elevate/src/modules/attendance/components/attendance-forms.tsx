@@ -75,7 +75,7 @@ export function PreferencesForm({ shareLocation, timeZone, monitoringPublished }
   );
 }
 
-const TYPE_LABEL = new Map([["clock_in", "Clock in"], ["break_start", "Break start"], ["break_end", "Break end"], ["clock_out", "Clock out"]]);
+const TYPE_LABEL = new Map([["clock_in", "Clock in"], ["break_start", "Break start"], ["break_end", "Break end"], ["clock_out", "Clock out"], ["switch_client", "Switch client"]]);
 
 type Preset = { key: string; label: string; fields: { type: "clock_in" | "break_start" | "break_end" | "clock_out"; label: string }[] };
 const PRESETS: Preset[] = [
@@ -262,6 +262,7 @@ function CorrectionDetail({ c, zone, mode }: { c: CorrectionItem; zone: string; 
         {c.proposed.map((p, i) => (
           <li key={i}>
             {TYPE_LABEL.get(p.type) ?? p.type} at {formatInZone(p.at, zone, "MMM d, yyyy h:mm a")}
+            {p.clientName ? `, ${p.clientName}` : ""}
           </li>
         ))}
       </ul>
