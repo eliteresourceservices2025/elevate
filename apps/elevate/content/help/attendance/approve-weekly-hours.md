@@ -5,7 +5,7 @@ category: attendance
 audience: super_admin, hr_admin, team_lead
 order: 2
 video: approve-weekly-hours
-updated: 2026-10-21
+updated: 2026-11-25
 ---
 
 ELEVATE is the time clock and the only source of hours. Each week, a lead checks the hours and approves them. Approved hours are what HR exports for payroll. Approving hours computes nothing; pay is worked out in the Payroll module.
@@ -15,6 +15,8 @@ ELEVATE is the time clock and the only source of hours. Each week, a lead checks
 Click **Hours review** in the left menu. It starts on last week. Use **Previous** and **Next** to move between weeks.
 
 A Team Lead sees their own team. HR sees everyone.
+
+Hours appear as soon as people clock in or out, on the web or the Tracker App. Someone still working shows **Working now**, with their time so far. The page says when it was **Last refreshed**. If something looks behind, click **Refresh this week** (the last 31 days).
 
 ![Hours review: check each week and approve it.](help:approve-weekly-hours/01-hours-review.png)
 

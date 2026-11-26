@@ -29,6 +29,7 @@ function DaySignal({ day, label }: { day: ReviewDay; label: (flag: string) => st
   const severity = worstSeverity(day.flags);
   const checks = day.flags.filter((f) => flagSeverity(f) === "review").length;
   const changed = day.state === "changed";
+  if (day.working && day.flags.every((f) => flagSeverity(f) === "clean") && !changed) return <Badge variant="info">Working now</Badge>;
   const badge = changed ? (
     <Badge variant="destructive">Changed after approval</Badge>
   ) : severity === "blocked" ? (
@@ -73,6 +74,7 @@ function DaySignal({ day, label }: { day: ReviewDay; label: (flag: string) => st
 }
 
 function ApprovalState({ day }: { day: ReviewDay }) {
+  if (day.working) return null; // "Working now" already says the day is not over
   if (day.state === "approved") return <Badge variant="default">Approved</Badge>;
   if (day.state === "changed") return null; // already said by the signal
   return <Badge variant="outline">{day.finished ? "Not approved" : "Day not over"}</Badge>;
@@ -179,7 +181,7 @@ function MarkTestDialog({ employeeId, date, name, open, onOpenChange }: { employ
 /** The ⋯ menu of a day: fix a forgotten clock-out, take the approval back, or mark it as a test. Nothing is shown when none applies. */
 function DayActions({ row, day, canMarkTest }: { row: ReviewRow; day: ReviewDay; canMarkTest: boolean }) {
   const [dialog, setDialog] = useState<"reopen" | "test" | null>(null);
-  const canFix = day.flags.includes("long_session") || day.flags.includes("open_session");
+  const canFix = day.working || day.flags.includes("long_session") || day.flags.includes("open_session");
   if (!canFix && !day.canReopen && !canMarkTest) return null;
   return (
     <>
@@ -199,7 +201,7 @@ function DayActions({ row, day, canMarkTest }: { row: ReviewRow; day: ReviewDay;
   );
 }
 
-const GRID = "md:grid-cols-[9.5rem_9.5rem_4.5rem_4.5rem_6.5rem_minmax(0,1fr)_2.25rem]";
+const GRID = "md:grid-cols-[minmax(9.5rem,12rem)_9.5rem_4.5rem_4.5rem_6.5rem_minmax(0,1fr)_2.25rem]";
 
 function extraText(day: ReviewDay) {
   if (!day.extraMinutes) return { main: "-", sub: null as string | null };
@@ -212,7 +214,7 @@ function extraText(day: ReviewDay) {
 /** A person's days of the week: when they worked, how long, and one status each. On a phone each day is a small card. */
 export function DayList({ row, canMarkTest, previewMode, label }: { row: ReviewRow; canMarkTest: boolean; previewMode: boolean; label: (flag: string) => string }) {
   return (
-    <div className="mt-2 text-xs">
+    <div className="mt-2 text-xs whitespace-normal">
       <div className={`hidden gap-x-3 px-1 pb-1 font-medium text-muted-foreground md:grid ${GRID}`} aria-hidden>
         <span>Day</span>
         <span>In to out</span>
@@ -238,11 +240,12 @@ export function DayList({ row, canMarkTest, previewMode, label }: { row: ReviewR
               </span>
               <span>
                 <span className="text-muted-foreground md:hidden">In to out: </span>
-                {d.firstIn ? formatInZone(d.firstIn, row.zone, "h:mm a") : "-"} to {d.lastOut ? formatInZone(d.lastOut, row.zone, "h:mm a") : "-"}
+                {d.firstIn ? formatInZone(d.firstIn, row.zone, "h:mm a") : "-"} to {d.working ? "now" : d.lastOut ? formatInZone(d.lastOut, row.zone, "h:mm a") : "-"}
               </span>
               <span className="md:text-right">
                 <span className="text-muted-foreground md:hidden">Worked: </span>
                 <span className="font-medium">{hours(d.workedMinutes)}</span>
+                {d.working ? <span className="block text-muted-foreground">so far</span> : null}
               </span>
               <span className="md:text-right">
                 <span className="text-muted-foreground md:hidden">Break: </span>
@@ -254,6 +257,7 @@ export function DayList({ row, canMarkTest, previewMode, label }: { row: ReviewR
                 {extra.sub ? <span className="block text-muted-foreground">{extra.sub}</span> : null}
               </span>
               <span className="flex flex-wrap items-center gap-1.5">
+                {d.working && d.flags.some((f) => flagSeverity(f) !== "clean") ? <Badge variant="info">Working now</Badge> : null}
                 <DaySignal day={d} label={label} />
                 <ApprovalState day={d} />
               </span>

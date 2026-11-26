@@ -12,6 +12,9 @@ import { fromZonedTime } from "date-fns-tz";
 import { hasScheduleAround } from "./schedule";
 import { splitByDay } from "./work-log-days";
 import { loadWorkLog, type NamedStretch } from "./work-log";
+import { MAX_SESSION_MS, buildDays, type DayTotals } from "./clock";
+import { loadEventsBetween } from "./service";
+import { REFRESH_DAYS } from "./hours-refresh";
 import { loadEffectiveSchedulesFor } from "./schedule-service";
 import { hoursSettings } from "./schema";
 
@@ -44,6 +47,8 @@ export type ReviewDay = {
   canReopen: boolean;
   /** The day is over in the person's own zone, so it can be approved. */
   finished: boolean;
+  /** Clocked in right now: worked and break hours are the time so far. */
+  working?: boolean;
 };
 
 export type ReviewRow = {
@@ -70,7 +75,9 @@ export type ReviewRow = {
 /** A day someone marked "test only": it is not in the list above, and can be taken off again. */
 export type TestDay = { employeeId: string; name: string; date: string; weekday: string; note: string; markedBy: string; markedOn: string };
 
-export type TeamReview = { weekStart: string; weekEnd: string; rows: ReviewRow[]; scope: "all" | "team"; pending: number; /** The signed-in person may mark days as test only (and take the mark off). */ canMarkTest: boolean; testDays: TestDay[] };
+export type TeamReview = { weekStart: string; weekEnd: string; rows: ReviewRow[]; scope: "all" | "team"; pending: number; /** The signed-in person may mark days as test only (and take the mark off). */ canMarkTest: boolean; testDays: TestDay[]; /** When the newest day of the week was last rebuilt (ms). */ refreshedAt?: number | null; /** The week is recent enough to be refreshed by hand. */ canRefresh?: boolean };
+
+const refreshable = (weekStart: string) => Date.parse(`${weekStart}T00:00:00Z`) >= Date.now() - REFRESH_DAYS * 86_400_000;
 
 /** One week of every person the signed-in lead (their team) or HR (everyone) reviews, with approval state. Defaults to last week. */
 export async function getTeamReview(weekStartInput?: string): Promise<TeamReview> {
@@ -86,7 +93,7 @@ export async function getTeamReview(weekStartInput?: string): Promise<TeamReview
   const ids = [...new Set(days.map((d) => d.employeeId))];
   const canMarkTest = ["all", "team"].includes(scopeFor(user, "hours.mark_test") ?? "");
   const testDays = await testDaysOf(restrict, weekStart, weekEnd);
-  if (ids.length === 0) return { weekStart, weekEnd, rows: [], scope, pending: 0, canMarkTest, testDays };
+  if (ids.length === 0) return { weekStart, weekEnd, rows: [], scope, pending: 0, canMarkTest, testDays, refreshedAt: null, canRefresh: refreshable(weekStart) };
 
   const approvals = await latestApprovals(db, ids, weekStart, weekEnd);
   const zones = await zonesFor(db, ids);
@@ -112,6 +119,20 @@ export async function getTeamReview(weekStartInput?: string): Promise<TeamReview
     const to = fromZonedTime(`${addDays(weekEnd, 1)}T00:00:00`, zone).getTime();
     workByPerson.set(id, splitByDay(await loadWorkLog(db, id, from, to), weekDates, zone));
   }
+
+  // Days still being worked: the stored day is a snapshot, so count the time so far from the clock events.
+  const live = new Map<string, DayTotals>();
+  for (const id of new Set(days.filter((d) => d.flags.includes("open_session")).map((d) => d.employeeId))) {
+    const events = await loadEventsBetween(db, id, Date.parse(`${weekStart}T00:00:00Z`) - 2 * 86_400_000, now);
+    for (const t of buildDays(events, resolveTimeZone(zones.get(id)), now)) {
+      const open = t.sessionList.find((x) => x.endAt === null);
+      // A session open for longer than any shift can be is a forgotten clock-out, not someone working.
+      if (open && now - open.startAt < MAX_SESSION_MS) live.set(`${id}|${t.date}`, t);
+    }
+  }
+  const [built] = (await db.execute(sql`
+    select floor(extract(epoch from max(built_at)) * 1000) as ms from time.attendance_days
+    where date between ${weekStart}::date and ${weekEnd}::date and employee_id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`)) as unknown as { ms: string | number | null }[];
 
   const rows: ReviewRow[] = ids
     .map((id) => {
@@ -142,7 +163,11 @@ export async function getTeamReview(weekStartInput?: string): Promise<TeamReview
         work: (workByDay[d.date] ?? []).filter((w) => w.clientId !== null).map((w) => ({ start: w.from, end: w.to, client: w.clientName, project: w.projectName })),
         canReopen: canReopenDay(approvals.get(approvalKey(id, d.date))),
         finished: d.date < today,
-      }));
+      })).map((day) => {
+        const t = live.get(`${id}|${day.date}`);
+        // While someone is working, the open session is expected, not something to fix.
+        return t ? { ...day, working: true, workedMinutes: t.workedMinutes, breakMinutes: t.breakMinutes, lastOut: null, flags: day.flags.filter((f) => f !== "open_session") } : day;
+      });
       const finished = reviewDays.filter((d) => d.finished);
       const approved = finished.filter((d) => d.state === "approved").length;
       const state: ReviewRow["state"] = finished.length === 0 ? "empty" : finished.some((d) => d.state === "changed") ? "changed" : approved === finished.length ? "approved" : approved > 0 ? "partly" : "none";
@@ -160,12 +185,13 @@ export async function getTeamReview(weekStartInput?: string): Promise<TeamReview
         absentDays: reviewDays.filter((d) => d.flags.includes("absent")).length,
         flags: [...new Set(reviewDays.flatMap((d) => d.flags))],
         state,
-        canApprove: p.user_id !== user.id && (state === "none" || state === "partly" || state === "changed"),
+        // The server refuses a week while a session that started on one of its finished days is still open.
+        canApprove: p.user_id !== user.id && (state === "none" || state === "partly" || state === "changed") && !reviewDays.some((d) => d.working && d.finished),
         canReopen: reviewDays.some((d) => d.canReopen),
       };
     })
     .sort((a, b) => a.name.localeCompare(b.name));
-  return { weekStart, weekEnd, rows, scope, pending: rows.filter((r) => r.canApprove).length, canMarkTest, testDays };
+  return { weekStart, weekEnd, rows, scope, pending: rows.filter((r) => r.canApprove).length, canMarkTest, testDays, refreshedAt: built?.ms == null ? null : Number(built.ms), canRefresh: refreshable(weekStart) };
 }
 
 /** The days marked test only in a week, with who marked them and why (names, not ids). */

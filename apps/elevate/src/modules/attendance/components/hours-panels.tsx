@@ -9,12 +9,12 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { formatDateOnly } from "@/lib/time";
+import { formatDateOnly, formatInZone } from "@/lib/time";
 import { MINUTE, formatDuration } from "../clock";
 import { CLEAN_FLAGS, worstSeverity } from "../flag-severity";
 import { DayList, ReopenWeekButton, WeekSignal } from "./hours-day-detail";
 import { useRun } from "./use-run";
-import { approveCleanWeeks, approveHoursWeek, clearTestDay, exportHours, savePayPeriod } from "../hours-actions";
+import { approveCleanWeeks, refreshHoursWeek, approveHoursWeek, clearTestDay, exportHours, savePayPeriod } from "../hours-actions";
 import type { HoursSettings, ReviewRow, TeamReview } from "../hours-queries";
 import { PAY_PERIOD_LABELS, type PayPeriodKind } from "../pay-periods";
 import { Alert } from "@/components/ui/alert";
@@ -98,9 +98,14 @@ export function ReviewPanel({ review, prevHref, nextHref, flagLabels, previewMod
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold">
-          Week of {formatDateOnly(review.weekStart)} <span className="text-sm font-normal text-muted-foreground">to {formatDateOnly(review.weekEnd)}</span>
-        </h2>
+        <div>
+          <h2 className="text-lg font-semibold">
+            Week of {formatDateOnly(review.weekStart)} <span className="text-sm font-normal text-muted-foreground">to {formatDateOnly(review.weekEnd)}</span>
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Updates when people clock in or out.{review.refreshedAt ? ` Last refreshed ${formatInZone(review.refreshedAt, undefined, "MMM d, h:mm a")}.` : ""}
+          </p>
+        </div>
         <div className="flex flex-wrap gap-2">
           <Link href={prevHref} className="rounded-lg border px-3 py-1 text-sm hover:bg-secondary/50" aria-label="Previous week">
             Previous
@@ -108,6 +113,16 @@ export function ReviewPanel({ review, prevHref, nextHref, flagLabels, previewMod
           <Link href={nextHref} className="rounded-lg border px-3 py-1 text-sm hover:bg-secondary/50" aria-label="Next week">
             Next
           </Link>
+          {review.canRefresh ? (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={pending || previewMode}
+              onClick={() => run<{ refreshed: number }>(() => refreshHoursWeek({ weekStart: review.weekStart }), (d) => (d?.refreshed ? `Updated ${d.refreshed} ${d.refreshed === 1 ? "person" : "people"}.` : "Everything was already up to date."))}
+            >
+              Refresh this week
+            </Button>
+          ) : null}
           <Button
             size="sm"
             disabled={pending || previewMode || review.pending === 0}
