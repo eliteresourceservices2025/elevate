@@ -123,3 +123,22 @@ describe("the week's review status", () => {
     expect(signal(row([day({ flags: ["corrected"] })]))).toContain("Ready");
   });
 });
+
+describe("a day being worked", () => {
+  it("reads as working now with the time so far, and is not counted as a day to fix", () => {
+    const r = row([day({ working: true, lastOut: null, finished: false, workedMinutes: 192 })]);
+    const out = html(r);
+    expect(out).toContain("Working now");
+    expect(out).toContain("to now");
+    expect(out).toContain("so far");
+    expect(out).not.toContain("Fix needed");
+    expect(out).not.toContain("Day not over");
+    expect(renderToStaticMarkup(createElement(WeekSignal, { row: r }))).not.toContain("to fix");
+  });
+
+  it("keeps the warnings that already apply beside it", () => {
+    const out = html(row([day({ working: true, lastOut: null, finished: false, flags: ["late"] })]));
+    expect(out).toContain("Working now");
+    expect(out).toContain("Check");
+  });
+});

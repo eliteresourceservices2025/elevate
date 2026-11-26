@@ -358,6 +358,9 @@ export const needsHrDecision = (earliestEventMs: number, filedAtMs: number) => e
 export const EOD_EDIT_WINDOW_MS = 24 * 60 * MINUTE;
 export const EOD_TEMPLATE = ["Done today:", "- ", "", "In progress:", "- ", "", "Blockers:", "- ", "", "Tomorrow:", "- "].join("\n");
 
+/** No shift is longer than this: a session open longer is a forgotten clock-out. */
+export const MAX_SESSION_MS = 16 * 3_600_000;
+
 export const MAX_OPEN_SESSION_MS = 12 * 60 * MINUTE;
 
 /** A finished session longer than this (clock-in to clock-out, breaks included) is almost always a forgotten clock-out. */

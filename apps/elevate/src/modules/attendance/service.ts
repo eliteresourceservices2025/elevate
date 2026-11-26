@@ -16,8 +16,9 @@ import { enqueueMirror, kickMirror } from "@/modules/jibble/enqueue";
 import { isSelfTestEmail } from "@/modules/jibble/mirror-rules";
 import { clientProjects, employees } from "@/modules/people/schema";
 import { projectOpenTo, projectRequired } from "./project-access";
-import { MINUTE, breakLabel, ipAllowed, overbreakOf, replayClock, roundCoordinate, transition, validCoordinates, type ClockEventLite, type ClockState, type ClockType } from "./clock";
+import { MAX_SESSION_MS, MINUTE, breakLabel, ipAllowed, overbreakOf, replayClock, roundCoordinate, transition, validCoordinates, type ClockEventLite, type ClockState, type ClockType } from "./clock";
 import { computeStopLimit, requestAutoStop } from "./auto-stop-limit";
+import { refreshAfterClock } from "./refresh";
 import { lastScheduleChangeMs } from "./schedule-service";
 import { breakLeftToday } from "./break-left";
 import { clockSourceOf } from "./clock-source";
@@ -300,6 +301,8 @@ export async function performClock(actor: { id: string; email: string }, type: C
     };
   });
   if (mirrored > 0) await kickMirror(mirroredEmployeeId);
+  // Hours review reads the rebuilt days: bring this person's up to date (web, Tracker App and automatic clock-outs all come through here).
+  await refreshAfterClock(person.id);
   // The limit can change when work starts or resumes or the client changes: ask for a stop at the new limit (replaces any older request).
   if (!system && (type === "clock_in" || type === "break_end" || type === "switch_client")) await requestAutoStop(person.id);
   return result;
@@ -430,7 +433,6 @@ export async function attachEvidenceToLeave(tx: Executor, evidenceIds: string[],
 // ---- Changing recorded time (add events, remove wrong ones) ---------------------------------------------------------------------
 
 const DAY_MS = 86_400_000;
-const MAX_SESSION_MS = 16 * 3_600_000;
 /** An appeal from the person or a lead's proposal may go this far back; HR and Super Admin may change time further back (but not further than a year). */
 export const MAX_APPEAL_AGE_MS = 31 * DAY_MS;
 export const MAX_EDIT_AGE_MS = 365 * DAY_MS;

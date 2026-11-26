@@ -10,13 +10,14 @@ import { ActionFailure, fail, runAction, type ActionResult } from "@/lib/run-act
 import { writeAudit } from "@/modules/audit/write";
 import { timeDownlineEmployeeIds } from "@/modules/org/service";
 import { buildHoursExport } from "./hours-export";
+import { REFRESH_DAYS, refreshWeek } from "./hours-refresh";
 import { approvePersonWeek } from "./hours-approve";
 import { reopenHours } from "./hours-reopen";
 import { CLEAN_FLAGS, attendanceRows } from "./hours-service";
 import { addDays, periodContaining, type PayPeriodKind } from "./pay-periods";
 import { hoursSettings } from "./schema";
 import { setTestMark } from "./hours-marks";
-import { approveCleanSchema, approveWeekSchema, clearTestDaySchema, exportHoursSchema, markTestDaySchema, payPeriodSchema, reopenHoursSchema } from "./validators";
+import { approveCleanSchema, approveWeekSchema, clearTestDaySchema, exportHoursSchema, markTestDaySchema, payPeriodSchema, refreshWeekSchema, reopenHoursSchema } from "./validators";
 
 // Hours approval (lead or HR, per person and week) and the payroll export (HR). ELEVATE labels and totals hours; the export computes nothing (pay is computed in the Payroll module).
 
@@ -35,6 +36,28 @@ export async function approveHoursWeek(input: unknown): Promise<ActionResult<{ a
     const result = await approvePersonWeek(actor, parsed.data.employeeId, parsed.data.weekStart, parsed.data.note);
     refresh();
     return { ok: true, data: { approved: result.approved } };
+  });
+}
+
+/**
+ * Brings a week's days up to date with the clock events: only the people whose events are newer than their days are rebuilt. HR for anyone, a
+ * lead for their team. Hours are rebuilt from the events, never edited. The audit says how many people.
+ */
+export async function refreshHoursWeek(input: unknown): Promise<ActionResult<{ refreshed: number }>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    const reach = scopeFor(actor, "hours.approve");
+    if (reach !== "all" && reach !== "team") throw new ForbiddenError("hours.approve");
+    const parsed = refreshWeekSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const { weekStart } = parsed.data;
+    if (Date.parse(`${weekStart}T00:00:00Z`) < Date.now() - REFRESH_DAYS * 86_400_000) return fail(`Only the last ${REFRESH_DAYS} days can be refreshed.`);
+    if (!(await allowRequest("hoursRefresh", actor.id))) return fail("You just refreshed. Wait a few minutes and try again.");
+    const refreshed = await refreshWeek(weekStart, reach === "team" ? await timeDownlineEmployeeIds(db, actor.id) : null);
+    await writeAudit({ actor, action: "hours.refresh", targetType: "hours_week", targetId: weekStart, metadata: { people: refreshed } });
+    revalidatePath("/hours-review");
+    refresh();
+    return { ok: true, data: { refreshed } };
   });
 }
 

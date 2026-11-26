@@ -25,3 +25,9 @@
 
 - New day flags: `auto_stopped` (a clock-out written by auto-stop that day; a review flag) and `makeup_hours` (a clean flag). `attendance_days.makeup_minutes` is a new derived column, rebuilt like the rest.
 - The job `auto-stop` (event plus every 30 minutes) is in `src/inngest/functions.ts` and `health/registry.ts` (30 minutes); the backstop route also runs the sweep.
+
+## Days stay current (2026-11-25)
+- `attendance_days` is a snapshot. Every clock event (web, Tracker App, automatic clock-out: all through `performClock`) rebuilds that person's last days after the response (`refresh.ts`, `after()`, awaited outside a request; failures only logged). The nightly job stays the backstop. A path that writes clock events some other way must rebuild too (corrections, edits, schedule changes, Jibble import already do).
+- A rebuild stamps `built_at` with the time its events were read and never overwrites a newer row.
+- A session still running (under 16 hours, `MAX_SESSION_MS`) reads as **Working now** with time so far, computed at page load; `open_session` is dropped from that day's flags on screen only (approval rules unchanged).
+- **Refresh this week** (`refreshHoursWeek`, `hours.approve`, lead for their team, last 31 days, rate limited) rebuilds only people whose events or removals are newer than their days (`hours-refresh.ts`).

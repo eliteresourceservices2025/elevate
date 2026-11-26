@@ -131,6 +131,8 @@ async function rebuildRange(people: { employee_id: string }[], from: string, to:
     const earliest = normalDaysBack === undefined ? from : formatInZone(now.getTime() - normalDaysBack * DAY_MS, prefs.zone, "yyyy-MM-dd");
     const today = normalDaysBack === undefined ? to : formatInZone(now, prefs.zone, "yyyy-MM-dd");
     // A two-day margin pairs overnight sessions at either edge without reading unrelated attendance history.
+    // A day is stamped with the moment its events were read, so a slower run that read older events never overwrites a newer one.
+    const readAt = new Date();
     const events = await loadEventsBetween(db, employeeId, eventFromMs, eventToMs);
     const days = buildDays(events, prefs.zone).filter((d) => d.date >= earliest && d.date <= today);
     const schedules = await loadEffectiveSchedules(db, employeeId);
@@ -166,7 +168,7 @@ async function rebuildRange(people: { employee_id: string }[], from: string, to:
             and created_at between to_timestamp(${d.firstIn / 1000}) and to_timestamp(${(end + 3_600_000) / 1000}) limit 1`)) as unknown as { ok: number }[])
         : [];
       // The clock stopped by itself that day (the hours ran out): a clock-out written by auto-stop.
-      const [autoStopped] = (await db.execute(sql`select 1 as ok from time.clock_events where employee_id = ${employeeId} and source = 'auto_stop' and occurred_at between to_timestamp(${d.firstIn / 1000}) and to_timestamp(${(end + 3_600_000) / 1000}) limit 1`)) as unknown as { ok: number }[];
+      const [autoStopped] = (await db.execute(sql`select 1 as ok from time.v_clock_events where employee_id = ${employeeId} and source = 'auto_stop' and occurred_at between to_timestamp(${d.firstIn / 1000}) and to_timestamp(${(end + 3_600_000) / 1000}) limit 1`)) as unknown as { ok: number }[];
       const [jibbleFlag] = (await db.execute(sql`select 1 as ok from time.jibble_daily where employee_id = ${employeeId} and date = ${d.date}::date and flagged`)) as unknown as { ok: number }[];
 
       // Against the person's schedule: late, left early, extra hours (a rest day or holiday counts in full).
@@ -224,10 +226,15 @@ async function rebuildRange(people: { employee_id: string }[], from: string, to:
         firstIn: new Date(d.firstIn),
         lastOut: d.lastOut ? new Date(d.lastOut) : null,
         flags,
-        builtAt: new Date(),
+        builtAt: readAt,
       };
       await db.transaction(async (tx) => {
-        await tx.insert(attendanceDays).values({ employeeId, date: d.date, ...values }).onConflictDoUpdate({ target: [attendanceDays.employeeId, attendanceDays.date], set: values });
+        const saved = await tx
+          .insert(attendanceDays)
+          .values({ employeeId, date: d.date, ...values })
+          .onConflictDoUpdate({ target: [attendanceDays.employeeId, attendanceDays.date], set: values, setWhere: sql`${attendanceDays.builtAt} <= ${readAt.toISOString()}::timestamptz` })
+          .returning({ date: attendanceDays.date });
+        if (saved.length === 0) return; // a newer run already wrote this day
         // The day's time by client (rebuilt with the day; only days with time that belongs to a client have rows).
         await tx.delete(attendanceDayClients).where(and(eq(attendanceDayClients.employeeId, employeeId), eq(attendanceDayClients.date, d.date)));
         // Each make-up request that started this day is credited with the minutes worked inside its window (never more than was missed).

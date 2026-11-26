@@ -53,6 +53,8 @@ export const POLICIES = {
   callRing: { requests: 20, window: "10 m" },
   callJoin: { requests: 60, window: "10 m" },
   callMedia: { requests: 600, window: "10 m" },
+  /** "Refresh this week" on hours review: it rebuilds days, so a few per person. */
+  hoursRefresh: { requests: 5, window: "5 m" },
   /** The header search box (it asks as people type, so the allowance is generous). */
   search: { requests: 200, window: "10 m" },
 } satisfies Record<string, Policy>;

@@ -16,6 +16,17 @@ export type Release = {
 
 export const RELEASES: Release[] = [
   {
+    version: "1.2.1",
+    date: "2026-11-25",
+    title: "Hours show as soon as you clock out",
+    highlights: [
+      "Hours review and Team attendance update when people clock in or out, on the web or the Tracker App, instead of the next night.",
+      "Someone still working shows as Working now with their time so far, not as something to fix.",
+      "Hours review has a Refresh this week button and shows when it was last refreshed.",
+      "Long client names no longer print over the times in the daily detail.",
+    ],
+  },
+  {
     version: "1.2.0",
     date: "2026-11-25",
     title: "Change one day, and easier hours per day",

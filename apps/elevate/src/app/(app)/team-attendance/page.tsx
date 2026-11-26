@@ -116,7 +116,7 @@ export default async function TeamAttendancePage({ searchParams }: PageProps<"/t
 
       <section aria-label="Flags" className="space-y-2">
         <h2 className="text-lg font-semibold">Flags in the last two weeks</h2>
-        <p className="text-sm text-muted-foreground">Rebuilt every night from the clock events.</p>
+        <p className="text-sm text-muted-foreground">Updated when people clock in or out, and again every night.</p>
         {flags.rows.length === 0 ? (
           <p className="text-muted-foreground">Nothing to look at.</p>
         ) : (

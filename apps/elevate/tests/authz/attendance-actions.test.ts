@@ -70,6 +70,7 @@ const actionCases: { name: string; call: () => Promise<{ ok: boolean; error?: st
   { name: "requestMakeup", call: () => makeupActions.requestMakeup({ absenceDate: "2026-09-30", windowStart: "2026-10-01T10:00:00Z", windowEnd: "2026-10-01T12:00:00Z", reason: "I was unwell" }), allowed: EVERYONE },
   { name: "answerExtraHours", call: () => extraActions.answerExtraHours({ requestId: ID, answer: "confirm" }), allowed: EVERYONE },
   { name: "fileExtraHoursFor", call: () => extraActions.fileExtraHoursFor({ employeeId: ID, clientId: ID, windowStart: "2026-10-01T10:00:00Z", windowEnd: "2026-10-01T12:00:00Z", contactName: "Pat", reason: "Client asked", confirmedByPhone: true }), allowed: TEAM_OR_HR },
+  { name: "refreshHoursWeek", call: () => hoursActions.refreshHoursWeek({ weekStart: "2026-09-28" }), allowed: TEAM_OR_HR },
   { name: "approveHoursWeek", call: () => hoursActions.approveHoursWeek({ employeeId: ID, weekStart: "2026-09-28" }), allowed: TEAM_OR_HR },
   { name: "approveCleanWeeks", call: () => hoursActions.approveCleanWeeks({ weekStart: "2026-09-28" }), allowed: TEAM_OR_HR },
   { name: "markTestDay", call: () => hoursActions.markTestDay({ employeeId: ID, date: "2026-10-05", note: "Testing the clock" }), allowed: TEAM_OR_HR },
