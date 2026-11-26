@@ -17,3 +17,7 @@ overrides:
   hono: "^4.13.16"
   fast-uri: "^3.1.9"
   "gcp-metadata>gaxios": "^7.1.4"
+  # drizzle-kit still loads a loader that pins esbuild 0.18 (pnpm audit, Nov 2026).
+  "@esbuild-kit/core-utils>esbuild": "^0.25.4"
+  # vitest's vite 8 line only (the tracker app stays on vite 7).
+  "vite@>=8.0.0 <8.3.3": "^8.3.3"
