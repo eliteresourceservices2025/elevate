@@ -23,6 +23,15 @@ export async function trackJob<T>(job: string, fn: () => Promise<T>): Promise<T>
   }
 }
 
+/**
+ * Records that a job ran but part of its work failed, without making the job service retry it. `problem` is shown on System health:
+ * counts and error codes only, never names or anything a service sent. A later fully successful run reads as healthy again.
+ */
+export async function noteJobProblem(job: string, problem: string): Promise<void> {
+  await db.execute(sql`insert into ops.job_runs (job, last_error_at, last_error, runs) values (${job}, clock_timestamp(), ${problem.slice(0, 160)}, 0)
+    on conflict (job) do update set last_error_at = clock_timestamp(), last_error = excluded.last_error`);
+}
+
 export type JobHealth = { job: string; label: string; everyMinutes: number; lastSuccessAt: string | null; lastErrorAt: string | null; lastError: string | null; state: "ok" | "late" | "failing" | "waiting" };
 
 /** Every known job with how it is doing. A job with no check-in yet is "waiting". */

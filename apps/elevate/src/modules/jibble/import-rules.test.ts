@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clientFor, desiredEvents, planImport, type ClientMapping, type JibbleTimeEntry } from "./import-rules";
+import { clientFor, desiredEvents, failureReason, importProblem, planImport, type ClientMapping, type JibbleTimeEntry } from "./import-rules";
 
 const A = "11111111-1111-4111-8111-111111111111";
 const B = "22222222-2222-4222-8222-222222222222";
@@ -89,5 +89,29 @@ describe("what to change to match Jibble", () => {
     const plan = planImport([want("e1", "clock_in", t(9))], [ev("e1", "clock_in", t(9), { voided: true })]);
     expect(plan).toEqual({ toInsert: [], toVoid: [] });
     expect(planImport([], [ev("e1", "clock_in", t(9), { voided: true })]).toVoid).toEqual([]);
+  });
+});
+
+describe("what is said when an import fails", () => {
+  const jibble = (status: number | null) => Object.assign(new Error("Jibble said: Maria Santos"), { name: "JibbleError", status });
+
+  it("keeps a code, never the message", () => {
+    expect(failureReason(jibble(429))).toBe("Jibble 429");
+    expect(failureReason(jibble(null))).toBe("Jibble unreachable");
+    expect(failureReason(Object.assign(new Error("Key (employee_id)=(abc) already exists"), { cause: { code: "23505" } }))).toBe("database 23505");
+    expect(failureReason(new TypeError("fetch failed for https://example.com/secret"))).toBe("TypeError");
+    expect(failureReason("a string with a name")).toBe("unknown error");
+    expect(failureReason(Object.assign(new Error("write"), { code: "EPIPE" }))).toBe("Error");
+  });
+
+  it("adds up the steps of one run, and says nothing when everyone was imported", () => {
+    expect(importProblem([{ people: 8, failed: 0, reasons: {} }])).toBeNull();
+    expect(importProblem([{ people: 7, failed: 1, reasons: { "Jibble 429": 1 } }, { people: 2, failed: 2, reasons: { "Jibble 429": 1, "database 23505": 1 } }])).toEqual({
+      failed: 3,
+      total: 12,
+      refusedOnly: false,
+      text: "3 of 12 not imported: Jibble 429 (2), database 23505 (1)",
+    });
+    expect(importProblem([{ people: 0, failed: 2, reasons: { "Jibble 401": 2 } }])?.refusedOnly).toBe(true);
   });
 });
