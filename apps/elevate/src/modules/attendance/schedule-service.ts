@@ -31,9 +31,41 @@ export async function loadSchedulesFor(executor: Executor, employeeIds: string[]
   return out;
 }
 
-/** When this person's schedules were last added or changed (ms), or 0. */
+type ChangeRow = { employee_id: string; id: string; date: string; client_id: string | null; off: boolean; start_time: string; end_time: string; break_minutes: number; allotted_minutes_per_day: number | null; zone: string };
+const isoDay = (date: string) => ((new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7) + 1;
+const changeToLite = (r: ChangeRow): ScheduleLite & { id: string } => ({ id: r.id, effectiveFrom: r.date, effectiveTo: r.date, startTime: r.start_time, endTime: r.end_time, weekdays: [isoDay(r.date)], breakMinutes: Number(r.break_minutes), zone: r.zone, clientId: r.client_id, allottedMinutesPerDay: r.allotted_minutes_per_day === null ? null : Number(r.allotted_minutes_per_day), dayChange: true, off: r.off });
+
+/** The live one-day changes of these people, as one-date schedule entries. */
+export async function loadDayChangesFor(executor: Executor, employeeIds: string[]): Promise<Map<string, (ScheduleLite & { id: string })[]>> {
+  const out = new Map<string, (ScheduleLite & { id: string })[]>();
+  if (employeeIds.length === 0) return out;
+  const rows = (await executor.execute(sql`
+    select employee_id, id, date::text as date, client_id, off, start_time, end_time, break_minutes, allotted_minutes_per_day, zone
+    from time.schedule_day_changes where employee_id in (${sql.join(employeeIds.map((id) => sql`${id}`), sql`, `)}) and removed_at is null order by date, start_time`)) as unknown as ChangeRow[];
+  for (const r of rows) out.set(r.employee_id, [...(out.get(r.employee_id) ?? []), changeToLite(r)]);
+  return out;
+}
+
+/** What ACTUALLY applies: the schedules plus the one-day changes. Everything that judges or limits work reads this; editing reads `loadSchedules`. */
+export async function loadEffectiveSchedules(executor: Executor, employeeId: string): Promise<(ScheduleLite & { id: string })[]> {
+  const base = await loadSchedules(executor, employeeId);
+  return [...base, ...((await loadDayChangesFor(executor, [employeeId])).get(employeeId) ?? [])];
+}
+
+export async function loadEffectiveSchedulesFor(executor: Executor, employeeIds: string[]): Promise<Map<string, (ScheduleLite & { id: string })[]>> {
+  const base = await loadSchedulesFor(executor, employeeIds);
+  for (const [id, changes] of await loadDayChangesFor(executor, employeeIds)) base.set(id, [...(base.get(id) ?? []), ...changes]);
+  return base;
+}
+
+/** When this person's schedules, day changes or hours per day were last added or changed (ms), or 0. */
 export async function lastScheduleChangeMs(executor: Executor, employeeId: string): Promise<number> {
-  const [row] = (await executor.execute(sql`select floor(extract(epoch from max(changed_at)) * 1000) as ms from time.schedules where employee_id = ${employeeId}`)) as unknown as { ms: string | number | null }[];
+  const [row] = (await executor.execute(sql`
+    select floor(extract(epoch from greatest(
+      (select max(changed_at) from time.schedules where employee_id = ${employeeId}),
+      (select max(greatest(created_at, removed_at)) from time.schedule_day_changes where employee_id = ${employeeId}),
+      (select max(set_at) from time.daily_hours where employee_id = ${employeeId})
+    )) * 1000) as ms`)) as unknown as { ms: string | number | null }[];
   return Number(row?.ms ?? 0);
 }
 

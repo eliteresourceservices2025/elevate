@@ -11,7 +11,7 @@ import { writeAudit } from "@/modules/audit/write";
 import { employees } from "@/modules/people/schema";
 import { recordHistory } from "@/modules/people/service";
 import { departments, positions, teams } from "./schema";
-import { activeDirectReports, applyAttendanceLead, applyReporting, reportName } from "./service";
+import { applyDailyCap, activeDirectReports, applyAttendanceLead, applyReporting, reportName } from "./service";
 import {
   archiveDepartmentSchema,
   archivePositionSchema,
@@ -340,12 +340,9 @@ export async function setDailyCaps(input: unknown): Promise<ActionResult<{ chang
     return db.transaction(async (tx) => {
       let changed = 0;
       for (const employeeId of ids) {
-        const [person] = await tx.select({ id: employees.id, cap: employees.dailyCapMinutes }).from(employees).where(and(eq(employees.id, employeeId), isNull(employees.archivedAt)));
+        const [person] = await tx.select({ id: employees.id }).from(employees).where(and(eq(employees.id, employeeId), isNull(employees.archivedAt)));
         if (!person) throw new ActionFailure("One of those people was not found.");
-        if ((person.cap ?? null) === p.data.minutes) continue;
-        await tx.update(employees).set({ dailyCapMinutes: p.data.minutes, updatedAt: new Date() }).where(eq(employees.id, person.id));
-        await writeAudit({ actor, action: "employee.daily_cap", targetType: "employee", targetId: person.id, before: { field: "daily_cap_minutes", set: person.cap !== null }, after: { field: "daily_cap_minutes", set: p.data.minutes !== null }, metadata: { bulk: ids.length } }, tx);
-        changed += 1;
+        if (await applyDailyCap(tx, actor, employeeId, p.data.minutes, ids.length)) changed += 1;
       }
       revalidatePath("/schedules");
       return { ok: true as const, data: { changed } };

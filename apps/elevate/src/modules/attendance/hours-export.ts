@@ -9,7 +9,7 @@ import { requestDays } from "@/modules/timeoff/workdays";
 import { approvalKey, attendanceRows, dayState, latestApprovals, testMarks, zonesFor, type DayState } from "./hours-service";
 import { toHours } from "./pay-periods";
 import { shiftOn, shiftRange } from "./schedule";
-import { loadSchedulesFor, workingWeekdaysFor } from "./schedule-service";
+import { loadEffectiveSchedulesFor, workingWeekdaysFor } from "./schedule-service";
 
 // Builds the hours export for payroll. ELEVATE only labels and totals hours; the export computes nothing (pay is computed in the Payroll module). By default only days whose
 // numbers are exactly what a lead approved are included; the rest can be added and are labelled.
@@ -54,7 +54,7 @@ export async function buildHoursExport(input: { periodStart: string; periodEnd: 
   const people = await peopleFor(ids, periodStart, periodEnd);
   const clientNames = await clientNamesFor(days.flatMap((d) => d.clientSplit.map((c) => c.clientId)));
   const zones = await zonesFor(db, ids);
-  const schedules = await loadSchedulesFor(db, ids);
+  const schedules = await loadEffectiveSchedulesFor(db, ids);
   const names = await approverNames([...approvals.values()].map((a) => a.approvedBy));
 
   const included = days

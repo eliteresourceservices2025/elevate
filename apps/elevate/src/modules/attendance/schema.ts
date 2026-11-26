@@ -408,6 +408,42 @@ export const extraHoursRequests = time
   .enableRLS();
 
 /**
+ * A change to ONE day of a person who has schedules (a client asks for a full day, another says not to work). On that date (the SCHEDULE's
+ * calendar day) these rows replace the person's schedules of the same client; other clients are untouched. An `off` row keeps the times of
+ * the shift it turns off, so it lands on the same day in the person's own zone. Rows are never deleted: undoing marks them removed.
+ */
+export const scheduleDayChanges = time
+  .table(
+    "schedule_day_changes",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      employeeId: uuid("employee_id")
+        .notNull()
+        .references(() => employees.id),
+      date: date("date", { mode: "string" }).notNull(),
+      clientId: uuid("client_id").references(() => clients.id),
+      off: boolean("off").notNull().default(false),
+      startTime: text("start_time").notNull(),
+      endTime: text("end_time").notNull(),
+      breakMinutes: smallint("break_minutes").notNull().default(0),
+      allottedMinutesPerDay: smallint("allotted_minutes_per_day"),
+      zone: text("zone").notNull(),
+      reason: text("reason").notNull(),
+      createdBy: uuid("created_by").notNull(),
+      createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+      removedAt: timestamp("removed_at", { withTimezone: true }),
+      removedBy: uuid("removed_by"),
+    },
+    (t) => [
+      index("schedule_day_changes_employee_idx").on(t.employeeId, t.date),
+      check("schedule_day_changes_times_chk", sql`${t.startTime} ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$' and ${t.endTime} ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'`),
+      check("schedule_day_changes_break_chk", sql`${t.breakMinutes} between 0 and 240`),
+      check("schedule_day_changes_allotted_chk", sql`${t.allottedMinutesPerDay} is null or ${t.allottedMinutesPerDay} between 1 and 960`),
+    ],
+  )
+  .enableRLS();
+
+/**
  * Hours for one specific day of a person with no fixed schedule (a contractor whose hours change from day to day), set by HR on top of their usual
  * "hours per day". The clock's stop, the extra hours prompt and make-up hours use the day's number when there is one. Ignored for a person who has a schedule.
  */
@@ -424,7 +460,7 @@ export const dailyHours = time
       setBy: uuid("set_by").notNull(),
       setAt: timestamp("set_at", { withTimezone: true }).notNull().defaultNow(),
     },
-    (t) => [uniqueIndex("daily_hours_unique_idx").on(t.employeeId, t.date), check("daily_hours_minutes_chk", sql`${t.minutes} between 1 and 960`)],
+    (t) => [uniqueIndex("daily_hours_unique_idx").on(t.employeeId, t.date), check("daily_hours_minutes_chk", sql`${t.minutes} between 0 and 960`)],
   )
   .enableRLS();
 

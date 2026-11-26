@@ -48,6 +48,24 @@ On the person's page, each schedule has its own buttons. The others stay as they
 - **Replace** gives new hours from a date. The old ones end the day before. A message says **Schedule replaced.**
 - **Remove** stops it after the last day you choose. One that has not started simply does not apply.
 
+# Change one day
+
+Use this when a day is different, for example one client asks for the whole day and another says not to work.
+
+1. On the person's page, click **Change a day** and pick the date. The date is in the client's calendar.
+2. Choose **Whole day for** a client, **Day off for all clients**, or **Custom hours**. Custom lets you keep, change or turn off each client's shift, or add one.
+3. Check the **Result**, write **Why is this day different?** and click **Save day**. A message says **Day saved. The person was told.**
+
+The clock follows the new hours, so no extra hours request is needed for them. A day with everything off is a rest day. Under **Changed days**, **Undo** brings the usual schedule back.
+
+# Hours per day, for people with no fixed schedule
+
+On the person's page you see their week of hours. Click a day to **Set hours**, mark a **Day off**, or go **Back to usual**. Change **Usual hours per day** if needed, then **Save changes**. **Copy to next week** repeats the week. These days are the person's own.
+
+For several people: tick them, click **Set schedule for** them, choose **Hours per day only (no fixed schedule)**, pick the dates and weekdays, and save. People who have a fixed schedule are skipped and named.
+
+On a **Day off** the person cannot clock in unless extra or make-up hours are approved.
+
 # End every schedule
 
 Tick the people, then click **End schedule for** them. Tick **Also remove schedules that start after that day** if they have upcoming ones.

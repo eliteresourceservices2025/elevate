@@ -15,7 +15,7 @@ import { reportName, timeChainUserIds } from "@/modules/org/service";
 import { employees } from "@/modules/people/schema";
 import { absenceDateProblem, checkMakeupWindow, shortfallMinutes } from "./makeup";
 import { expectedMinutesByDay } from "./makeup-service";
-import { loadSchedules } from "./schedule-service";
+import { loadEffectiveSchedules } from "./schedule-service";
 import { makeupRequests } from "./schema";
 import { personForUser, prefsFor } from "./service";
 import { cancelMakeupSchema, decideMakeupSchema, makeupRequestSchema } from "./validators";
@@ -65,7 +65,7 @@ export async function requestMakeup(input: unknown): Promise<ActionResult> {
     if (dayProblem) return fail(dayProblem);
 
     // What the day expected of the person (their shift, or their daily hours with no schedule; nothing on a weekend without a schedule, a holiday or approved leave), and what was worked.
-    const schedules = await loadSchedules(db, person.id);
+    const schedules = await loadEffectiveSchedules(db, person.id);
     const scheduled = (await expectedMinutesByDay(db, person.id, prefs.zone, v.absenceDate, v.absenceDate, schedules)).get(v.absenceDate) ?? null;
     if (scheduled === null) return fail("You had no working hours that day, so there is nothing to make up.");
     const [day] = (await db.execute(sql`select worked_minutes from time.attendance_days where employee_id = ${person.id} and date = ${v.absenceDate}::date`)) as unknown as { worked_minutes: number }[];

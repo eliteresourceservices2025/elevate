@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/page-header";
 import { scopeFor } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { orNotFound } from "@/lib/or-not-found";
-import { AddScheduleButton, PersonScheduleView } from "@/modules/attendance/components/person-schedule";
+import { PersonScheduleView, ScheduleHeaderButtons } from "@/modules/attendance/components/person-schedule";
 import { getPersonSchedule } from "@/modules/attendance/queries";
 
 export const metadata: Metadata = { title: "Schedule" };
@@ -23,7 +23,7 @@ export default async function PersonSchedulePage({ params, searchParams }: PageP
         title={data.name}
         description="Their schedules, in the client's time zone and in Manila time."
         breadcrumbs={[{ label: crumb, href: "/schedules" }, { label: data.name }]}
-        actions={data.canManage ? <AddScheduleButton data={data} /> : undefined}
+        actions={data.canManage ? <ScheduleHeaderButtons data={data} /> : undefined}
       />
       <PersonScheduleView data={data} basePath={`/schedules/${data.employeeId}`} />
     </PageContainer>

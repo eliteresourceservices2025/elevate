@@ -53,7 +53,7 @@ describe("setDayHours", () => {
     current.user = hr;
     const d1 = day(1);
     const d2 = day(2);
-    expect(await scheduleActions.setDayHours({ employeeIds: [a.employeeId, b.employeeId], days: [{ date: d1, minutes: 240 }, { date: d2, minutes: 360 }] })).toEqual({ ok: true, data: { changed: 4 } });
+    expect(await scheduleActions.setDayHours({ employeeIds: [a.employeeId, b.employeeId], days: [{ date: d1, minutes: 240 }, { date: d2, minutes: 360 }] })).toEqual({ ok: true, data: { changed: 4, replaced: 0, skipped: [] } });
     expect([await overrideOf(a.employeeId, d1), await overrideOf(b.employeeId, d2)]).toEqual([240, 360]);
     expect((await scheduleActions.setDayHours({ employeeIds: [a.employeeId], days: [{ date: d1, minutes: 300 }] })).ok).toBe(true);
     expect(await overrideOf(a.employeeId, d1)).toBe(300);
@@ -68,7 +68,7 @@ describe("setDayHours", () => {
     const a = await person("dhC");
     current.user = hr;
     const ok = { employeeIds: [a.employeeId] };
-    for (const minutes of [0, 961, 2.5]) expect((await scheduleActions.setDayHours({ ...ok, days: [{ date: day(1), minutes }] })).ok).toBe(false);
+    for (const minutes of [-1, 961, 2.5]) expect((await scheduleActions.setDayHours({ ...ok, days: [{ date: day(1), minutes }] })).ok).toBe(false);
     expect((await scheduleActions.setDayHours({ ...ok, days: [{ date: "2026-13-40", minutes: 240 }] })).ok).toBe(false);
     expect((await scheduleActions.setDayHours({ ...ok, days: [{ date: day(-60), minutes: 240 }] })).ok).toBe(false);
     expect((await scheduleActions.setDayHours({ ...ok, days: [{ date: day(400), minutes: 240 }] })).ok).toBe(false);

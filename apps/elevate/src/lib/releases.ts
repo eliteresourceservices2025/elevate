@@ -16,6 +16,16 @@ export type Release = {
 
 export const RELEASES: Release[] = [
   {
+    version: "1.2.0",
+    date: "2026-11-25",
+    title: "Change one day, and easier hours per day",
+    highlights: [
+      "HR can change a single day, for example when one client asks for the whole day and another says not to work. The usual schedules stay.",
+      "Contractors with no fixed schedule have a week of hours that HR can edit day by day, including a day off.",
+      "Hours can be set for several people over a range of dates, with a check of what will be replaced.",
+    ],
+  },
+  {
     version: "1.1.1",
     date: "2026-11-25",
     title: "Several schedules for one person",

@@ -9,7 +9,7 @@ import { employees } from "@/modules/people/schema";
 import { MAKEUP_DAYS_BACK, MAKEUP_MIN_MINUTES, shortfallMinutes } from "./makeup";
 import { addDays } from "./schedule";
 import { expectedMinutesByDay } from "./makeup-service";
-import { loadSchedules } from "./schedule-service";
+import { loadEffectiveSchedules } from "./schedule-service";
 import { prefsFor } from "./service";
 
 // Every query starts with requireUser() and authorize(). Pages wrap them in orNotFound().
@@ -91,7 +91,7 @@ export async function getMyMakeup(): Promise<MyMakeup | null> {
   const prefs = await prefsFor(db, me.id);
   const today = formatInZone(Date.now(), prefs.zone, "yyyy-MM-dd");
   const from = addDays(today, -MAKEUP_DAYS_BACK);
-  const schedules = await loadSchedules(db, me.id);
+  const schedules = await loadEffectiveSchedules(db, me.id);
   const worked = (await db.execute(sql`select date::text as date, worked_minutes from time.attendance_days where employee_id = ${me.id} and date between ${from}::date and ${today}::date`)) as unknown as { date: string; worked_minutes: number }[];
   const workedBy = new Map(worked.map((w) => [w.date, Number(w.worked_minutes)]));
   const live = (await db.execute(sql`select absence_date::text as date, coalesce(sum(minutes), 0)::int as asked from time.makeup_requests where employee_id = ${me.id} and status in ('pending', 'approved') and absence_date >= ${from}::date group by absence_date`)) as unknown as { date: string; asked: number }[];

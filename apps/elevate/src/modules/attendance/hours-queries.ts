@@ -12,7 +12,7 @@ import { fromZonedTime } from "date-fns-tz";
 import { hasScheduleAround } from "./schedule";
 import { splitByDay } from "./work-log-days";
 import { loadWorkLog, type NamedStretch } from "./work-log";
-import { loadSchedulesFor } from "./schedule-service";
+import { loadEffectiveSchedulesFor } from "./schedule-service";
 import { hoursSettings } from "./schema";
 
 // Every query starts with requireUser() and authorize(). Pages wrap them in orNotFound().
@@ -90,7 +90,7 @@ export async function getTeamReview(weekStartInput?: string): Promise<TeamReview
 
   const approvals = await latestApprovals(db, ids, weekStart, weekEnd);
   const zones = await zonesFor(db, ids);
-  const schedules = await loadSchedulesFor(db, ids);
+  const schedules = await loadEffectiveSchedulesFor(db, ids);
   const clientIds = [...new Set(days.flatMap((d) => d.clientSplit.map((c) => c.clientId)).filter((id): id is string => id !== null))];
   const clientNames = new Map(
     clientIds.length === 0 ? [] : ((await db.execute(sql`select id, name from core.clients where id in (${sql.join(clientIds.map((id) => sql`${id}`), sql`, `)})`)) as unknown as { id: string; name: string }[]).map((c) => [c.id, c.name] as const),

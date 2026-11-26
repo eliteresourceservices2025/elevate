@@ -1,6 +1,6 @@
 // Pure shaping of a person's schedules for the screens: the entry lines, the week and the Mon-to-Sun chips. No database and no clock.
 
-import { addDays, describeSchedule, isoWeekday, weekOf, type ScheduleLite } from "./schedule";
+import { addDays, describeSchedule, schedulesFor, weekOf, type ScheduleLite } from "./schedule";
 
 export type ScheduleEntry = {
   id: string;
@@ -23,8 +23,13 @@ export type ScheduleEntry = {
   canEdit: boolean;
 };
 
-export type WeekViewDay = { date: string; weekday: number; shifts: { entryId: string; clientName: string | null; startLabel: string; clientRange: string; manilaRange: string }[] };
-export type DayChip = { weekday: number; shifts: { entryId: string; clientName: string | null; startLabel: string }[] };
+/** `changed`: from a one-day change (its entryId is the change, not a schedule). */
+export type WeekViewShift = { entryId: string; clientName: string | null; startLabel: string; clientRange: string; manilaRange: string; changed: boolean };
+/** `off`: the clients turned off by a one-day change. */
+export type WeekViewDay = { date: string; weekday: number; shifts: WeekViewShift[]; off: (string | null)[] };
+export type DayChip = { weekday: number; shifts: { entryId: string; clientName: string | null; startLabel: string }[]; changed: boolean; off: boolean };
+/** The hours of one day for someone with no fixed schedule: what HR set for that day, or null for their usual hours. */
+export type DayHours = { date: string; minutes: number | null };
 
 type Entry = ScheduleLite & { id: string };
 
@@ -54,17 +59,19 @@ export function toEntry(s: Entry, today: string, names: ReadonlyMap<string, stri
 }
 
 export function weekView(schedules: readonly Entry[], weekStart: string, names: ReadonlyMap<string, string>): WeekViewDay[] {
+  const nameOf = (id: string | null | undefined) => (id ? (names.get(id) ?? null) : null);
   return weekOf(schedules, weekStart).map((day) => ({
     date: day.date,
     weekday: day.weekday,
-    shifts: day.shifts.map((x) => ({ entryId: x.schedule.id, clientName: x.schedule.clientId ? (names.get(x.schedule.clientId) ?? null) : null, startLabel: x.startLabel, clientRange: x.clientRange, manilaRange: x.secondaryRange })),
+    shifts: day.shifts.map((x) => ({ entryId: x.schedule.id, clientName: nameOf(x.schedule.clientId), startLabel: x.startLabel, clientRange: x.clientRange, manilaRange: x.secondaryRange, changed: x.schedule.dayChange === true })),
+    off: [...new Set(schedulesFor(schedules, day.date).filter((s) => s.off).map((s) => nameOf(s.clientId)))],
   }));
 }
 
 /** Monday to Sunday as it will run: each weekday is taken from its next date, today included. */
 export function weekChips(schedules: readonly Entry[], today: string, names: ReadonlyMap<string, string>): DayChip[] {
   return weekView(schedules, today, names)
-    .map((d) => ({ weekday: d.weekday, shifts: d.shifts.map((s) => ({ entryId: s.entryId, clientName: s.clientName, startLabel: s.startLabel })) }))
+    .map((d) => ({ weekday: d.weekday, shifts: d.shifts.map((s) => ({ entryId: s.entryId, clientName: s.clientName, startLabel: s.startLabel })), changed: d.off.length > 0 || d.shifts.some((s) => s.changed), off: d.shifts.length === 0 && d.off.length > 0 }))
     .sort((a, b) => a.weekday - b.weekday);
 }
 
