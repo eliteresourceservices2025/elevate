@@ -605,7 +605,7 @@ describe("the team calendar", () => {
     expect(new Map(Object.entries(counts.counts)).get(day)).toBeGreaterThanOrEqual(2);
 
     // Holidays appear on the calendar
-    const [holiday] = await rows<{ date: string }>(sql`select date::text as date from time.holidays where calendar = 'PH' order by date desc limit 1`);
+    const [holiday] = await rows<{ date: string }>(sql`select date::text as date from time.holidays where calendar = 'PH' and archived_at is null order by date desc limit 1`);
     as(a.user);
     expect((await queries.getTeamCalendar(holiday.date.slice(0, 7))).holidays.map((h) => h.date)).toContain(holiday.date);
     expect((await queries.getTeamCalendar("not-a-month")).month).toMatch(/^\d{4}-\d{2}$/);

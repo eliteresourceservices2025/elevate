@@ -772,14 +772,16 @@ describe("dollars paid and the client of each person", () => {
     const seen = (await getPayments(runId))!;
     expect(seen.people[0].payment?.usd).toBeNull();
     expect(seen.usdTotal).toBeNull();
-    expect(JSON.stringify(seen)).not.toContain("351");
+    // The figure as a whole number only: random ids, emails and times can hold the same digits inside a longer run.
+    const figure = /\b(?:351|35166)\b/;
+    expect(JSON.stringify(seen)).not.toMatch(figure);
 
     // Nothing about the figure is in the audit log or the clear columns of the change log; the history reads it from the encrypted detail.
     const audit = JSON.stringify(await rows(sql`select * from ops.audit_log where target_id = ${runId}`));
-    expect(audit).not.toMatch(/351|35166/);
+    expect(audit).not.toMatch(figure);
     expect(audit).toContain("payment amounts in dollars");
     const [change] = await rows<Row>(sql`select * from payroll.pay_change_log where run_id = ${runId} and action = 'payment_marked'`);
-    expect(JSON.stringify(change)).not.toMatch(/351|35166/);
+    expect(JSON.stringify(change)).not.toMatch(figure);
 
     // A correction is a new row: the newest dollars show, and a blank clears them.
     as(preparer);
