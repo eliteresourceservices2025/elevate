@@ -58,6 +58,8 @@ For HR, Super Admin and whoever looks after ELEVATE. Plain steps, no code. Nothi
 
 **Emergency stop:** Attendance > Jibble > **Pause sending to Jibble**. The ELEVATE clock keeps working; only the calls to Jibble stop.
 
+**Hours from Jibble are missing (people on the Jibble clock).** Open **Attendance > Health**, row **Importing hours from Jibble**. **Failing** with "3 of 12 not imported: ..." means some people could not be read: "Jibble 401/403" is the access token, "Jibble 429" is Jibble asking us to slow down, "database ..." goes to the developer with that code. **Late** means the job itself is not running: check the `jibble-import` function in the Inngest dashboard. The scheduled run reads only the last 3 days, so once fixed, use **Import now > Last 14 days** on the Jibble page for each person. Nothing older than 14 days can be imported.
+
 ## 5b. Recruiting problems
 
 | What you see | What it means | What to do |

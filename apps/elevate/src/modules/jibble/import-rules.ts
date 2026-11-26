@@ -95,3 +95,31 @@ export function planImport(desired: readonly DesiredEvent[], existing: readonly 
     toVoid: existing.filter((e) => !e.voided && !wanted.has(keyOf(e.entryId, e.type, e.atMs, e.clientId))).map((e) => e.id),
   };
 }
+
+/**
+ * Why one person's import failed, as a short code that is safe to keep and show: Jibble's HTTP status, the database's error code, or the
+ * error's class name. Never a message, which can carry names, ids or what Jibble sent.
+ */
+export function failureReason(error: unknown): string {
+  const e = (error ?? {}) as { name?: unknown; status?: unknown; code?: unknown; cause?: { code?: unknown } };
+  if (e.name === "JibbleError") return typeof e.status === "number" ? `Jibble ${e.status}` : "Jibble unreachable";
+  const code = e.cause?.code ?? e.code;
+  if (typeof code === "string" && /^(?=.*\d)[0-9A-Z]{5}$/.test(code)) return `database ${code}`;
+  return typeof e.name === "string" && /^[A-Za-z]{1,40}$/.test(e.name) ? e.name : "unknown error";
+}
+
+/** The outcome of a whole run (all its steps): how many people were not imported and why, or null when everyone was. Counts and codes only. */
+export function importProblem(runs: readonly { people: number; failed: number; reasons: Readonly<Record<string, number>> }[]): { failed: number; total: number; refusedOnly: boolean; text: string } | null {
+  const failed = runs.reduce((n, r) => n + r.failed, 0);
+  if (failed === 0) return null;
+  const total = failed + runs.reduce((n, r) => n + r.people, 0);
+  const reasons = new Map<string, number>();
+  for (const run of runs) for (const [reason, n] of Object.entries(run.reasons)) reasons.set(reason, (reasons.get(reason) ?? 0) + n);
+  const sorted = [...reasons].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  return {
+    failed,
+    total,
+    refusedOnly: sorted.every(([reason]) => reason === "Jibble 401" || reason === "Jibble 403"),
+    text: `${failed} of ${total} not imported: ${sorted.slice(0, 4).map(([reason, n]) => `${reason} (${n})`).join(", ")}`,
+  };
+}

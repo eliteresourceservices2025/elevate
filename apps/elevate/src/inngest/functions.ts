@@ -4,7 +4,7 @@ import { purgeShots, rebuildActivityMinutes, runTrackerOfflineAlerts } from "@/m
 import { purgeEvidence, purgeSelfies, rebuildAttendanceDays, runExtraHoursReminders, runHrApprovalSummary, runLeadApprovalReminders, runMissedClockouts, runOverbreakAlerts, runQuietSessionAlerts, runWeeklyExtraHoursNotice } from "@/modules/attendance/jobs";
 import { runAckReminders } from "@/modules/announcements/jobs";
 import { purgeOrphanContentFiles } from "@/modules/announcements/content-files";
-import { listJibbleImportPeople, runJibbleImport } from "@/modules/jibble/import";
+import { listJibbleImportPeople, reportJibbleImport, runJibbleImport, type ImportRun } from "@/modules/jibble/import";
 import { processMirrorQueue, purgeJibbleData, runJibbleComparison, runJibbleRepair, runJibbleUnmatchedReport, syncJibblePeople } from "@/modules/jibble/jobs";
 import { runCredentialReminders } from "@/modules/credentials/jobs";
 import { listLearnCourses } from "@/modules/learn/course-catalog";
@@ -233,10 +233,13 @@ export const jibbleImport = inngest.createFunction(
     const due = await step.run("list", () => listJibbleImportPeople());
     const ids = requested ? due.filter((id) => requested.includes(id)) : due;
     // A few people per step, so each step is short and one slow person cannot stop the rest.
+    const runs: ImportRun[] = [];
     for (let i = 0; i < ids.length; i += 8) {
       const chunk = ids.slice(i, i + 8);
-      await step.run(`import-${i / 8}`, () => track("jibble-import", () => runJibbleImport({ employeeIds: chunk, days })));
+      runs.push(await step.run(`import-${i / 8}`, () => track("jibble-import", () => runJibbleImport({ employeeIds: chunk, days }))));
     }
+    // After the steps, so a later step that worked does not hide an earlier person who failed.
+    await step.run("report", () => reportJibbleImport(runs));
     return { people: ids.length };
   },
 );

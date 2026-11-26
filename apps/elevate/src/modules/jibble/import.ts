@@ -7,9 +7,10 @@ import { assignedClients } from "@/modules/attendance/extra-hours-service";
 import { rebuildAttendanceDays } from "@/modules/attendance/jobs";
 import { clockEventVoids, clockEvents } from "@/modules/attendance/schema";
 import { lockEmployeeClock } from "@/modules/attendance/service";
+import { noteJobProblem } from "@/modules/health/service";
 import { getJibbleClient, sendsAllowed } from "./client";
 import { JibbleError, type JibbleClient } from "./http-client";
-import { desiredEvents, planImport, type ClientMapping, type ImportedEvent, type JibbleTimeEntry, type Unmapped } from "./import-rules";
+import { desiredEvents, failureReason, importProblem, planImport, type ClientMapping, type ImportedEvent, type JibbleTimeEntry, type Unmapped } from "./import-rules";
 import { alertHr, jibblePaused } from "./jobs";
 
 // Hours of people who clock in Jibble (time.clock_source = 'jibble'): their Jibble time entries become ELEVATE clock events (source 'jibble').
@@ -25,7 +26,7 @@ export const MAX_IMPORT_DAYS = 14;
 const SYSTEM_USER = "00000000-0000-0000-0000-000000000000";
 const PARALLEL = 3;
 
-export type ImportRun = { people: number; imported: number; voided: number; failed: number; keptBecauseEmpty: number; skipped: "not_configured" | "paused" | null };
+export type ImportRun = { people: number; imported: number; voided: number; failed: number; /** Why people failed: a short safe code to how many. */ reasons: Record<string, number>; keptBecauseEmpty: number; skipped: "not_configured" | "paused" | null };
 
 type Person = { employee_id: string; jibble_person_id: string };
 
@@ -119,7 +120,7 @@ async function importPerson(client: JibbleClient, person: Person, days: number, 
  * configured or HR paused the link. Per person: a Jibble failure is counted and the others carry on.
  */
 export async function runJibbleImport(options: { days?: number; employeeId?: string; employeeIds?: string[]; now?: Date; client?: JibbleClient | null } = {}): Promise<ImportRun> {
-  const run: ImportRun = { people: 0, imported: 0, voided: 0, failed: 0, keptBecauseEmpty: 0, skipped: null };
+  const run: ImportRun = { people: 0, imported: 0, voided: 0, failed: 0, reasons: {}, keptBecauseEmpty: 0, skipped: null };
   const client = options.client === undefined ? getJibbleClient() : options.client;
   if (!client?.listTimeEntries) return { ...run, skipped: "not_configured" };
   if (await jibblePaused()) return { ...run, skipped: "paused" };
@@ -149,7 +150,9 @@ export async function runJibbleImport(options: { days?: number; employeeId?: str
         } catch (error) {
           run.failed += 1;
           if (error instanceof JibbleError && (error.status === 401 || error.status === 403)) refused = true;
-          console.error("jibble import failed:", error instanceof Error ? error.name : "unknown error");
+          const reason = failureReason(error);
+          run.reasons[reason] = (run.reasons[reason] ?? 0) + 1;
+          console.error("jibble import failed:", reason);
         }
       }),
     );
@@ -157,6 +160,24 @@ export async function runJibbleImport(options: { days?: number; employeeId?: str
   if (refused) await alertHr("jibble.import_refused", "Jibble refused the hours import", "Jibble did not accept the access token, so hours of people who clock in Jibble are not being imported. Check the connection on the Jibble page.", 12);
   if (run.keptBecauseEmpty > 0) await alertHr("jibble.import_empty", "Jibble returned no entries for someone who had hours", "Their imported hours were kept. If entries were really deleted in Jibble, fix their hours with a correction.", 24);
   return run;
+}
+
+/**
+ * Called once after all the steps of a job run. A person who fails does not fail the job (the others still import), so without this the
+ * job would look healthy while hours are missing: System health shows it as failing with the counts, and HR is told at most once a day.
+ */
+export async function reportJibbleImport(runs: readonly ImportRun[]): Promise<void> {
+  const problem = importProblem(runs);
+  if (!problem) return;
+  await noteJobProblem("jibble-import", problem.text);
+  // A refused token already has its own notice, from the run itself.
+  if (problem.refusedOnly) return;
+  await alertHr(
+    "jibble.import_failed",
+    "Some Jibble hours were not imported",
+    `Hours could not be imported from Jibble for ${problem.failed} of ${problem.total} ${problem.total === 1 ? "person" : "people"}, so their time may be missing. The Health tab on Attendance shows the reason. After it is fixed, use Import now for the last 14 days on the Jibble page.`,
+    24,
+  );
 }
 
 /**

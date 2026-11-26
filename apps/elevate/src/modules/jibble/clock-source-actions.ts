@@ -201,7 +201,7 @@ export async function importJibbleHours(input: unknown): Promise<ActionResult<{ 
     const result = await runJibbleImport({ employeeId, days });
     if (result.skipped === "not_configured") return fail("Jibble is not set up yet, or cannot list time entries.");
     if (result.skipped === "paused") return fail("The Jibble link is paused. Turn it on first.");
-    if (result.failed > 0) return fail("Jibble could not be reached for that person. Try again in a few minutes.");
+    if (result.failed > 0) return fail(`Their hours could not be imported (${Object.keys(result.reasons)[0]}). Try again in a few minutes. If it happens again, report this code to your system administrator.`);
     await writeAudit({ actor, action: "jibble.import_requested", targetType: "employee", targetId: employeeId, metadata: { days, imported: result.imported, voided: result.voided } });
     refresh();
     return { ok: true, data: { imported: result.imported, voided: result.voided } };

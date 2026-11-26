@@ -19,7 +19,9 @@ const queries = await import("@/modules/attendance/queries");
 const hoursQueries = await import("@/modules/attendance/hours-queries");
 const { mondayOf } = await import("@/modules/attendance/pay-periods");
 const sourceActions = await import("@/modules/jibble/clock-source-actions");
-const { runJibbleImport } = await import("@/modules/jibble/import");
+const { reportJibbleImport, runJibbleImport } = await import("@/modules/jibble/import");
+const { jobHealth, trackJob } = await import("@/modules/health/service");
+const { JibbleError } = await import("@/modules/jibble/http-client");
 const jobs = await import("@/modules/jibble/jobs");
 const { setJibbleClient } = await import("@/modules/jibble/client");
 type JibbleClient = import("@/modules/jibble/http-client").JibbleClient;
@@ -475,5 +477,37 @@ describe("a session Jibble left open, and moving back to the ELEVATE clock", () 
     await db.execute(sql`insert into time.clock_events (employee_id, type, occurred_at, source, jibble_entry_id) values (${own[0].id}, 'clock_in', ${iso("09:00")}, 'jibble', ${uniq("own-entry")})`);
     as(hr);
     expect(await sourceActions.closeSessionAndUseElevateClock({ employeeId: own[0].id, closeAt: iso("17:00"), reason: REASON })).toEqual({ ok: false, error: "Someone else must change your own time. Ask HR or your lead." });
+  });
+});
+
+describe("when some people cannot be imported", () => {
+  it("shows the job as failing with counts only, tells HR once, and recovers on the next good run", async () => {
+    const c = await client();
+    const good = await person("FailGood", [c.id]);
+    const bad = await person("FailBad", [c.id]);
+    await onJibble(good);
+    await onJibble(bad);
+    fake.entries.set(good.jibbleId, [entry(good.jibbleId, "g1", "In", "09:00"), entry(good.jibbleId, "g2", "Out", "10:00")]);
+    const broken: JibbleClient = Object.assign(Object.create(fake), {
+      listTimeEntries: async (personId: string) => {
+        if (personId === bad.jibbleId) throw new JibbleError(429, "too_many_requests", "Maria Santos is rate limited");
+        return fake.listTimeEntries(personId);
+      },
+    });
+    const notices = () => rows<{ body: string }>(sql`select body from ops.notifications where user_id = ${hr.id} and kind = 'jibble.import_failed'`);
+    const health = async () => (await jobHealth()).find((j) => j.job === "jibble-import")!;
+
+    const run = await trackJob("jibble-import", () => runJibbleImport({ client: broken, days: 5, employeeIds: [good.employeeId, bad.employeeId] }));
+    expect(run).toMatchObject({ people: 1, imported: 2, failed: 1, reasons: { "Jibble 429": 1 } }); // the other person still imports
+    await reportJibbleImport([run]);
+    await reportJibbleImport([run]);
+    expect(await health()).toMatchObject({ state: "failing", lastError: "1 of 2 not imported: Jibble 429 (1)" });
+    expect(await notices()).toHaveLength(1);
+    expect((await notices())[0].body).toContain("1 of 2 people");
+    expect((await notices())[0].body).not.toMatch(/Maria|FailBad/);
+
+    const next = await trackJob("jibble-import", () => runJibbleImport({ days: 5, employeeIds: [good.employeeId, bad.employeeId] }));
+    await reportJibbleImport([next]);
+    expect((await health()).state).toBe("ok");
   });
 });
