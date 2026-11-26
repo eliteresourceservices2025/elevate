@@ -314,3 +314,26 @@ describe("a night shift past midnight", () => {
     expect(r.limitMs).toBe(ms("02:00"));
   });
 });
+
+describe("clocking in early", () => {
+  // 8:00 to 17:00 with an hour unpaid, 8 hours for the client.
+  const nine: ScheduleLite = { ...base, startTime: "08:00", endTime: "17:00", breakMinutes: 60, allottedMinutesPerDay: 480 };
+  const limit = (nowTime: string, stretches: { from: number; to: number; clientId: string | null }[], schedule = nine) =>
+    stopLimit({ nowMs: ms(nowTime), hasSchedule: true, shifts: shiftsOn([schedule], PHX, DATE), clientId: "A", workedMsByClient: new Map(), stretches, workedMsToday: 0, dailyCapMinutes: null, companyDefaultCapMinutes: 480, approvedWindows: [] });
+
+  it("never stops the clock before the shift ends", () => {
+    // In at 7:45, lunch 12:00 to 13:00. Before lunch the limit is the same as for someone on time.
+    expect(limit("07:45", []).limitMs).toBe(ms("16:00"));
+    expect(limit("13:00", [{ from: ms("07:45"), to: ms("12:00"), clientId: "A" }])).toMatchObject({ limitMs: ms("17:00"), overrunMs: 0 });
+    expect(limit("16:45", [{ from: ms("07:45"), to: ms("12:00"), clientId: "A" }, { from: ms("13:00"), to: ms("16:45"), clientId: "A" }]).limitMs).toBe(ms("17:00"));
+  });
+
+  it("still stops when the allotted hours inside the shift are used up", () => {
+    const r = limit("12:30", [{ from: ms("07:00"), to: ms("12:30"), clientId: "A" }], { ...nine, allottedMinutesPerDay: 240 });
+    expect(r).toMatchObject({ reason: "client_allotment", limitMs: ms("12:30"), overrunMs: 30 * 60_000 });
+  });
+
+  it("counts only the working client's own time", () => {
+    expect(limit("13:00", [{ from: ms("08:00"), to: ms("12:00"), clientId: "B" }, { from: ms("12:00"), to: ms("13:00"), clientId: "A" }]).limitMs).toBe(ms("17:00"));
+  });
+});

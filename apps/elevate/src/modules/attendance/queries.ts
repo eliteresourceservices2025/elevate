@@ -143,7 +143,7 @@ export type CorrectionItem = {
   employeeId: string;
   employeeName: string;
   reason: string;
-  proposed: { type: string; at: string }[];
+  proposed: { type: string; at: string; clientId?: string; clientName?: string | null }[];
   status: string;
   decisionNote: string | null;
   createdAt: string;
@@ -261,7 +261,7 @@ export async function getMyTime(weekStartInput?: string): Promise<MyTime | null>
       employeeId: String(r.employee_id),
       employeeName: "You",
       reason: String(r.reason),
-      proposed: r.proposed as { type: string; at: string }[],
+      proposed: (r.proposed as { type: string; at: string; clientId?: string }[]).map((p) => ({ ...p, clientName: p.clientId ? (clientNames.get(p.clientId) ?? null) : null })),
       status: String(r.status),
       decisionNote: (r.decision_note as string | null) ?? null,
       createdAt: new Date(r.created_at as string | Date).toISOString(),
@@ -366,6 +366,9 @@ export async function listCorrectionQueue(): Promise<{ items: CorrectionItem[]; 
   const evidence = await evidenceFor(rows.map((r) => String(r.id)));
   const counts = await reportThreadCounts("correction", rows.map((r) => String(r.id)));
   const removed = await eventsByIds(rows.flatMap((r) => (r.void_event_ids as string[] | null) ?? []));
+  // Which client a proposed clock-in or switch is for, so the reviewer sees what they approve.
+  const proposedClients = [...new Set(rows.flatMap((r) => (r.proposed as { clientId?: string }[]).map((p) => p.clientId).filter((id): id is string => Boolean(id))))];
+  const clientNames = new Map(proposedClients.length === 0 ? [] : ((await db.execute(sql`select id, name from core.clients where id in (${list(proposedClients)})`)) as unknown as { id: string; name: string }[]).map((c) => [c.id, c.name] as const));
   const items: CorrectionItem[] = [];
   for (const r of rows) {
     const own = r.user_id === user.id || r.requested_by === user.id;
@@ -379,7 +382,7 @@ export async function listCorrectionQueue(): Promise<{ items: CorrectionItem[]; 
       employeeId: String(r.employee_id),
       employeeName: reportName({ first: String(r.first), last: String(r.last), preferred: (r.preferred as string | null) ?? null }),
       reason: String(r.reason),
-      proposed: r.proposed as { type: string; at: string }[],
+      proposed: (r.proposed as { type: string; at: string; clientId?: string }[]).map((p) => ({ ...p, clientName: p.clientId ? (clientNames.get(p.clientId) ?? null) : null })),
       status: String(r.status),
       decisionNote: (r.decision_note as string | null) ?? null,
       createdAt: new Date(r.created_at as string | Date).toISOString(),

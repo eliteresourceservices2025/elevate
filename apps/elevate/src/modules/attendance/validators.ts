@@ -32,10 +32,13 @@ export const idleAnswerSchema = z.object({ promptId: uuid });
 const CLOCK_TYPES = z.enum(["clock_in", "break_start", "break_end", "clock_out"]);
 
 const reason = z.string().trim().min(5, "Explain what happened in a few words").max(300, "Use 300 characters or fewer");
-const proposedEvents = z
-  .array(z.object({ type: CLOCK_TYPES, at: z.string().refine((v) => !Number.isNaN(Date.parse(v)), "Enter a real date and time") }))
-  .min(1, "Add at least one event")
-  .max(6, "Add six events at most");
+const eventsOf = <T extends z.ZodType>(type: T) =>
+  z
+    .array(z.object({ type, at: z.string().refine((v) => !Number.isNaN(Date.parse(v)), "Enter a real date and time") }))
+    .min(1, "Add at least one event")
+    .max(6, "Add six events at most");
+/** What can be asked for. A switch needs its client, which only "Change someone's time" can name. */
+const proposedEvents = eventsOf(z.enum(["clock_in", "break_start", "break_end", "clock_out"]));
 const kind = z.enum(["forgot", "connection_problem", "device_problem", "other"]);
 
 export const correctionRequestSchema = z.object({
@@ -53,12 +56,21 @@ export const editAttendanceSchema = z
     employeeId: uuid,
     voidEventIds: z.array(uuid).max(6, "Remove six events at most at once").default([]),
     events: z
-      .array(z.object({ type: CLOCK_TYPES, at: z.string().refine((v) => !Number.isNaN(Date.parse(v)), "Enter a real date and time") }))
+      .array(
+        z.object({
+          type: z.enum(["clock_in", "break_start", "break_end", "clock_out", "switch_client"]),
+          at: z.string().refine((v) => !Number.isNaN(Date.parse(v)), "Enter a real date and time"),
+          /** The client the time that follows belongs to (a clock-in or a switch only). */
+          clientId: z.preprocess(blankToUndefined, uuid.optional()),
+        }),
+      )
       .max(6, "Add six events at most at once")
       .default([]),
     reason,
   })
-  .refine((v) => v.voidEventIds.length + v.events.length > 0, { message: "Remove or add at least one event", path: ["events"] });
+  .refine((v) => v.voidEventIds.length + v.events.length > 0, { message: "Remove or add at least one event", path: ["events"] })
+  .refine((v) => v.events.every((e) => e.type !== "switch_client" || e.clientId), { message: "Choose the client for a switch", path: ["events"] })
+  .refine((v) => v.events.every((e) => !e.clientId || e.type === "clock_in" || e.type === "switch_client"), { message: "Only a clock-in or a switch has a client", path: ["events"] });
 /** Which person and which calendar day (YYYY-MM-DD in the person's own zone) to show for changing. */
 export const loadDaySchema = z.object({ employeeId: uuid, date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Choose a date") });
 export const EVIDENCE_MAX_BYTES = 5_000_000;
@@ -71,7 +83,7 @@ export const decideCorrectionSchema = z.object({
   decision: z.enum(["approve", "reject"]),
   note: z.preprocess(blankToUndefined, z.string().trim().max(300).optional()),
   /** The reviewer changed the times before approving. */
-  events: proposedEvents.optional(),
+  events: eventsOf(z.enum(["clock_in", "break_start", "break_end", "clock_out", "switch_client"])).optional(),
 });
 
 const cidr = z.string().trim().refine(isValidRange, "Use an IPv4 address or range such as 203.0.113.0/24");

@@ -39,8 +39,10 @@ test("hours review follows the clock without waiting for the nightly run", async
   await hr.waitForLoadState("networkidle");
   const row = hr.getByRole("row").filter({ hasText: `Aaalive${stamp}` });
   await expect(row).toBeVisible(slow);
-  await row.page().getByText("Review daily detail").first().click();
-  await expect(hr.getByText("Working now").first()).toBeVisible(slow);
+  // Their own detail is the row under theirs: other test people share the page.
+  const detail = row.locator("xpath=following-sibling::tr[1]");
+  await detail.getByText("Review daily detail").click();
+  await expect(detail.getByText("Working now").first()).toBeVisible(slow);
   await expect(hr.getByText(/Last refreshed/)).toBeVisible();
   if (SHOTS) await hr.screenshot({ path: `${SHOTS}/h-working.png`, fullPage: false });
 
@@ -50,8 +52,8 @@ test("hours review follows the clock without waiting for the nightly run", async
 
   await expect(async () => {
     await hr.reload();
-    await hr.getByText("Review daily detail").first().click();
-    await expect(hr.getByText("Working now")).toHaveCount(0, { timeout: 2000 });
+    await detail.getByText("Review daily detail").click();
+    await expect(detail.getByText("Working now")).toHaveCount(0, { timeout: 2000 });
   }).toPass({ timeout: 60_000 });
   await hr.getByRole("button", { name: "Refresh this week" }).click();
   await expect(hr.getByText(/already up to date|Updated \d+/)).toBeVisible(slow);
